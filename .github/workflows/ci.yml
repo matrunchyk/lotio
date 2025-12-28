@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ develop ]  # Only test on develop branch
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [ main, master, develop ]  # Test all PRs
 
 jobs:
   build:
