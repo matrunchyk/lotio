@@ -14,7 +14,13 @@ int main(int argc, char* argv[]) {
 
     // Parse command-line arguments
     Arguments args;
-    if (parseArguments(argc, argv, args) != 0) {
+    int parse_result = parseArguments(argc, argv, args);
+    if (parse_result == 2) {
+        // Help was shown - exit successfully
+        return 0;
+    }
+    if (parse_result != 0) {
+        // Parse error - exit with error
         return 1;
     }
     
