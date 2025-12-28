@@ -12,6 +12,12 @@ fi
 
 cd "$SKIA_ROOT"
 
+# Clean build directory if it exists (in case of interrupted builds)
+if [ -d "out/Release" ]; then
+    echo "Cleaning previous build directory (handling interrupted builds)..."
+    rm -rf out/Release
+fi
+
 echo "Fetching GN binary..."
 python3 bin/fetch-gn
 echo "GN binary fetched"
@@ -75,15 +81,18 @@ echo "Generating build files with GN..."
 echo "GN args: $GN_ARGS"
 bin/gn gen out/Release --args="$GN_ARGS"
 
-# Debug: Check for GN warnings
+# Verify gen/skia.h was created successfully (critical for compilation)
 echo ""
-echo "Checking for GN warnings..."
-cd out/Release
-$SKIA_ROOT/bin/gn desc . --root="$SKIA_ROOT" --format=json * > /dev/null 2>&1 || {
-    echo "⚠️  GN generated warnings. Running with verbose output:"
-    $SKIA_ROOT/bin/gn desc . --root="$SKIA_ROOT" --format=json * 2>&1 | head -20 || true
-}
-cd "$SKIA_ROOT"
+echo "Verifying gen/skia.h was generated..."
+if [ ! -f "out/Release/gen/skia.h" ]; then
+    echo "❌ ERROR: gen/skia.h was not generated!"
+    echo "This is required for compilation. Checking GN configuration..."
+    cd out/Release
+    bin/gn desc . --root="$SKIA_ROOT" --format=json * 2>&1 | head -30 || true
+    cd "$SKIA_ROOT"
+    exit 1
+fi
+echo "✅ gen/skia.h generated successfully"
 
 echo "Building Skia with Ninja..."
 ninja -C out/Release
