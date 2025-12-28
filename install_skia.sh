@@ -70,10 +70,10 @@ fi
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS - use Homebrew paths
     HARFBUZZ_INCLUDE="$HOMEBREW_PREFIX/include/harfbuzz"
-    GN_ARGS="$GN_ARGS extra_cflags=[\"-O3\", \"-march=native\", \"-I$HOMEBREW_PREFIX/include\", \"-I$FREETYPE_INCLUDE\", \"-I$ICU_INCLUDE\", \"-I$HARFBUZZ_INCLUDE\"]"
+    GN_ARGS="$GN_ARGS extra_cflags=[\"-O3\", \"-I$HOMEBREW_PREFIX/include\", \"-I$FREETYPE_INCLUDE\", \"-I$ICU_INCLUDE\", \"-I$HARFBUZZ_INCLUDE\"]"
 else
-    # Linux - use system paths
-    GN_ARGS="$GN_ARGS extra_cflags=[\"-O3\", \"-march=native\", \"-I/usr/include\", \"-I/usr/include/freetype2\", \"-I/usr/include/harfbuzz\", \"-I/usr/include/fontconfig\"]"
+    # Linux - use system paths (remove -march=native as it can cause issues)
+    GN_ARGS="$GN_ARGS extra_cflags=[\"-O3\", \"-I/usr/include\", \"-I/usr/include/freetype2\", \"-I/usr/include/harfbuzz\", \"-I/usr/include/fontconfig\"]"
 fi
 
 bin/gn gen out/Release --args="$GN_ARGS"
