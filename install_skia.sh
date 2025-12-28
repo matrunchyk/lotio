@@ -86,13 +86,18 @@ echo ""
 echo "Verifying gen/skia.h was generated..."
 if [ ! -f "out/Release/gen/skia.h" ]; then
     echo "❌ ERROR: gen/skia.h was not generated!"
-    echo "This is required for compilation. Checking GN configuration..."
+    echo "This is required for compilation. Attempting to build it explicitly..."
     cd out/Release
-    bin/gn desc . --root="$SKIA_ROOT" --format=json * 2>&1 | head -30 || true
+    ninja gen/skia.h || {
+        echo "Failed to generate gen/skia.h. This indicates a GN configuration issue."
+        echo "Checking GN args..."
+        bin/gn args --list . 2>&1 | grep -E "(target_cpu|skia_enable)" | head -10 || true
+        cd "$SKIA_ROOT"
+        exit 1
+    }
     cd "$SKIA_ROOT"
-    exit 1
 fi
-echo "✅ gen/skia.h generated successfully"
+echo "✅ gen/skia.h verified"
 
 echo "Building Skia with Ninja..."
 ninja -C out/Release
