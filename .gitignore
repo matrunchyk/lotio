@@ -24,10 +24,11 @@ third_party/skia/
 
 # Output files
 samples/*/output/
-*.png
-*.jpg
-*.jpeg
-*.webp
+# Ignore PNGs in output directories, but allow source images
+samples/*/output/*.png
+samples/*/output/*.jpg
+samples/*/output/*.jpeg
+samples/*/output/*.webp
 
 # Compiler and linker generated files
 *.d
