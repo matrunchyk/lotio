@@ -179,7 +179,7 @@ jobs:
           tap: matrunchyk/homebrew-lotio
           tag: ${{ steps.version.outputs.VERSION }}
           revision: ""
-          download-url: https://github.com/${{ github.repository }}/archive/refs/tags/${{ steps.version.outputs.VERSION }}.tar.gz
+          download_url: https://github.com/${{ github.repository }}/archive/refs/tags/${{ steps.version.outputs.VERSION }}.tar.gz
           commit-message: "Update lotio to ${{ steps.version.outputs.VERSION }}"
           version: ${{ steps.version.outputs.VERSION }}
 
