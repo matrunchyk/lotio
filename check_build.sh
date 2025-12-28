@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # Quick script to check Skia build status
 
 SKIA_ROOT="third_party/skia/skia"
