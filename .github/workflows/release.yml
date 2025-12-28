@@ -152,12 +152,17 @@ jobs:
           path: ${{ steps.deb_package.outputs.FILENAME }}
           retention-days: 90
 
-      - name: Create Git tag
+      - name: Wait for release to be created
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ steps.version.outputs.VERSION }}" -m "Release ${{ steps.version.outputs.VERSION }}" || echo "Tag may already exist"
-          git push origin "${{ steps.version.outputs.VERSION }}" || echo "Tag push may have failed (might already exist)"
+          # Wait up to 5 minutes for the macOS job to create the release
+          for i in {1..60}; do
+            if gh release view "${{ steps.version.outputs.VERSION }}" >/dev/null 2>&1; then
+              echo "Release found"
+              break
+            fi
+            echo "Waiting for release... ($i/60)"
+            sleep 5
+          done
 
       - name: Upload .deb to release
         uses: softprops/action-gh-release@v1
