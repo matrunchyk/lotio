@@ -57,14 +57,9 @@ else
 fi
 
 # Build GN args - use single line format for better compatibility
+# Note: skia_use_avx, skia_use_avx2, etc. are not valid GN arguments in Skia
+# CPU optimizations are handled automatically by the compiler
 GN_ARGS="target_cpu=\"${TARGET_CPU}\" is_official_build=true is_debug=false skia_enable_skottie=true skia_enable_fontmgr_fontconfig=true skia_enable_fontmgr_custom_directory=true skia_use_freetype=true skia_use_libpng_encode=true skia_use_libpng_decode=true skia_use_libwebp_decode=true skia_use_wuffs=true skia_enable_pdf=false"
-
-# Add CPU-specific optimizations for x64
-# Note: Disable AVX/AVX2 for now to avoid ABI issues and header generation problems
-# These can be re-enabled later if needed, but they're causing build failures
-if [[ "$TARGET_CPU" == "x64" ]]; then
-    GN_ARGS="$GN_ARGS skia_use_avx=false skia_use_avx2=false skia_use_avx512=false skia_use_sse41=true skia_use_sse42=true"
-fi
 
 # Build extra_cflags array
 if [[ "$OSTYPE" == "darwin"* ]]; then
