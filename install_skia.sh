@@ -71,11 +71,15 @@ skia_use_wuffs=true
 skia_enable_pdf=false"
 
 # Add CPU-specific optimizations for x64
+# Note: Disable AVX-512 (skx) as it may not be available on all runners
+# and causes linking errors if not properly built
 if [[ "$TARGET_CPU" == "x64" ]]; then
     GN_ARGS="$GN_ARGS
 skia_use_avx=true
 skia_use_avx2=true
-skia_use_avx512=false"
+skia_use_avx512=false
+skia_use_sse41=true
+skia_use_sse42=true"
 fi
 
 GN_ARGS="$GN_ARGS
