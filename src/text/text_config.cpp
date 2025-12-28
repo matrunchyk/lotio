@@ -64,7 +64,6 @@ std::map<std::string, TextLayerConfig> parseTextConfig(const std::string& config
                 std::sregex_iterator iter(layersJson.begin(), layersJson.end(), layerPattern);
                 std::sregex_iterator end;
                 
-                size_t lastPos = 0;
                 for (; iter != end; ++iter) {
                     std::smatch match = *iter;
                     std::string layerName = match[1].str();

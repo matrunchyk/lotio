@@ -148,9 +148,6 @@ int renderFrames(
         thread_local int local_completed = 0;
         local_completed = 0;
         
-        // Reusable filename buffer
-        char filename[512];
-        
         // Process pre-assigned frames
         for (int frame_idx : thread_frames[thread_id]) {
             // Use pre-computed frame time

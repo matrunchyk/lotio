@@ -43,7 +43,7 @@ std::string processTextConfiguration(
     // Create font manager early for text measurement
     sk_sp<SkFontMgr> tempFontMgr;
     try {
-        const auto fcInitOk = FcInit();
+        FcInit(); // Initialize fontconfig
         auto scanner = SkFontScanner_Make_FreeType();
         if (scanner) {
             tempFontMgr = SkFontMgr_New_FontConfig(nullptr, std::move(scanner));
