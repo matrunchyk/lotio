@@ -2,7 +2,7 @@ class Lotio < Formula
   desc "High-performance Lottie animation frame renderer using Skia"
   homepage "https://github.com/matrunchyk/lotio"
   url "https://github.com/matrunchyk/lotio/archive/refs/tags/v1.1.0.tar.gz"
-  sha256 "PLACEHOLDER_SHA256"  # Will be updated after release is created
+  # SHA256 will be automatically calculated and updated by GitHub Actions in the Homebrew tap
   version "1.1.0"
   license "MIT"
   depends_on "ninja" => :build
