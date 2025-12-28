@@ -38,7 +38,14 @@ fi
 # Compiler settings
 CXX=clang++
 CXXFLAGS="-std=c++17 -O3 -march=native -DNDEBUG -Wall -Wextra"
-INCLUDES="-I$SKIA_ROOT -I$SRC_DIR"
+
+# Add Homebrew include paths for macOS
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    HOMEBREW_PREFIX=$(brew --prefix 2>/dev/null || echo "/opt/homebrew")
+    INCLUDES="-I$SKIA_ROOT -I$SRC_DIR -I$HOMEBREW_PREFIX/include -I$HOMEBREW_PREFIX/include/fontconfig -I$HOMEBREW_PREFIX/include/freetype2"
+else
+    INCLUDES="-I$SKIA_ROOT -I$SRC_DIR"
+fi
 
 # Library paths and flags
 LDFLAGS="-L$SKIA_LIB_DIR $RPATH_FLAG"
