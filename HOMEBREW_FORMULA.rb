@@ -8,6 +8,7 @@ class Lotio < Formula
   depends_on "cmake" => :build
   depends_on "ninja" => :build
   depends_on "python@3.11" => :build
+  depends_on "git" => :build
   depends_on "fontconfig"
   depends_on "freetype"
   depends_on "icu4c"
