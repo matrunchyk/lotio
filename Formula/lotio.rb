@@ -2,7 +2,9 @@ class Lotio < Formula
   desc "High-performance Lottie animation frame renderer using Skia"
   homepage "https://github.com/matrunchyk/lotio"
   url "https://github.com/matrunchyk/lotio/archive/refs/tags/v1.1.0.tar.gz"
-  # SHA256 will be automatically calculated and updated by GitHub Actions in the Homebrew tap
+  # Note: SHA256 is automatically calculated and updated by dawidd6/action-homebrew-bump-formula
+  # in the Homebrew tap repository (matrunchyk/lotio). This file is just a template.
+  sha256 "0000000000000000000000000000000000000000000000000000000000000000"  # Auto-updated in tap
   version "1.1.0"
   license "MIT"
   depends_on "ninja" => :build
