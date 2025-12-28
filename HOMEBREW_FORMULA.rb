@@ -13,7 +13,7 @@ class Lotio < Formula
   depends_on "icu4c"
   depends_on "libpng"
   depends_on "jpeg-turbo"
-  depends_on "libwebp"
+  depends_on "webp"
   depends_on "harfbuzz"
 
   def install
