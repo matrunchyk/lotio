@@ -1,11 +1,10 @@
 class Lotio < Formula
   desc "High-performance Lottie animation frame renderer using Skia"
-  homepage "https://github.com/matrunchyk/lotio"  # Update with your actual repo URL
-  url "https://github.com/matrunchyk/lotio/archive/refs/tags/v20251228-9496855.tar.gz"
-  sha256 "e7319e1815b3c84ca10b0de26c85545baec8986e45b4f14e214850a6d2c62752"
-  license "MIT"  # Update with your license
-
-  depends_on "cmake" => :build
+  homepage "https://github.com/matrunchyk/lotio"
+  url "https://github.com/matrunchyk/lotio/archive/refs/tags/v1.1.0.tar.gz"
+  sha256 "PLACEHOLDER_SHA256"  # Will be updated after release is created
+  version "1.1.0"
+  license "MIT"
   depends_on "ninja" => :build
   depends_on "python@3.11" => :build
   depends_on "git" => :build
