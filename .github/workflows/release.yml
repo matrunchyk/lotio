@@ -188,7 +188,7 @@ jobs:
         uses: dawidd6/action-homebrew-bump-formula@v7
         with:
           formula: lotio
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN || github.token }}
           tap: matrunchyk/homebrew-lotio
           tag: ${{ steps.version.outputs.VERSION }}
           message: "Update lotio to ${{ steps.version.outputs.VERSION }}"
