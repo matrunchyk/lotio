@@ -172,14 +172,13 @@ jobs:
 
       - name: Update Homebrew Formula
         continue-on-error: true
-        uses: dawidd6/action-homebrew-bump-formula@v5
+        uses: dawidd6/action-homebrew-bump-formula@v7
         with:
           formula: lotio
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           tap: matrunchyk/homebrew-lotio
           tag: ${{ steps.version.outputs.VERSION }}
-          commit-message: "Update lotio to ${{ steps.version.outputs.VERSION }}"
-          version: ${{ steps.version.outputs.VERSION }}
+          message: "Update lotio to ${{ steps.version.outputs.VERSION }}"
 
   build-linux-deb:
     runs-on: ubuntu-latest
