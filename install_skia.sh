@@ -56,41 +56,24 @@ else
     fi
 fi
 
-# Build GN args
-GN_ARGS="target_cpu=\"${TARGET_CPU}\"
-is_official_build=true
-is_debug=false
-skia_enable_skottie=true
-skia_enable_fontmgr_fontconfig=true
-skia_enable_fontmgr_custom_directory=true
-skia_use_freetype=true
-skia_use_libpng_encode=true
-skia_use_libpng_decode=true
-skia_use_libwebp_decode=true
-skia_use_wuffs=true
-skia_enable_pdf=false"
+# Build GN args - use single line format for better compatibility
+GN_ARGS="target_cpu=\"${TARGET_CPU}\" is_official_build=true is_debug=false skia_enable_skottie=true skia_enable_fontmgr_fontconfig=true skia_enable_fontmgr_custom_directory=true skia_use_freetype=true skia_use_libpng_encode=true skia_use_libpng_decode=true skia_use_libwebp_decode=true skia_use_wuffs=true skia_enable_pdf=false"
 
 # Add CPU-specific optimizations for x64
 # Note: Disable AVX-512 (skx) as it may not be available on all runners
 # and causes linking errors if not properly built
 if [[ "$TARGET_CPU" == "x64" ]]; then
-    GN_ARGS="$GN_ARGS
-skia_use_avx=true
-skia_use_avx2=true
-skia_use_avx512=false
-skia_use_sse41=true
-skia_use_sse42=true"
+    GN_ARGS="$GN_ARGS skia_use_avx=true skia_use_avx2=true skia_use_avx512=false skia_use_sse41=true skia_use_sse42=true"
 fi
 
-GN_ARGS="$GN_ARGS
-extra_cflags=[\"-O3\", \"-march=native\""
-
+# Build extra_cflags array
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    # Override include paths - Skia hardcodes /usr/include paths
+    # macOS - use Homebrew paths
     HARFBUZZ_INCLUDE="$HOMEBREW_PREFIX/include/harfbuzz"
-    GN_ARGS="$GN_ARGS, \"-I$HOMEBREW_PREFIX/include\", \"-I$FREETYPE_INCLUDE\", \"-I$ICU_INCLUDE\", \"-I$HARFBUZZ_INCLUDE\"]"
+    GN_ARGS="$GN_ARGS extra_cflags=[\"-O3\", \"-march=native\", \"-I$HOMEBREW_PREFIX/include\", \"-I$FREETYPE_INCLUDE\", \"-I$ICU_INCLUDE\", \"-I$HARFBUZZ_INCLUDE\"]"
 else
-    GN_ARGS="$GN_ARGS]"
+    # Linux - use system paths
+    GN_ARGS="$GN_ARGS extra_cflags=[\"-O3\", \"-march=native\", \"-I/usr/include\", \"-I/usr/include/freetype2\", \"-I/usr/include/harfbuzz\", \"-I/usr/include/fontconfig\"]"
 fi
 
 bin/gn gen out/Release --args="$GN_ARGS"
