@@ -45,6 +45,8 @@ jobs:
         run: |
           mkdir -p third_party/skia
           cd third_party/skia
+          # Remove existing directory if it exists (from partial cache or previous runs)
+          rm -rf skia
           git clone --depth 1 https://skia.googlesource.com/skia.git
           cd skia
           python3 tools/git-sync-deps
@@ -232,6 +234,8 @@ jobs:
         run: |
           mkdir -p third_party/skia
           cd third_party/skia
+          # Remove existing directory if it exists (from partial cache or previous runs)
+          rm -rf skia
           git clone --depth 1 https://skia.googlesource.com/skia.git
           cd skia
           python3 tools/git-sync-deps
