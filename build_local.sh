@@ -37,7 +37,13 @@ fi
 
 # Compiler settings
 CXX=clang++
-CXXFLAGS="-std=c++17 -O3 -march=native -DNDEBUG -Wall -Wextra"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS - clang supports -march=native
+    CXXFLAGS="-std=c++17 -O3 -march=native -DNDEBUG -Wall -Wextra"
+else
+    # Linux - clang doesn't support -march=native, use -O3 only
+    CXXFLAGS="-std=c++17 -O3 -DNDEBUG -Wall -Wextra"
+fi
 
 # Add Homebrew include paths for macOS
 if [[ "$OSTYPE" == "darwin"* ]]; then
