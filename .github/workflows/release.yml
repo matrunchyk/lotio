@@ -35,7 +35,9 @@ jobs:
           mkdir -p third_party/skia
           cd third_party/skia
           git clone --depth 1 https://skia.googlesource.com/skia.git
-          echo "Skia cloned successfully"
+          cd skia
+          python3 tools/git-sync-deps
+          echo "Skia cloned and dependencies synced successfully"
 
       - name: Build Skia
         run: |
