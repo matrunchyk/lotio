@@ -7,19 +7,19 @@ set -e
 echo "🐳 Testing Linux build locally with Docker..."
 echo "=============================================="
 
-# Build and test in Docker
-docker build -t lotio-test -f Dockerfile .
-
-# Or run a quick test in a container
-echo ""
 echo "📦 Running build test in Docker container..."
+echo "This will take a while (especially building Skia)..."
+echo ""
+
 docker run --rm -v "$(pwd):/workspace" -w /workspace \
     ubuntu:22.04 bash -c "
         set -e
         export DEBIAN_FRONTEND=noninteractive
+        
+        echo '📦 Installing dependencies...'
         apt-get update -qq
         apt-get install -y -qq \
-            build-essential clang ninja-build python3 \
+            build-essential clang ninja-build python3 git \
             libfontconfig1-dev libfreetype6-dev \
             libx11-dev libxext-dev libxrender-dev \
             mesa-common-dev libgl1-mesa-dev libglu1-mesa-dev \
@@ -27,15 +27,19 @@ docker run --rm -v "$(pwd):/workspace" -w /workspace \
             libharfbuzz-dev libwebp-dev > /dev/null 2>&1
         
         echo '✅ Dependencies installed'
-        echo '🔨 Building Skia...'
+        echo ''
+        echo '🔨 Building Skia (this will take 10-20 minutes)...'
         chmod +x install_skia.sh
         ./install_skia.sh
         
+        echo ''
         echo '🔨 Building lotio...'
         chmod +x build_local.sh
         ./build_local.sh
         
+        echo ''
         echo '✅ Build successful!'
+        echo '🧪 Testing binary...'
         ./lotio --help
     "
 
