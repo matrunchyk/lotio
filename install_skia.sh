@@ -81,23 +81,30 @@ echo "Generating build files with GN..."
 echo "GN args: $GN_ARGS"
 bin/gn gen out/Release --args="$GN_ARGS"
 
-# Verify gen/skia.h was created successfully (critical for compilation)
+# Build gen/skia.h explicitly before full build (required for compilation)
+# This prevents failures during parallel ninja builds where gen/skia.h might be built too late
 echo ""
-echo "Verifying gen/skia.h was generated..."
-if [ ! -f "out/Release/gen/skia.h" ]; then
-    echo "❌ ERROR: gen/skia.h was not generated!"
-    echo "This is required for compilation. Attempting to build it explicitly..."
-    cd out/Release
-    ninja gen/skia.h || {
-        echo "Failed to generate gen/skia.h. This indicates a GN configuration issue."
-        echo "Checking GN args..."
-        bin/gn args --list . 2>&1 | grep -E "(target_cpu|skia_enable)" | head -10 || true
-        cd "$SKIA_ROOT"
-        exit 1
-    }
+echo "Building gen/skia.h explicitly (required before compilation)..."
+cd out/Release
+ninja gen/skia.h || {
+    echo "❌ ERROR: Failed to generate gen/skia.h"
+    echo "This indicates a GN configuration issue."
+    echo "Checking GN args..."
+    bin/gn args --list . 2>&1 | grep -E "(target_cpu|skia_enable)" | head -10 || true
+    echo ""
+    echo "Attempting to see GN warning..."
+    bin/gn desc . --root="$SKIA_ROOT" --format=json "*" 2>&1 | head -30 || true
     cd "$SKIA_ROOT"
+    exit 1
+}
+cd "$SKIA_ROOT"
+
+# Verify gen/skia.h was created
+if [ ! -f "out/Release/gen/skia.h" ]; then
+    echo "❌ ERROR: gen/skia.h was not created after explicit build"
+    exit 1
 fi
-echo "✅ gen/skia.h verified"
+echo "✅ gen/skia.h built successfully"
 
 echo "Building Skia with Ninja..."
 ninja -C out/Release
