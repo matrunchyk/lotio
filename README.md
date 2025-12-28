@@ -61,6 +61,31 @@ lotio --png --stream animation.json - | ffmpeg -f image2pipe -i - output.mp4
 lotio --png --text-config text_config.json animation.json frames/
 ```
 
+## Samples
+
+The `samples/` directory contains example Lottie animations and configurations:
+
+- **`samples/sample1/`** - Basic animation with text configuration
+  - `data.json` - Lottie animation file
+  - `text-config.json` - Text customization configuration
+  - `output/` - Rendered frames (run lotio to generate)
+
+- **`samples/sample2/`** - Animation with external images
+  - `data.json` - Lottie animation file with image references
+  - `images/` - External image assets referenced by the animation
+  - `output/` - Rendered frames (run lotio to generate)
+
+**Try the samples:**
+```bash
+# Sample 1: Basic animation with text customization
+cd samples/sample1
+lotio --png --webp --text-config text-config.json data.json output/ 30
+
+# Sample 2: Animation with external images
+cd samples/sample2
+lotio --png --webp data.json output/ 30
+```
+
 ## Using as a Library
 
 ### Headers
