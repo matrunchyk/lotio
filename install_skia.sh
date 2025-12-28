@@ -37,8 +37,22 @@ fi
 
 echo "Generating build files..."
 
+# Detect architecture
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS - detect architecture
+    ARCH=$(uname -m)
+    if [[ "$ARCH" == "arm64" ]]; then
+        TARGET_CPU="arm64"
+    else
+        TARGET_CPU="x64"
+    fi
+else
+    # Linux - default to arm64 for now
+    TARGET_CPU="arm64"
+fi
+
 # Build GN args
-GN_ARGS="target_cpu=\"arm64\"
+GN_ARGS="target_cpu=\"${TARGET_CPU}\"
 is_official_build=true
 is_debug=false
 skia_enable_skottie=true

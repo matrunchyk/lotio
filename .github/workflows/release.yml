@@ -6,6 +6,162 @@ on:
   workflow_dispatch:
 
 jobs:
+  build-linux-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate version
+        id: version
+        run: |
+          DATE=$(date +%Y%m%d)
+          SHA=$(git rev-parse --short HEAD)
+          VERSION="${DATE}-${SHA}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION_SHORT=${DATE}" >> $GITHUB_OUTPUT
+          echo "VERSION_SHA=${SHA}" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            ninja-build \
+            python3 \
+            libfontconfig1-dev \
+            libfreetype6-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrender-dev \
+            mesa-common-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libpng-dev \
+            libjpeg-dev \
+            libicu-dev \
+            libharfbuzz-dev \
+            libwebp-dev \
+            dpkg-dev
+
+      - name: Cache Skia
+        id: cache-skia
+        uses: actions/cache@v4
+        with:
+          path: third_party/skia/skia
+          key: skia-linux-${{ runner.os }}-${{ hashFiles('.github/workflows/release.yml') }}
+          restore-keys: |
+            skia-linux-${{ runner.os }}-
+
+      - name: Fetch Skia
+        if: steps.cache-skia.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p third_party/skia
+          cd third_party/skia
+          git clone --depth 1 https://skia.googlesource.com/skia.git
+          cd skia
+          python3 tools/git-sync-deps
+          echo "Skia cloned and dependencies synced successfully"
+
+      - name: Cache Skia Build
+        id: cache-skia-build
+        uses: actions/cache@v4
+        with:
+          path: third_party/skia/skia/out/Release
+          key: skia-build-linux-${{ runner.os }}-${{ hashFiles('install_skia.sh') }}
+          restore-keys: |
+            skia-build-linux-${{ runner.os }}-
+
+      - name: Build Skia
+        if: steps.cache-skia-build.outputs.cache-hit != 'true'
+        run: |
+          chmod +x install_skia.sh
+          ./install_skia.sh
+
+      - name: Build lotio
+        run: |
+          chmod +x build_local.sh
+          ./build_local.sh
+
+      - name: Test binary
+        run: |
+          ./lotio --help
+
+      - name: Create .deb package
+        id: deb_package
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          PKG_NAME="lotio"
+          PKG_VERSION="${VERSION}"
+          DEB_DIR="deb-package"
+          
+          # Create package structure
+          mkdir -p "$DEB_DIR/usr/local/bin"
+          mkdir -p "$DEB_DIR/usr/local/include/lotio"
+          mkdir -p "$DEB_DIR/DEBIAN"
+          
+          # Copy binary
+          cp lotio "$DEB_DIR/usr/local/bin/"
+          
+          # Copy headers
+          cp -r src/core/*.h "$DEB_DIR/usr/local/include/lotio/core/" 2>/dev/null || true
+          cp -r src/text/*.h "$DEB_DIR/usr/local/include/lotio/text/" 2>/dev/null || true
+          cp -r src/utils/*.h "$DEB_DIR/usr/local/include/lotio/utils/" 2>/dev/null || true
+          
+          # Create control file
+          cat > "$DEB_DIR/DEBIAN/control" << EOF
+          Package: lotio
+          Version: ${PKG_VERSION}
+          Architecture: arm64
+          Maintainer: matrunchyk
+          Description: High-performance Lottie animation frame renderer using Skia
+           Render Lottie animations frame-by-frame to PNG and/or WebP files for video encoding.
+          Depends: libfontconfig1, libfreetype6, libx11-6, libxext6, libxrender1, libpng16-16, libjpeg-turbo8, libicu70, libharfbuzz0b, libwebp7
+          EOF
+          
+          # Create postinst script (optional - for post-install setup)
+          cat > "$DEB_DIR/DEBIAN/postinst" << 'EOF'
+          #!/bin/bash
+          set -e
+          # Update font cache if fontconfig is available
+          if command -v fc-cache >/dev/null 2>&1; then
+            fc-cache -f >/dev/null 2>&1 || true
+          fi
+          exit 0
+          EOF
+          chmod +x "$DEB_DIR/DEBIAN/postinst"
+          
+          # Build .deb package
+          dpkg-deb --build "$DEB_DIR" "${PKG_NAME}_${PKG_VERSION}_arm64.deb"
+          
+          # Calculate SHA256
+          SHA256=$(shasum -a 256 "${PKG_NAME}_${PKG_VERSION}_arm64.deb" | cut -d' ' -f1)
+          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+          echo "FILENAME=${PKG_NAME}_${PKG_VERSION}_arm64.deb" >> $GITHUB_OUTPUT
+          echo ".deb package created: ${PKG_NAME}_${PKG_VERSION}_arm64.deb"
+          echo "SHA256: $SHA256"
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lotio-deb-${{ steps.version.outputs.VERSION }}
+          path: ${{ steps.deb_package.outputs.FILENAME }}
+          retention-days: 90
+
+      - name: Upload .deb to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ steps.deb_package.outputs.FILENAME }}
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-and-release:
     runs-on: macos-latest
     steps:
