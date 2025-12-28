@@ -68,7 +68,17 @@ skia_use_libpng_encode=true
 skia_use_libpng_decode=true
 skia_use_libwebp_decode=true
 skia_use_wuffs=true
-skia_enable_pdf=false
+skia_enable_pdf=false"
+
+# Add CPU-specific optimizations for x64
+if [[ "$TARGET_CPU" == "x64" ]]; then
+    GN_ARGS="$GN_ARGS
+skia_use_avx=true
+skia_use_avx2=true
+skia_use_avx512=false"
+fi
+
+GN_ARGS="$GN_ARGS
 extra_cflags=[\"-O3\", \"-march=native\""
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
