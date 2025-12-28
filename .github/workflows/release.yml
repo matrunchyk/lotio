@@ -72,7 +72,7 @@ jobs:
 
       - name: Test binary
         run: |
-          ./lotio --help || true
+          ./lotio --help
           echo "Binary is working"
 
       - name: Create headers-only package
@@ -260,7 +260,7 @@ jobs:
 
       - name: Test binary
         run: |
-          ./lotio --help || true
+          ./lotio --help
           echo "Binary is working"
 
       - name: Create .deb package

@@ -38,7 +38,7 @@ int parseArguments(int argc, char* argv[], Arguments& args) {
             }
         } else if (arg == "--help" || arg == "-h") {
             printUsage(argv[0]);
-            return 1;
+            return 0;  // Help is a successful operation
         } else if (arg[0] != '-' || arg == "-") {
             // Positional argument (including "-" which is used for streaming/stdout)
             if (args.input_file.empty()) {
