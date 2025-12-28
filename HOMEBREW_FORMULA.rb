@@ -1,11 +1,10 @@
 class Lotio < Formula
   desc "High-performance Lottie animation frame renderer using Skia"
-  homepage "https://github.com/matrunchyk/lotio"  # Update with your actual repo URL
-  url "https://github.com/matrunchyk/lotio/archive/refs/tags/v20251228-9496855.tar.gz"
-  sha256 "e7319e1815b3c84ca10b0de26c85545baec8986e45b4f14e214850a6d2c62752"
-  license "MIT"  # Update with your license
-
-  depends_on "cmake" => :build
+  homepage "https://github.com/matrunchyk/lotio"
+  url "https://github.com/matrunchyk/lotio/archive/refs/tags/v1.1.0.tar.gz"
+  sha256 "PLACEHOLDER_SHA256"  # Will be updated after release is created
+  version "1.1.0"
+  license "MIT"
   depends_on "ninja" => :build
   depends_on "python@3.11" => :build
   depends_on "git" => :build
@@ -27,40 +26,44 @@ class Lotio < Formula
       end
     end
     
-    # Build Skia
-    cd "third_party/skia/skia" do
-      system "python3", "bin/fetch-gn"
-      
-      # Configure GN args for macOS
-      gn_args = [
-        "target_cpu=\"#{Hardware::CPU.arch == "arm64" ? "arm64" : "x64"}\"",
-        "is_official_build=true",
-        "is_debug=false",
-        "skia_enable_skottie=true",
-        "skia_enable_fontmgr_fontconfig=true",
-        "skia_enable_fontmgr_custom_directory=true",
-        "skia_use_freetype=true",
-        "skia_use_libpng_encode=true",
-        "skia_use_libpng_decode=true",
-        "skia_use_libwebp_decode=true",
-        "skia_use_wuffs=true",
-        "skia_enable_pdf=false"
-      ]
-      
-      # Add Homebrew include paths for macOS
-      if OS.mac?
-        homebrew_prefix = HOMEBREW_PREFIX
-        freetype_include = "#{Formula["freetype"].opt_include}/freetype2"
-        icu_include = "#{Formula["icu4c"].opt_include}"
-        harfbuzz_include = "#{Formula["harfbuzz"].opt_include}/harfbuzz"
+      # Build Skia
+      cd "third_party/skia/skia" do
+        system "python3", "bin/fetch-gn"
         
-        gn_args << "extra_cflags=[\"-O3\", \"-march=native\", \"-I#{homebrew_prefix}/include\", \"-I#{freetype_include}\", \"-I#{icu_include}\", \"-I#{harfbuzz_include}\"]"
-        gn_args << "extra_asmflags=[\"-I#{homebrew_prefix}/include\", \"-I#{freetype_include}\", \"-I#{icu_include}\", \"-I#{harfbuzz_include}\"]"
+        # Configure GN args for macOS
+        gn_args = [
+          "target_cpu=\"#{Hardware::CPU.arch == "arm64" ? "arm64" : "x64"}\"",
+          "is_official_build=true",
+          "is_debug=false",
+          "skia_enable_skottie=true",
+          "skia_enable_fontmgr_fontconfig=true",
+          "skia_enable_fontmgr_custom_directory=true",
+          "skia_use_freetype=true",
+          "skia_use_libpng_encode=true",
+          "skia_use_libpng_decode=true",
+          "skia_use_libwebp_decode=true",
+          "skia_use_wuffs=true",
+          "skia_enable_pdf=false"
+        ]
+        
+        # Add Homebrew include paths for macOS
+        if OS.mac?
+          homebrew_prefix = HOMEBREW_PREFIX
+          freetype_include = "#{Formula["freetype"].opt_include}/freetype2"
+          icu_include = "#{Formula["icu4c"].opt_include}"
+          harfbuzz_include = "#{Formula["harfbuzz"].opt_include}/harfbuzz"
+          
+          gn_args << "extra_cflags=[\"-O3\", \"-march=native\", \"-I#{homebrew_prefix}/include\", \"-I#{freetype_include}\", \"-I#{icu_include}\", \"-I#{harfbuzz_include}\"]"
+          gn_args << "extra_asmflags=[\"-I#{homebrew_prefix}/include\", \"-I#{freetype_include}\", \"-I#{icu_include}\", \"-I#{harfbuzz_include}\"]"
+        end
+        
+        system "bin/gn", "gen", "out/Release", "--args=#{gn_args.join(' ')}"
+        
+        # Build gen/skia.h explicitly before full build (prevents CI failures)
+        system "ninja", "-C", "out/Release", "gen/skia.h"
+        
+        system "ninja", "-C", "out/Release"
       end
-      
-      system "bin/gn", "gen", "out/Release", "--args=#{gn_args.join(' ')}"
-      system "ninja", "-C", "out/Release"
-    end
 
     # Build lotio
     system "./build_local.sh"

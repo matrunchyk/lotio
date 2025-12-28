@@ -59,6 +59,10 @@ class Lotio < Formula
       end
       
       system "bin/gn", "gen", "out/Release", "--args=#{gn_args.join(' ')}"
+      
+      # Build gen/skia.h explicitly before full build (prevents CI failures)
+      system "ninja", "-C", "out/Release", "gen/skia.h"
+      
       system "ninja", "-C", "out/Release"
     end
 

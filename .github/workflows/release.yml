@@ -25,12 +25,22 @@ jobs:
       - name: Generate version
         id: version
         run: |
-          DATE=$(date +%Y%m%d)
-          SHA=$(git rev-parse --short HEAD)
-          VERSION="v${DATE}-${SHA}"
+          # Check if we're on a semantic version tag (v1.1.0, v2.0.0, etc.)
+          if git describe --tags --exact-match HEAD 2>/dev/null | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+            # Use the semantic version tag
+            VERSION=$(git describe --tags --exact-match HEAD)
+            echo "Using semantic version tag: $VERSION"
+          else
+            # Fall back to date-SHA format
+            DATE=$(date +%Y%m%d)
+            SHA=$(git rev-parse --short HEAD)
+            VERSION="v${DATE}-${SHA}"
+            echo "Using date-SHA version: $VERSION"
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "VERSION_SHORT=${DATE}" >> $GITHUB_OUTPUT
-          echo "VERSION_SHA=${SHA}" >> $GITHUB_OUTPUT
+          # Extract version number for Homebrew (remove 'v' prefix)
+          VERSION_NUMBER="${VERSION#v}"
+          echo "VERSION_NUMBER=$VERSION_NUMBER" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
       - name: Install dependencies
