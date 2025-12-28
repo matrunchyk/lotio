@@ -28,7 +28,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install fontconfig freetype harfbuzz icu4c libpng jpeg-turbo libwebp ninja python@3.11
+          brew install fontconfig freetype harfbuzz icu4c libpng jpeg-turbo webp ninja python@3.11
 
       - name: Build Skia
         run: |
