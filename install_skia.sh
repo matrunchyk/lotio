@@ -1,8 +1,14 @@
 #!/bin/bash
 set -e
 
-BUILD_ROOT="/Users/thebook/Downloads/cpp"
-SKIA_ROOT="$BUILD_ROOT/third_party/skia/skia"
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKIA_ROOT="$SCRIPT_DIR/third_party/skia/skia"
+
+if [ ! -d "$SKIA_ROOT" ]; then
+    echo "Error: Skia directory not found at $SKIA_ROOT"
+    exit 1
+fi
 
 cd "$SKIA_ROOT"
 
