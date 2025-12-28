@@ -194,7 +194,7 @@ jobs:
           message: "Update lotio to ${{ steps.version.outputs.VERSION }}"
 
   build-linux-deb:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Note: ubuntu-latest is x86_64, not ARM64
     needs: build-and-release
     steps:
       - name: Checkout code

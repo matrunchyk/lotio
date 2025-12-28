@@ -47,8 +47,13 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         TARGET_CPU="x64"
     fi
 else
-    # Linux - default to arm64 for now
-    TARGET_CPU="arm64"
+    # Linux - detect architecture
+    ARCH=$(uname -m)
+    if [[ "$ARCH" == "aarch64" ]] || [[ "$ARCH" == "arm64" ]]; then
+        TARGET_CPU="arm64"
+    else
+        TARGET_CPU="x64"
+    fi
 fi
 
 # Build GN args
