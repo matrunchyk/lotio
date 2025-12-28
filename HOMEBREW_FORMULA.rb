@@ -2,7 +2,7 @@ class Lotio < Formula
   desc "High-performance Lottie animation frame renderer using Skia"
   homepage "https://github.com/matrunchyk/lotio"  # Update with your actual repo URL
   url "https://github.com/matrunchyk/lotio/archive/refs/tags/v20251228-9496855.tar.gz"
-  sha256 "7d1196457dccc2efccb904cb577c31a1ed876ce9a6bab86d175c1466b9fcbd9c"
+  sha256 "e7319e1815b3c84ca10b0de26c85545baec8986e45b4f14e214850a6d2c62752"
   license "MIT"  # Update with your license
 
   depends_on "cmake" => :build
@@ -17,7 +17,16 @@ class Lotio < Formula
   depends_on "harfbuzz"
 
   def install
-    # Build Skia first
+    # Fetch Skia first (not included in source archive)
+    mkdir_p "third_party/skia"
+    cd "third_party/skia" do
+      system "git", "clone", "--depth", "1", "https://skia.googlesource.com/skia.git"
+      cd "skia" do
+        system "python3", "tools/git-sync-deps"
+      end
+    end
+    
+    # Build Skia
     cd "third_party/skia/skia" do
       system "python3", "bin/fetch-gn"
       
