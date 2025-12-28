@@ -1,0 +1,7 @@
+CompileFlags:
+  Add:
+    - -I${workspaceFolder}/third_party/skia/skia
+    - -I${workspaceFolder}/src
+    - -std=c++17
+
+
