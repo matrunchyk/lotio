@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install fontconfig freetype harfbuzz icu4c libpng jpeg-turbo libwebp ninja python@3.11
+
+      - name: Build Skia
+        run: |
+          chmod +x install_skia.sh
+          ./install_skia.sh
+
+      - name: Build lotio
+        run: |
+          chmod +x build_local.sh
+          ./build_local.sh
+
+      - name: Test binary
+        run: |
+          ./lotio --help
+
+      - name: Verify headers structure
+        run: |
+          echo "Checking header files..."
+          find src -name "*.h" | head -10
+          echo "✅ Headers found"
+

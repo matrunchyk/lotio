@@ -1,0 +1,268 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate version
+        id: version
+        run: |
+          # Generate version from date and short SHA
+          DATE=$(date +%Y%m%d)
+          SHA=$(git rev-parse --short HEAD)
+          VERSION="v${DATE}-${SHA}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION_SHORT=${DATE}" >> $GITHUB_OUTPUT
+          echo "VERSION_SHA=${SHA}" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Install dependencies
+        run: |
+          brew install fontconfig freetype harfbuzz icu4c libpng jpeg-turbo libwebp ninja python@3.11
+
+      - name: Build Skia
+        run: |
+          chmod +x install_skia.sh
+          ./install_skia.sh
+
+      - name: Build lotio
+        run: |
+          chmod +x build_local.sh
+          ./build_local.sh
+
+      - name: Test binary
+        run: |
+          ./lotio --help
+
+      - name: Create headers-only package
+        id: headers_package
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          PKG_NAME="lotio-headers-${VERSION}"
+          mkdir -p "$PKG_NAME/include/lotio"
+          
+          # Copy headers maintaining structure
+          cp -r src/core/*.h "$PKG_NAME/include/lotio/core/" 2>/dev/null || true
+          cp -r src/text/*.h "$PKG_NAME/include/lotio/text/" 2>/dev/null || true
+          cp -r src/utils/*.h "$PKG_NAME/include/lotio/utils/" 2>/dev/null || true
+          
+          # Create README for headers package
+          cat > "$PKG_NAME/README.md" << EOF
+          # Lotio Headers $VERSION
+          
+          Headers-only package for IDE support and reference.
+          
+          ## Installation
+          
+          Extract to your include path:
+          \`\`\`bash
+          tar -xzf $PKG_NAME.tar.gz
+          cp -r $PKG_NAME/include/lotio /usr/local/include/
+          \`\`\`
+          
+          Or use with your IDE by adding to include paths:
+          - \`include/lotio/core/\`
+          - \`include/lotio/text/\`
+          - \`include/lotio/utils/\`
+          EOF
+          
+          # Create tarball
+          tar -czf "${PKG_NAME}.tar.gz" "$PKG_NAME"
+          
+          # Calculate SHA256
+          SHA256=$(shasum -a 256 "${PKG_NAME}.tar.gz" | cut -d' ' -f1)
+          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+          echo "FILENAME=${PKG_NAME}.tar.gz" >> $GITHUB_OUTPUT
+          echo "Headers package SHA256: $SHA256"
+
+      - name: Create full package (binary + headers + libs)
+        id: full_package
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          PKG_NAME="lotio-${VERSION}"
+          mkdir -p "$PKG_NAME"
+          
+          # Copy binary
+          cp lotio "$PKG_NAME/"
+          
+          # Copy headers
+          mkdir -p "$PKG_NAME/include/lotio"
+          cp -r src/core/*.h "$PKG_NAME/include/lotio/core/" 2>/dev/null || true
+          cp -r src/text/*.h "$PKG_NAME/include/lotio/text/" 2>/dev/null || true
+          cp -r src/utils/*.h "$PKG_NAME/include/lotio/utils/" 2>/dev/null || true
+          
+          # Copy Skia libraries (static libs)
+          mkdir -p "$PKG_NAME/lib"
+          SKIA_LIB_DIR="third_party/skia/skia/out/Release"
+          for lib in skottie skia skparagraph sksg skshaper skunicode_icu skunicode_core skresources jsonreader; do
+            if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
+              cp "$SKIA_LIB_DIR/lib${lib}.a" "$PKG_NAME/lib/"
+            fi
+          done
+          
+          # Create pkg-config file
+          mkdir -p "$PKG_NAME/lib/pkgconfig"
+          cat > "$PKG_NAME/lib/pkgconfig/lotio.pc" << EOF
+          prefix=/usr/local
+          exec_prefix=\${prefix}
+          libdir=\${exec_prefix}/lib
+          includedir=\${prefix}/include
+          
+          Name: lotio
+          Description: High-performance Lottie animation frame renderer using Skia
+          Version: ${VERSION}
+          Libs: -L\${libdir} -lskottie -lskia -lskparagraph -lsksg -lskshaper -lskunicode_icu -lskunicode_core -lskresources -ljsonreader
+          Cflags: -I\${includedir}
+          EOF
+          
+          # Create README
+          cat > "$PKG_NAME/README.md" << EOF
+          # Lotio $VERSION
+          
+          Full package with binary, headers, and libraries.
+          
+          ## Installation
+          
+          ### Homebrew (Recommended)
+          \`\`\`bash
+          brew tap matrunchyk/lotio
+          brew install lotio
+          \`\`\`
+          
+          ### Manual Installation
+          \`\`\`bash
+          # Extract
+          tar -xzf $PKG_NAME.tar.gz
+          cd $PKG_NAME
+          
+          # Install binary
+          sudo cp lotio /usr/local/bin/
+          
+          # Install headers
+          sudo cp -r include/lotio /usr/local/include/
+          
+          # Install libraries
+          sudo cp lib/*.a /usr/local/lib/
+          
+          # Install pkg-config
+          sudo cp lib/pkgconfig/lotio.pc /usr/local/lib/pkgconfig/
+          \`\`\`
+          
+          ## Usage
+          
+          \`\`\`bash
+          lotio --png --webp animation.json output_dir/ 30
+          \`\`\`
+          
+          ## Headers
+          
+          Headers are located in \`include/lotio/\`:
+          - \`include/lotio/core/\` - Core functionality
+          - \`include/lotio/text/\` - Text processing
+          - \`include/lotio/utils/\` - Utilities
+          
+          ## Linking
+          
+          When linking your application:
+          \`\`\`bash
+          g++ -I/usr/local/include -L/usr/local/lib \\
+              -llotio -lskottie -lskia -lskparagraph -lsksg -lskshaper \\
+              -lskunicode_icu -lskunicode_core -lskresources -ljsonreader \\
+              your_app.cpp -o your_app
+          \`\`\`
+          
+          Or use pkg-config:
+          \`\`\`bash
+          g++ \$(pkg-config --cflags --libs lotio) your_app.cpp -o your_app
+          \`\`\`
+          EOF
+          
+          # Create tarball
+          tar -czf "${PKG_NAME}.tar.gz" "$PKG_NAME"
+          
+          # Calculate SHA256
+          SHA256=$(shasum -a 256 "${PKG_NAME}.tar.gz" | cut -d' ' -f1)
+          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+          echo "FILENAME=${PKG_NAME}.tar.gz" >> $GITHUB_OUTPUT
+          echo "Full package SHA256: $SHA256"
+
+      - name: Upload headers-only artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lotio-headers-${{ steps.version.outputs.VERSION }}
+          path: ${{ steps.headers_package.outputs.FILENAME }}
+          retention-days: 90
+
+      - name: Upload full package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lotio-full-${{ steps.version.outputs.VERSION }}
+          path: ${{ steps.full_package.outputs.FILENAME }}
+          retention-days: 90
+
+      - name: Create Git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.VERSION }}" -m "Release ${{ steps.version.outputs.VERSION }}"
+          git push origin "${{ steps.version.outputs.VERSION }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ${{ steps.headers_package.outputs.FILENAME }}
+            ${{ steps.full_package.outputs.FILENAME }}
+          name: Release ${{ steps.version.outputs.VERSION }}
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Lotio ${{ steps.version.outputs.VERSION }}
+            
+            ### Packages
+            
+            **Headers-only** (for IDE/reference):
+            - File: \`${{ steps.headers_package.outputs.FILENAME }}\`
+            - SHA256: \`${{ steps.headers_package.outputs.SHA256 }}\`
+            - Use for: IDE support, code reference
+            
+            **Full package** (binary + headers + libraries):
+            - File: \`${{ steps.full_package.outputs.FILENAME }}\`
+            - SHA256: \`${{ steps.full_package.outputs.SHA256 }}\`
+            - Use for: Programmatic use, linking
+            
+            ### Installation
+            
+            **Homebrew:**
+            \`\`\`bash
+            brew tap matrunchyk/lotio
+            brew install lotio
+            \`\`\`
+            
+            The Homebrew formula will be automatically updated.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Homebrew Formula
+        if: secrets.HOMEBREW_TAP_TOKEN != ''
+        uses: dawidd6/action-homebrew-bump-formula@v5
+        with:
+          formula: lotio
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          tap: matrunchyk/homebrew-lotio
+          tag: ${{ steps.version.outputs.VERSION }}
+          revision: ""
+          download-url: https://github.com/${{ github.repository }}/archive/refs/tags/${{ steps.version.outputs.VERSION }}.tar.gz
+          commit-message: "Update lotio to ${{ steps.version.outputs.VERSION }}"
+          version: ${{ steps.version.outputs.VERSION }}
