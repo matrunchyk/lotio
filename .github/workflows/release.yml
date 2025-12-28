@@ -19,7 +19,7 @@ jobs:
         run: |
           DATE=$(date +%Y%m%d)
           SHA=$(git rev-parse --short HEAD)
-          VERSION="${DATE}-${SHA}"
+          VERSION="v${DATE}-${SHA}"
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "VERSION_SHORT=${DATE}" >> $GITHUB_OUTPUT
           echo "VERSION_SHA=${SHA}" >> $GITHUB_OUTPUT
@@ -151,6 +151,13 @@ jobs:
           name: lotio-deb-${{ steps.version.outputs.VERSION }}
           path: ${{ steps.deb_package.outputs.FILENAME }}
           retention-days: 90
+
+      - name: Create Git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.VERSION }}" -m "Release ${{ steps.version.outputs.VERSION }}" || echo "Tag may already exist"
+          git push origin "${{ steps.version.outputs.VERSION }}" || echo "Tag push may have failed (might already exist)"
 
       - name: Upload .deb to release
         uses: softprops/action-gh-release@v1
