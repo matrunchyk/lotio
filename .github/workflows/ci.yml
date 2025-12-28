@@ -17,6 +17,13 @@ jobs:
         run: |
           brew install fontconfig freetype harfbuzz icu4c libpng jpeg-turbo webp ninja python@3.11
 
+      - name: Fetch Skia
+        run: |
+          mkdir -p third_party/skia
+          cd third_party/skia
+          git clone --depth 1 https://skia.googlesource.com/skia.git
+          echo "Skia cloned successfully"
+
       - name: Build Skia
         run: |
           chmod +x install_skia.sh
