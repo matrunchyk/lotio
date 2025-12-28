@@ -76,7 +76,19 @@ else
     GN_ARGS="$GN_ARGS extra_cflags=[\"-O3\", \"-Wno-psabi\", \"-I/usr/include\", \"-I/usr/include/freetype2\", \"-I/usr/include/harfbuzz\", \"-I/usr/include/fontconfig\"]"
 fi
 
+echo "Generating build files with GN..."
+echo "GN args: $GN_ARGS"
 bin/gn gen out/Release --args="$GN_ARGS"
+
+# Debug: Check for GN warnings
+echo ""
+echo "Checking for GN warnings..."
+cd out/Release
+$SKIA_ROOT/bin/gn desc . --root="$SKIA_ROOT" --format=json * > /dev/null 2>&1 || {
+    echo "⚠️  GN generated warnings. Running with verbose output:"
+    $SKIA_ROOT/bin/gn desc . --root="$SKIA_ROOT" --format=json * 2>&1 | head -20 || true
+}
+cd "$SKIA_ROOT"
 
 echo "Building Skia with Ninja..."
 ninja -C out/Release
