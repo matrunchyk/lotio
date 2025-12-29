@@ -194,7 +194,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Homebrew Formula
-        continue-on-error: true
+        continue-on-error: false
         uses: dawidd6/action-homebrew-bump-formula@v7
         with:
           formula: lotio
