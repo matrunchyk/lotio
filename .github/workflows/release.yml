@@ -94,35 +94,23 @@ jobs:
         run: |
           ./lotio --help
 
-      - name: Create headers-only package
-        id: headers_package
+      - name: Create developer package
+        id: dev_package
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          PKG_NAME="lotio-headers-${VERSION}"
-          mkdir -p "$PKG_NAME/include/lotio"
-          
-          cp -r src/core/*.h "$PKG_NAME/include/lotio/core/" 2>/dev/null || true
-          cp -r src/text/*.h "$PKG_NAME/include/lotio/text/" 2>/dev/null || true
-          cp -r src/utils/*.h "$PKG_NAME/include/lotio/utils/" 2>/dev/null || true
-          
-          tar -czf "${PKG_NAME}.tar.gz" "$PKG_NAME"
-          SHA256=$(shasum -a 256 "${PKG_NAME}.tar.gz" | cut -d' ' -f1)
-          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
-          echo "FILENAME=${PKG_NAME}.tar.gz" >> $GITHUB_OUTPUT
-
-      - name: Create full package
-        id: full_package
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          PKG_NAME="lotio-${VERSION}"
+          PKG_NAME="lotio-dev-${VERSION}"
           mkdir -p "$PKG_NAME"
           
+          # Binary
           cp lotio "$PKG_NAME/"
+          
+          # Headers (for development)
           mkdir -p "$PKG_NAME/include/lotio"
           cp -r src/core/*.h "$PKG_NAME/include/lotio/core/" 2>/dev/null || true
           cp -r src/text/*.h "$PKG_NAME/include/lotio/text/" 2>/dev/null || true
           cp -r src/utils/*.h "$PKG_NAME/include/lotio/utils/" 2>/dev/null || true
           
+          # Skia static libraries (for linking)
           mkdir -p "$PKG_NAME/lib"
           SKIA_LIB_DIR="third_party/skia/skia/out/Release"
           for lib in skottie skia skparagraph sksg skshaper skunicode_icu skunicode_core skresources jsonreader; do
@@ -130,6 +118,21 @@ jobs:
               cp "$SKIA_LIB_DIR/lib${lib}.a" "$PKG_NAME/lib/"
             fi
           done
+          
+          # pkg-config file
+          mkdir -p "$PKG_NAME/lib/pkgconfig"
+          cat > "$PKG_NAME/lib/pkgconfig/lotio.pc" << EOF
+          prefix=/usr/local
+          exec_prefix=\${prefix}
+          libdir=\${exec_prefix}/lib
+          includedir=\${exec_prefix}/include
+          
+          Name: lotio
+          Description: High-performance Lottie animation frame renderer using Skia
+          Version: ${VERSION#v}
+          Libs: -L\${libdir} -lskottie -lskia -lskparagraph -lsksg -lskshaper -lskunicode_icu -lskunicode_core -lskresources -ljsonreader
+          Cflags: -I\${includedir}
+          EOF
           
           tar -czf "${PKG_NAME}.tar.gz" "$PKG_NAME"
           SHA256=$(shasum -a 256 "${PKG_NAME}.tar.gz" | cut -d' ' -f1)
@@ -215,8 +218,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ${{ steps.headers_package.outputs.FILENAME }}
-            ${{ steps.full_package.outputs.FILENAME }}
+            ${{ steps.dev_package.outputs.FILENAME }}
             ${{ steps.bottle.outputs.FILENAME }}
           name: Release ${{ steps.version.outputs.VERSION }}
           tag_name: ${{ steps.version.outputs.VERSION }}
@@ -225,13 +227,15 @@ jobs:
             
             ### Packages
             
-            **Headers-only** (for IDE/reference):
-            - File: \`${{ steps.headers_package.outputs.FILENAME }}\`
-            - SHA256: \`${{ steps.headers_package.outputs.SHA256 }}\`
+            **Developer package** (binary + headers + libraries for development):
+            - File: \`${{ steps.dev_package.outputs.FILENAME }}\`
+            - SHA256: \`${{ steps.dev_package.outputs.SHA256 }}\`
+            - Contains: binary, lotio headers, Skia static libraries, pkg-config file
             
-            **Full package** (binary + headers + libraries):
-            - File: \`${{ steps.full_package.outputs.FILENAME }}\`
-            - SHA256: \`${{ steps.full_package.outputs.SHA256 }}\`
+            **Homebrew bottle** (pre-built binary for macOS):
+            - File: \`${{ steps.bottle.outputs.FILENAME }}\`
+            - SHA256: \`${{ steps.bottle.outputs.SHA256 }}\`
+            - Used automatically by Homebrew for fast installation
             
             **Debian package** (Linux ARM64):
             - File: \`lotio_${{ steps.version.outputs.VERSION }}_arm64.deb\`
@@ -239,10 +243,17 @@ jobs:
             
             ### Installation
             
-            **Homebrew (macOS):**
+            **Homebrew (macOS) - Recommended:**
             \`\`\`bash
-            brew tap matrunchyk/lotio
+            brew tap matrunchyk/homebrew-lotio
             brew install lotio
+            \`\`\`
+            
+            **Developer package (for programmatic use):**
+            \`\`\`bash
+            wget https://github.com/matrunchyk/lotio/releases/download/${{ steps.version.outputs.VERSION }}/${{ steps.dev_package.outputs.FILENAME }}
+            tar -xzf ${{ steps.dev_package.outputs.FILENAME }}
+            # Use binary, headers, and libraries from the package
             \`\`\`
             
             **Debian/Ubuntu (Linux ARM64):**
