@@ -94,35 +94,23 @@ jobs:
         run: |
           ./lotio --help
 
-      - name: Create headers-only package
-        id: headers_package
+      - name: Create developer package
+        id: dev_package
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          PKG_NAME="lotio-headers-${VERSION}"
-          mkdir -p "$PKG_NAME/include/lotio"
-          
-          cp -r src/core/*.h "$PKG_NAME/include/lotio/core/" 2>/dev/null || true
-          cp -r src/text/*.h "$PKG_NAME/include/lotio/text/" 2>/dev/null || true
-          cp -r src/utils/*.h "$PKG_NAME/include/lotio/utils/" 2>/dev/null || true
-          
-          tar -czf "${PKG_NAME}.tar.gz" "$PKG_NAME"
-          SHA256=$(shasum -a 256 "${PKG_NAME}.tar.gz" | cut -d' ' -f1)
-          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
-          echo "FILENAME=${PKG_NAME}.tar.gz" >> $GITHUB_OUTPUT
-
-      - name: Create full package
-        id: full_package
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          PKG_NAME="lotio-${VERSION}"
+          PKG_NAME="lotio-dev-${VERSION}"
           mkdir -p "$PKG_NAME"
           
+          # Binary
           cp lotio "$PKG_NAME/"
+          
+          # Headers (for development)
           mkdir -p "$PKG_NAME/include/lotio"
           cp -r src/core/*.h "$PKG_NAME/include/lotio/core/" 2>/dev/null || true
           cp -r src/text/*.h "$PKG_NAME/include/lotio/text/" 2>/dev/null || true
           cp -r src/utils/*.h "$PKG_NAME/include/lotio/utils/" 2>/dev/null || true
           
+          # Skia static libraries (for linking)
           mkdir -p "$PKG_NAME/lib"
           SKIA_LIB_DIR="third_party/skia/skia/out/Release"
           for lib in skottie skia skparagraph sksg skshaper skunicode_icu skunicode_core skresources jsonreader; do
@@ -131,10 +119,84 @@ jobs:
             fi
           done
           
+          # pkg-config file
+          mkdir -p "$PKG_NAME/lib/pkgconfig"
+          cat > "$PKG_NAME/lib/pkgconfig/lotio.pc" << EOF
+          prefix=/usr/local
+          exec_prefix=\${prefix}
+          libdir=\${exec_prefix}/lib
+          includedir=\${exec_prefix}/include
+          
+          Name: lotio
+          Description: High-performance Lottie animation frame renderer using Skia
+          Version: ${VERSION#v}
+          Libs: -L\${libdir} -lskottie -lskia -lskparagraph -lsksg -lskshaper -lskunicode_icu -lskunicode_core -lskresources -ljsonreader
+          Cflags: -I\${includedir}
+          EOF
+          
           tar -czf "${PKG_NAME}.tar.gz" "$PKG_NAME"
           SHA256=$(shasum -a 256 "${PKG_NAME}.tar.gz" | cut -d' ' -f1)
           echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
           echo "FILENAME=${PKG_NAME}.tar.gz" >> $GITHUB_OUTPUT
+
+      - name: Create Homebrew bottle
+        id: bottle
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          VERSION_NUMBER="${VERSION#v}"
+          
+          # Create bottle directory structure
+          BOTTLE_DIR="lotio-${VERSION_NUMBER}"
+          mkdir -p "$BOTTLE_DIR/bin"
+          mkdir -p "$BOTTLE_DIR/include/lotio/core"
+          mkdir -p "$BOTTLE_DIR/include/lotio/text"
+          mkdir -p "$BOTTLE_DIR/include/lotio/utils"
+          mkdir -p "$BOTTLE_DIR/lib/pkgconfig"
+          
+          # Copy binary
+          cp lotio "$BOTTLE_DIR/bin/"
+          
+          # Copy headers
+          cp -r src/core/*.h "$BOTTLE_DIR/include/lotio/core/" 2>/dev/null || true
+          cp -r src/text/*.h "$BOTTLE_DIR/include/lotio/text/" 2>/dev/null || true
+          cp -r src/utils/*.h "$BOTTLE_DIR/include/lotio/utils/" 2>/dev/null || true
+          
+          # Copy Skia static libraries
+          SKIA_LIB_DIR="third_party/skia/skia/out/Release"
+          for lib in skottie skia skparagraph sksg skshaper skunicode_icu skunicode_core skresources jsonreader; do
+            if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
+              cp "$SKIA_LIB_DIR/lib${lib}.a" "$BOTTLE_DIR/lib/"
+            fi
+          done
+          
+          # Create pkg-config file
+          cat > "$BOTTLE_DIR/lib/pkgconfig/lotio.pc" << EOF
+          prefix=/opt/homebrew
+          exec_prefix=\${prefix}
+          libdir=\${exec_prefix}/lib
+          includedir=\${exec_prefix}/include
+          
+          Name: lotio
+          Description: High-performance Lottie animation frame renderer using Skia
+          Version: ${VERSION_NUMBER}
+          Libs: -L\${libdir} -lskottie -lskia -lskparagraph -lsksg -lskshaper -lskunicode_icu -lskunicode_core -lskresources -ljsonreader
+          Cflags: -I\${includedir}
+          EOF
+          
+          # Create tarball (Homebrew bottle format)
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "arm64" ]; then
+            BOTTLE_ARCH="arm64_big_sur"
+          else
+            BOTTLE_ARCH="x86_64_linux"
+          fi
+          
+          tar -czf "lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz" "$BOTTLE_DIR"
+          
+          SHA256=$(shasum -a 256 "lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz" | cut -d' ' -f1)
+          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+          echo "FILENAME=lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz" >> $GITHUB_OUTPUT
+          echo "ARCH=$BOTTLE_ARCH" >> $GITHUB_OUTPUT
 
       - name: Create Git tag
         env:
@@ -156,8 +218,8 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ${{ steps.headers_package.outputs.FILENAME }}
-            ${{ steps.full_package.outputs.FILENAME }}
+            ${{ steps.dev_package.outputs.FILENAME }}
+            ${{ steps.bottle.outputs.FILENAME }}
           name: Release ${{ steps.version.outputs.VERSION }}
           tag_name: ${{ steps.version.outputs.VERSION }}
           body: |
@@ -165,13 +227,15 @@ jobs:
             
             ### Packages
             
-            **Headers-only** (for IDE/reference):
-            - File: \`${{ steps.headers_package.outputs.FILENAME }}\`
-            - SHA256: \`${{ steps.headers_package.outputs.SHA256 }}\`
+            **Developer package** (binary + headers + libraries for development):
+            - File: \`${{ steps.dev_package.outputs.FILENAME }}\`
+            - SHA256: \`${{ steps.dev_package.outputs.SHA256 }}\`
+            - Contains: binary, lotio headers, Skia static libraries, pkg-config file
             
-            **Full package** (binary + headers + libraries):
-            - File: \`${{ steps.full_package.outputs.FILENAME }}\`
-            - SHA256: \`${{ steps.full_package.outputs.SHA256 }}\`
+            **Homebrew bottle** (pre-built binary for macOS):
+            - File: \`${{ steps.bottle.outputs.FILENAME }}\`
+            - SHA256: \`${{ steps.bottle.outputs.SHA256 }}\`
+            - Used automatically by Homebrew for fast installation
             
             **Debian package** (Linux ARM64):
             - File: \`lotio_${{ steps.version.outputs.VERSION }}_arm64.deb\`
@@ -179,10 +243,17 @@ jobs:
             
             ### Installation
             
-            **Homebrew (macOS):**
+            **Homebrew (macOS) - Recommended:**
             \`\`\`bash
-            brew tap matrunchyk/lotio
+            brew tap matrunchyk/homebrew-lotio
             brew install lotio
+            \`\`\`
+            
+            **Developer package (for programmatic use):**
+            \`\`\`bash
+            wget https://github.com/matrunchyk/lotio/releases/download/${{ steps.version.outputs.VERSION }}/${{ steps.dev_package.outputs.FILENAME }}
+            tar -xzf ${{ steps.dev_package.outputs.FILENAME }}
+            # Use binary, headers, and libraries from the package
             \`\`\`
             
             **Debian/Ubuntu (Linux ARM64):**
@@ -267,17 +338,10 @@ jobs:
           "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
-      - name: Cache Skia Build
-        id: cache-skia-build
-        uses: actions/cache@v4
-        with:
-          path: third_party/skia/skia/out/Release
-          key: skia-build-linux-${{ runner.os }}-${{ hashFiles('install_skia.sh') }}
-          restore-keys: |
-            skia-build-linux-${{ runner.os }}-
-
+      # Note: Not caching Skia build artifacts for Linux due to disk space constraints
+      # The build cache can be several GB and exceeds GitHub Actions runner limits
+      
       - name: Build Skia
-        if: steps.cache-skia-build.outputs.cache-hit != 'true'
         run: |
           chmod +x install_skia.sh
           ./install_skia.sh
