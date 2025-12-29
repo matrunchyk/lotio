@@ -65,8 +65,8 @@ jobs:
           rm -rf skia
           git clone --depth 1 https://skia.googlesource.com/skia.git
           cd skia
-          chmod +x ../../sync_skia_deps.sh
-          ../../sync_skia_deps.sh .
+          chmod +x "$GITHUB_WORKSPACE/sync_skia_deps.sh"
+          "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
       - name: Cache Skia Build
@@ -261,8 +261,8 @@ jobs:
           rm -rf skia
           git clone --depth 1 https://skia.googlesource.com/skia.git
           cd skia
-          chmod +x ../../sync_skia_deps.sh
-          ../../sync_skia_deps.sh .
+          chmod +x "$GITHUB_WORKSPACE/sync_skia_deps.sh"
+          "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
       - name: Cache Skia Build
