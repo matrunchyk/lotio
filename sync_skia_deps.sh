@@ -6,6 +6,9 @@ set -e
 
 SKIA_ROOT="${1:-$(pwd)}"
 
+# Convert to absolute path
+SKIA_ROOT="$(cd "$SKIA_ROOT" && pwd)"
+
 if [ ! -f "$SKIA_ROOT/DEPS" ]; then
     echo "Error: DEPS file not found at $SKIA_ROOT/DEPS"
     echo "Usage: $0 [skia_root_directory]"
