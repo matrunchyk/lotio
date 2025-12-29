@@ -18,21 +18,10 @@ jobs:
         run: |
           brew install fontconfig freetype harfbuzz icu4c libpng jpeg-turbo webp ninja python@3.11
 
-      - name: Cache Skia
-        id: cache-skia
-        uses: actions/cache@v4
-        with:
-          path: third_party/skia/skia
-          key: skia-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: |
-            skia-${{ runner.os }}-
-
       - name: Fetch Skia
-        if: steps.cache-skia.outputs.cache-hit != 'true'
         run: |
           mkdir -p third_party/skia
           cd third_party/skia
-          # Remove existing directory if it exists (from partial cache or previous runs)
           rm -rf skia
           git config --global advice.detachedHead false
           git clone --depth 1 https://skia.googlesource.com/skia.git
@@ -41,17 +30,7 @@ jobs:
           "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
-      - name: Cache Skia Build
-        id: cache-skia-build
-        uses: actions/cache@v4
-        with:
-          path: third_party/skia/skia/out/Release
-          key: skia-build-${{ runner.os }}-${{ hashFiles('install_skia.sh') }}
-          restore-keys: |
-            skia-build-${{ runner.os }}-
-
       - name: Build Skia
-        if: steps.cache-skia-build.outputs.cache-hit != 'true'
         run: |
           chmod +x install_skia.sh
           ./install_skia.sh
@@ -100,21 +79,10 @@ jobs:
             libharfbuzz-dev \
             libwebp-dev
 
-      - name: Cache Skia
-        id: cache-skia
-        uses: actions/cache@v4
-        with:
-          path: third_party/skia/skia
-          key: skia-linux-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: |
-            skia-linux-${{ runner.os }}-
-
       - name: Fetch Skia
-        if: steps.cache-skia.outputs.cache-hit != 'true'
         run: |
           mkdir -p third_party/skia
           cd third_party/skia
-          # Remove existing directory if it exists (from partial cache or previous runs)
           rm -rf skia
           git config --global advice.detachedHead false
           git clone --depth 1 https://skia.googlesource.com/skia.git
@@ -123,9 +91,6 @@ jobs:
           "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
-      # Note: Not caching Skia build artifacts for Linux due to disk space constraints
-      # The build cache can be several GB and exceeds GitHub Actions runner limits
-      
       - name: Build Skia
         run: |
           chmod +x install_skia.sh
