@@ -11,7 +11,7 @@ echo "📦 Running build test in Docker container..."
 echo "This will take a while (especially building Skia)..."
 echo ""
 
-docker run --rm -v "$(pwd):/workspace" -w /workspace \
+docker run --rm --platform linux/amd64 -v "$(pwd):/workspace" -w /workspace \
     ubuntu:22.04 bash -c "
         set -e
         export DEBIAN_FRONTEND=noninteractive

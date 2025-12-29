@@ -12,6 +12,12 @@ fi
 
 cd "$SKIA_ROOT"
 
+# Clean build directory if it exists (in case of interrupted builds)
+if [ -d "out/Release" ]; then
+    echo "Cleaning previous build directory (handling interrupted builds)..."
+    rm -rf out/Release
+fi
+
 echo "Fetching GN binary..."
 python3 bin/fetch-gn
 echo "GN binary fetched"
@@ -57,14 +63,9 @@ else
 fi
 
 # Build GN args - use single line format for better compatibility
+# Note: skia_use_avx, skia_use_avx2, etc. are not valid GN arguments in Skia
+# CPU optimizations are handled automatically by the compiler
 GN_ARGS="target_cpu=\"${TARGET_CPU}\" is_official_build=true is_debug=false skia_enable_skottie=true skia_enable_fontmgr_fontconfig=true skia_enable_fontmgr_custom_directory=true skia_use_freetype=true skia_use_libpng_encode=true skia_use_libpng_decode=true skia_use_libwebp_decode=true skia_use_wuffs=true skia_enable_pdf=false"
-
-# Add CPU-specific optimizations for x64
-# Note: Disable AVX/AVX2 for now to avoid ABI issues and header generation problems
-# These can be re-enabled later if needed, but they're causing build failures
-if [[ "$TARGET_CPU" == "x64" ]]; then
-    GN_ARGS="$GN_ARGS skia_use_avx=false skia_use_avx2=false skia_use_avx512=false skia_use_sse41=true skia_use_sse42=true"
-fi
 
 # Build extra_cflags array
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -80,15 +81,30 @@ echo "Generating build files with GN..."
 echo "GN args: $GN_ARGS"
 bin/gn gen out/Release --args="$GN_ARGS"
 
-# Debug: Check for GN warnings
+# Build gen/skia.h explicitly before full build (required for compilation)
+# This prevents failures during parallel ninja builds where gen/skia.h might be built too late
 echo ""
-echo "Checking for GN warnings..."
+echo "Building gen/skia.h explicitly (required before compilation)..."
 cd out/Release
-$SKIA_ROOT/bin/gn desc . --root="$SKIA_ROOT" --format=json * > /dev/null 2>&1 || {
-    echo "⚠️  GN generated warnings. Running with verbose output:"
-    $SKIA_ROOT/bin/gn desc . --root="$SKIA_ROOT" --format=json * 2>&1 | head -20 || true
+ninja gen/skia.h || {
+    echo "❌ ERROR: Failed to generate gen/skia.h"
+    echo "This indicates a GN configuration issue."
+    echo "Checking GN args..."
+    bin/gn args --list . 2>&1 | grep -E "(target_cpu|skia_enable)" | head -10 || true
+    echo ""
+    echo "Attempting to see GN warning..."
+    bin/gn desc . --root="$SKIA_ROOT" --format=json "*" 2>&1 | head -30 || true
+    cd "$SKIA_ROOT"
+    exit 1
 }
 cd "$SKIA_ROOT"
+
+# Verify gen/skia.h was created
+if [ ! -f "out/Release/gen/skia.h" ]; then
+    echo "❌ ERROR: gen/skia.h was not created after explicit build"
+    exit 1
+fi
+echo "✅ gen/skia.h built successfully"
 
 echo "Building Skia with Ninja..."
 ninja -C out/Release

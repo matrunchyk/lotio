@@ -7,7 +7,8 @@ on:
     branches: [ main, master, develop ]  # Test all PRs
 
 jobs:
-  build:
+  build-macos:
+    name: Build and Test (macOS)
     runs-on: macos-latest
     steps:
       - name: Checkout code
@@ -46,6 +47,86 @@ jobs:
           key: skia-build-${{ runner.os }}-${{ hashFiles('install_skia.sh') }}
           restore-keys: |
             skia-build-${{ runner.os }}-
+
+      - name: Build Skia
+        if: steps.cache-skia-build.outputs.cache-hit != 'true'
+        run: |
+          chmod +x install_skia.sh
+          ./install_skia.sh
+
+      - name: Build lotio
+        run: |
+          chmod +x build_local.sh
+          ./build_local.sh
+
+      - name: Test binary
+        run: |
+          ./lotio --help
+
+      - name: Verify headers structure
+        run: |
+          echo "Checking header files..."
+          find src -name "*.h" | head -10
+          echo "✅ Headers found"
+
+  build-linux:
+    name: Build and Test (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            ninja-build \
+            python3 \
+            libfontconfig1-dev \
+            libfreetype6-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrender-dev \
+            mesa-common-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libpng-dev \
+            libjpeg-dev \
+            libicu-dev \
+            libharfbuzz-dev \
+            libwebp-dev
+
+      - name: Cache Skia
+        id: cache-skia
+        uses: actions/cache@v4
+        with:
+          path: third_party/skia/skia
+          key: skia-linux-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            skia-linux-${{ runner.os }}-
+
+      - name: Fetch Skia
+        if: steps.cache-skia.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p third_party/skia
+          cd third_party/skia
+          # Remove existing directory if it exists (from partial cache or previous runs)
+          rm -rf skia
+          git clone --depth 1 https://skia.googlesource.com/skia.git
+          cd skia
+          python3 tools/git-sync-deps
+          echo "Skia cloned and dependencies synced successfully"
+
+      - name: Cache Skia Build
+        id: cache-skia-build
+        uses: actions/cache@v4
+        with:
+          path: third_party/skia/skia/out/Release
+          key: skia-build-linux-${{ runner.os }}-${{ hashFiles('install_skia.sh') }}
+          restore-keys: |
+            skia-build-linux-${{ runner.os }}-
 
       - name: Build Skia
         if: steps.cache-skia-build.outputs.cache-hit != 'true'

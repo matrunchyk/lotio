@@ -143,7 +143,6 @@ void adjustTextAnimatorPosition(
                                     
                                     // Replace just the number part
                                     size_t numStart = absolutePos;
-                                    size_t numEnd = numStart + match[1].str().length();
                                     
                                     // Include the minus sign
                                     if (numStart > 0 && json[numStart - 1] == '-') {
