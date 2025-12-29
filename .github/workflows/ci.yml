@@ -123,17 +123,10 @@ jobs:
           "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
-      - name: Cache Skia Build
-        id: cache-skia-build
-        uses: actions/cache@v4
-        with:
-          path: third_party/skia/skia/out/Release
-          key: skia-build-linux-${{ runner.os }}-${{ hashFiles('install_skia.sh') }}
-          restore-keys: |
-            skia-build-linux-${{ runner.os }}-
-
+      # Note: Not caching Skia build artifacts for Linux due to disk space constraints
+      # The build cache can be several GB and exceeds GitHub Actions runner limits
+      
       - name: Build Skia
-        if: steps.cache-skia-build.outputs.cache-hit != 'true'
         run: |
           chmod +x install_skia.sh
           ./install_skia.sh
