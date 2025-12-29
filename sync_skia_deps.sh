@@ -14,6 +14,9 @@ fi
 
 cd "$SKIA_ROOT"
 
+# Suppress detached HEAD warnings for CI/CD environments
+git config --global advice.detachedHead false
+
 echo "Syncing Skia dependencies from DEPS file..."
 echo "Creating third_party/externals directory..."
 mkdir -p third_party/externals
