@@ -34,9 +34,11 @@ jobs:
           cd third_party/skia
           # Remove existing directory if it exists (from partial cache or previous runs)
           rm -rf skia
+          git config --global advice.detachedHead false
           git clone --depth 1 https://skia.googlesource.com/skia.git
           cd skia
-          python3 tools/git-sync-deps
+          chmod +x "$GITHUB_WORKSPACE/sync_skia_deps.sh"
+          "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
       - name: Cache Skia Build
@@ -114,9 +116,11 @@ jobs:
           cd third_party/skia
           # Remove existing directory if it exists (from partial cache or previous runs)
           rm -rf skia
+          git config --global advice.detachedHead false
           git clone --depth 1 https://skia.googlesource.com/skia.git
           cd skia
-          python3 tools/git-sync-deps
+          chmod +x "$GITHUB_WORKSPACE/sync_skia_deps.sh"
+          "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
       - name: Cache Skia Build
