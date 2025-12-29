@@ -274,6 +274,7 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           tap: matrunchyk/homebrew-lotio
           tag: ${{ steps.version.outputs.VERSION }}
+          version: ${{ steps.version.outputs.VERSION_NUMBER }}
           message: "Update lotio to ${{ steps.version.outputs.VERSION }}"
 
   build-linux-deb:
@@ -338,9 +339,6 @@ jobs:
           "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
-      # Note: Not caching Skia build artifacts for Linux due to disk space constraints
-      # The build cache can be several GB and exceeds GitHub Actions runner limits
-      
       - name: Build Skia
         run: |
           chmod +x install_skia.sh
