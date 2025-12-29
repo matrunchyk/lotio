@@ -267,6 +267,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Homebrew Formula
+        # Only update for semantic version tags (v1.1.0, v2.0.0, etc.)
+        # Skip date-SHA tags (v20251229-abc123) as they're for CI/testing
+        if: steps.version.outputs.VERSION != '' && contains(steps.version.outputs.VERSION, '.')
         continue-on-error: false
         uses: dawidd6/action-homebrew-bump-formula@v7
         with:
@@ -274,7 +277,6 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           tap: matrunchyk/homebrew-lotio
           tag: ${{ steps.version.outputs.VERSION }}
-          version: ${{ steps.version.outputs.VERSION_NUMBER }}
           message: "Update lotio to ${{ steps.version.outputs.VERSION }}"
 
   build-linux-deb:
