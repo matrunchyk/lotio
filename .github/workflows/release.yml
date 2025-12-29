@@ -136,6 +136,65 @@ jobs:
           echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
           echo "FILENAME=${PKG_NAME}.tar.gz" >> $GITHUB_OUTPUT
 
+      - name: Create Homebrew bottle
+        id: bottle
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          VERSION_NUMBER="${VERSION#v}"
+          
+          # Create bottle directory structure
+          BOTTLE_DIR="lotio-${VERSION_NUMBER}"
+          mkdir -p "$BOTTLE_DIR/bin"
+          mkdir -p "$BOTTLE_DIR/include/lotio/core"
+          mkdir -p "$BOTTLE_DIR/include/lotio/text"
+          mkdir -p "$BOTTLE_DIR/include/lotio/utils"
+          mkdir -p "$BOTTLE_DIR/lib/pkgconfig"
+          
+          # Copy binary
+          cp lotio "$BOTTLE_DIR/bin/"
+          
+          # Copy headers
+          cp -r src/core/*.h "$BOTTLE_DIR/include/lotio/core/" 2>/dev/null || true
+          cp -r src/text/*.h "$BOTTLE_DIR/include/lotio/text/" 2>/dev/null || true
+          cp -r src/utils/*.h "$BOTTLE_DIR/include/lotio/utils/" 2>/dev/null || true
+          
+          # Copy Skia static libraries
+          SKIA_LIB_DIR="third_party/skia/skia/out/Release"
+          for lib in skottie skia skparagraph sksg skshaper skunicode_icu skunicode_core skresources jsonreader; do
+            if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
+              cp "$SKIA_LIB_DIR/lib${lib}.a" "$BOTTLE_DIR/lib/"
+            fi
+          done
+          
+          # Create pkg-config file
+          cat > "$BOTTLE_DIR/lib/pkgconfig/lotio.pc" << EOF
+          prefix=/opt/homebrew
+          exec_prefix=\${prefix}
+          libdir=\${exec_prefix}/lib
+          includedir=\${exec_prefix}/include
+          
+          Name: lotio
+          Description: High-performance Lottie animation frame renderer using Skia
+          Version: ${VERSION_NUMBER}
+          Libs: -L\${libdir} -lskottie -lskia -lskparagraph -lsksg -lskshaper -lskunicode_icu -lskunicode_core -lskresources -ljsonreader
+          Cflags: -I\${includedir}
+          EOF
+          
+          # Create tarball (Homebrew bottle format)
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "arm64" ]; then
+            BOTTLE_ARCH="arm64_big_sur"
+          else
+            BOTTLE_ARCH="x86_64_linux"
+          fi
+          
+          tar -czf "lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz" "$BOTTLE_DIR"
+          
+          SHA256=$(shasum -a 256 "lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz" | cut -d' ' -f1)
+          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+          echo "FILENAME=lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz" >> $GITHUB_OUTPUT
+          echo "ARCH=$BOTTLE_ARCH" >> $GITHUB_OUTPUT
+
       - name: Create Git tag
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -158,6 +217,7 @@ jobs:
           files: |
             ${{ steps.headers_package.outputs.FILENAME }}
             ${{ steps.full_package.outputs.FILENAME }}
+            ${{ steps.bottle.outputs.FILENAME }}
           name: Release ${{ steps.version.outputs.VERSION }}
           tag_name: ${{ steps.version.outputs.VERSION }}
           body: |
