@@ -69,7 +69,7 @@ done
 # System libraries
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS: Add Homebrew library paths
-    ICU_PREFIX=$(brew --prefix icu4c 2>/dev/null || echo "$HOMEBREW_PREFIX/opt/icu4c@77")
+    ICU_PREFIX="${ICU_PREFIX:-$(brew --prefix icu4c 2>/dev/null || echo "$HOMEBREW_PREFIX/opt/icu4c@77")}"
     ICU_LIB_DIR="$ICU_PREFIX/lib"
     LDFLAGS="$LDFLAGS -L$ICU_LIB_DIR"
     # Add Homebrew library paths
