@@ -87,9 +87,9 @@ jobs:
           mkdir -p "$PKG_NAME/include/lotio/core"
           mkdir -p "$PKG_NAME/include/lotio/text"
           mkdir -p "$PKG_NAME/include/lotio/utils"
-          cp src/core/*.h "$PKG_NAME/include/lotio/core/" 2>/dev/null || true
-          cp src/text/*.h "$PKG_NAME/include/lotio/text/" 2>/dev/null || true
-          cp src/utils/*.h "$PKG_NAME/include/lotio/utils/" 2>/dev/null || true
+          cp src/core/*.h "$PKG_NAME/include/lotio/core/"
+          cp src/text/*.h "$PKG_NAME/include/lotio/text/"
+          cp src/utils/*.h "$PKG_NAME/include/lotio/utils/"
           
           # Skia static libraries (for linking)
           mkdir -p "$PKG_NAME/lib"
@@ -138,9 +138,9 @@ jobs:
           cp lotio "$BOTTLE_DIR/bin/"
           
           # Copy headers
-          cp src/core/*.h "$BOTTLE_DIR/include/lotio/core/" 2>/dev/null || true
-          cp src/text/*.h "$BOTTLE_DIR/include/lotio/text/" 2>/dev/null || true
-          cp src/utils/*.h "$BOTTLE_DIR/include/lotio/utils/" 2>/dev/null || true
+          cp src/core/*.h "$BOTTLE_DIR/include/lotio/core/"
+          cp src/text/*.h "$BOTTLE_DIR/include/lotio/text/"
+          cp src/utils/*.h "$BOTTLE_DIR/include/lotio/utils/"
           
           # Copy Skia static libraries
           SKIA_LIB_DIR="third_party/skia/skia/out/Release"
