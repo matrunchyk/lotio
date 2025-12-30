@@ -126,8 +126,19 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           VERSION_NUMBER="${VERSION#v}"
           
-          # Create bottle directory structure
-          BOTTLE_DIR="lotio-${VERSION_NUMBER}"
+          # Determine Homebrew prefix based on architecture
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "arm64" ]; then
+            BOTTLE_ARCH="arm64_big_sur"
+            HOMEBREW_PREFIX="/opt/homebrew"
+          else
+            BOTTLE_ARCH="x86_64_linux"
+            HOMEBREW_PREFIX="/usr/local"
+          fi
+          
+          # Create bottle directory structure with Homebrew prefix
+          # Structure: lotio/<version>/<prefix>/bin, etc.
+          BOTTLE_DIR="lotio/${VERSION_NUMBER}${HOMEBREW_PREFIX}"
           mkdir -p "$BOTTLE_DIR/bin"
           mkdir -p "$BOTTLE_DIR/include/lotio/core"
           mkdir -p "$BOTTLE_DIR/include/lotio/text"
@@ -150,9 +161,9 @@ jobs:
             fi
           done
           
-          # Create pkg-config file
+          # Create pkg-config file with relocatable prefix
           cat > "$BOTTLE_DIR/lib/pkgconfig/lotio.pc" << EOF
-          prefix=/opt/homebrew
+          prefix=\${pcfiledir}/../..
           exec_prefix=\${prefix}
           libdir=\${exec_prefix}/lib
           includedir=\${exec_prefix}/include
@@ -160,19 +171,13 @@ jobs:
           Name: lotio
           Description: High-performance Lottie animation frame renderer using Skia
           Version: ${VERSION_NUMBER}
-          Libs: -L\${libdir} -lskottie -lsksg -ljsonreader -lskia -lskparagraph -lskshaper -lskunicode_icu -lskunicode_core -lskresources
+          Libs: -L\${libdir} -lskottie -lskia -lskparagraph -lsksg -lskshaper -lskunicode_icu -lskunicode_core -lskresources -ljsonreader
           Cflags: -I\${includedir}
           EOF
           
           # Create tarball (Homebrew bottle format)
-          ARCH=$(uname -m)
-          if [ "$ARCH" = "arm64" ]; then
-            BOTTLE_ARCH="arm64_big_sur"
-          else
-            BOTTLE_ARCH="x86_64_linux"
-          fi
-          
-          tar -czf "lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz" "$BOTTLE_DIR"
+          # The tarball should contain: lotio/<version>/<prefix>/...
+          tar -czf "lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz" "lotio"
           
           SHA256=$(shasum -a 256 "lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz" | cut -d' ' -f1)
           echo "SHA256=$SHA256" >> $GITHUB_OUTPUT

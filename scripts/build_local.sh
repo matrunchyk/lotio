@@ -124,10 +124,39 @@ else
     # - skottie depends on: skshaper, skunicode_icu, sksg, jsonreader
     # - skparagraph depends on: skshaper, skunicode_icu
     # - skshaper depends on: skunicode_icu, skunicode_core
+    # - skunicode_icu depends on: skunicode_core (circular dependency)
     # 
-    # Order: base -> skparagraph -> skottie -> skshaper/skunicode (skottie deps) -> sksg/jsonreader -> skia
+    # Use --start-group and --end-group for unicode libraries to handle circular dependencies
+    # Order: base -> skparagraph -> skottie -> skshaper -> skunicode (group) -> sksg/jsonreader -> skia
     MISSING_LIBS=()
-    for lib in skresources skunicode_core skparagraph skottie skshaper skunicode_icu sksg jsonreader skia; do
+    SKIA_LIBS=""
+    
+    # Libraries before unicode group
+    for lib in skresources skparagraph skottie skshaper; do
+        if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
+            SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.a"
+        elif [ -f "$SKIA_LIB_DIR/lib${lib}.so" ]; then
+            SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.so"
+        else
+            MISSING_LIBS+=("lib${lib}.a")
+        fi
+    done
+    
+    # Unicode libraries with circular dependencies - use group
+    SKIA_LIBS="$SKIA_LIBS -Wl,--start-group"
+    for lib in skunicode_icu skunicode_core; do
+        if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
+            SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.a"
+        elif [ -f "$SKIA_LIB_DIR/lib${lib}.so" ]; then
+            SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.so"
+        else
+            MISSING_LIBS+=("lib${lib}.a")
+        fi
+    done
+    SKIA_LIBS="$SKIA_LIBS -Wl,--end-group"
+    
+    # Libraries after unicode group
+    for lib in sksg jsonreader skia; do
         if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
             SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.a"
         elif [ -f "$SKIA_LIB_DIR/lib${lib}.so" ]; then
