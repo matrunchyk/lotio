@@ -25,9 +25,12 @@ INCLUDES = -I$(SKIA_ROOT) -I$(SRC_DIR)
 LDFLAGS = -L$(SKIA_LIB_DIR) $(RPATH_FLAG)
 
 # Skia libraries (matching Docker build)
-SKIA_LIBS = -lskottie -lskia -lskparagraph -lsksg -lskshaper \
+# IMPORTANT: Link order matters for static libraries!
+# Dependencies must come AFTER the libraries that need them.
+# skottie depends on sksg and jsonreader, so they come after skottie
+SKIA_LIBS = -lskottie -lsksg -ljsonreader -lskia -lskparagraph -lskshaper \
             -lskunicode_icu -lskunicode_core -lskresources \
-            -ljsonreader -lwebp -lwebpdemux -lwebpmux -lpiex \
+            -lwebp -lwebpdemux -lwebpmux -lpiex \
             -lfreetype -lpng -ljpeg -lharfbuzz -licuuc -licui18n -licudata \
             -lz -lfontconfig -lm -lpthread $(FRAMEWORKS) $(LIBS_X11)
 

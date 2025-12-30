@@ -111,7 +111,7 @@ jobs:
           Name: lotio
           Description: High-performance Lottie animation frame renderer using Skia
           Version: ${VERSION#v}
-          Libs: -L\${libdir} -lskottie -lskia -lskparagraph -lsksg -lskshaper -lskunicode_icu -lskunicode_core -lskresources -ljsonreader
+          Libs: -L\${libdir} -lskottie -lsksg -ljsonreader -lskia -lskparagraph -lskshaper -lskunicode_icu -lskunicode_core -lskresources
           Cflags: -I\${includedir}
           EOF
           
@@ -160,7 +160,7 @@ jobs:
           Name: lotio
           Description: High-performance Lottie animation frame renderer using Skia
           Version: ${VERSION_NUMBER}
-          Libs: -L\${libdir} -lskottie -lskia -lskparagraph -lsksg -lskshaper -lskunicode_icu -lskunicode_core -lskresources -ljsonreader
+          Libs: -L\${libdir} -lskottie -lsksg -ljsonreader -lskia -lskparagraph -lskshaper -lskunicode_icu -lskunicode_core -lskresources
           Cflags: -I\${includedir}
           EOF
           

@@ -17,6 +17,8 @@ lotio.js.map
 # IDE
 .vscode/
 .idea/
+.cursor/
+.history/
 *.swp
 *.swo
 *~
@@ -28,9 +30,6 @@ Thumbs.db
 # Dependencies
 node_modules/
 .emsdk-cache/
-
-# History
-.history/
 
 # Temporary
 *.tmp
