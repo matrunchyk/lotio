@@ -481,15 +481,6 @@ void modifyTextLayerInJson(
             LOG_COUT("[DEBUG] Warning: Unbalanced braces in modified textStyleJson for " << layerName << " (count: " << braceCount << ")") << std::endl;
         }
     }
-    
-    // Validate: ensure we didn't break the JSON structure
-    // Count braces in the modified section to ensure balance
-    int openBraces = 0, closeBraces = 0;
-    for (char c : textStyleJson) {
-        if (c == '{') openBraces++;
-        if (c == '}') closeBraces++;
-    }
-    // The textStyleJson should not contain unmatched braces since it's the content of a single object
 }
 
 void normalizeLottieTextNewlines(std::string& json) {

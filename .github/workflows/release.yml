@@ -47,21 +47,10 @@ jobs:
         run: |
           brew install fontconfig freetype harfbuzz icu4c libpng jpeg-turbo webp ninja python@3.11
 
-      - name: Cache Skia
-        id: cache-skia
-        uses: actions/cache@v4
-        with:
-          path: third_party/skia/skia
-          key: skia-${{ runner.os }}-${{ hashFiles('.github/workflows/release.yml') }}
-          restore-keys: |
-            skia-${{ runner.os }}-
-
       - name: Fetch Skia
-        if: steps.cache-skia.outputs.cache-hit != 'true'
         run: |
           mkdir -p third_party/skia
           cd third_party/skia
-          # Remove existing directory if it exists (from partial cache or previous runs)
           rm -rf skia
           git config --global advice.detachedHead false
           git clone --depth 1 https://skia.googlesource.com/skia.git
@@ -70,17 +59,7 @@ jobs:
           "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
-      - name: Cache Skia Build
-        id: cache-skia-build
-        uses: actions/cache@v4
-        with:
-          path: third_party/skia/skia/out/Release
-          key: skia-build-${{ runner.os }}-${{ hashFiles('install_skia.sh') }}
-          restore-keys: |
-            skia-build-${{ runner.os }}-
-
       - name: Build Skia
-        if: steps.cache-skia-build.outputs.cache-hit != 'true'
         run: |
           chmod +x install_skia.sh
           ./install_skia.sh
@@ -267,6 +246,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Homebrew Formula
+        # Only update for semantic version tags (v1.1.0, v2.0.0, etc.)
+        # Skip date-SHA tags (v20251229-abc123) as they're for CI/testing
+        if: steps.version.outputs.VERSION != '' && contains(steps.version.outputs.VERSION, '.')
         continue-on-error: false
         uses: dawidd6/action-homebrew-bump-formula@v7
         with:
@@ -274,7 +256,6 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           tap: matrunchyk/homebrew-lotio
           tag: ${{ steps.version.outputs.VERSION }}
-          version: ${{ steps.version.outputs.VERSION_NUMBER }}
           message: "Update lotio to ${{ steps.version.outputs.VERSION }}"
 
   build-linux-deb:
@@ -316,21 +297,10 @@ jobs:
             libwebp-dev \
             dpkg-dev
 
-      - name: Cache Skia
-        id: cache-skia
-        uses: actions/cache@v4
-        with:
-          path: third_party/skia/skia
-          key: skia-linux-${{ runner.os }}-${{ hashFiles('.github/workflows/release.yml') }}
-          restore-keys: |
-            skia-linux-${{ runner.os }}-
-
       - name: Fetch Skia
-        if: steps.cache-skia.outputs.cache-hit != 'true'
         run: |
           mkdir -p third_party/skia
           cd third_party/skia
-          # Remove existing directory if it exists (from partial cache or previous runs)
           rm -rf skia
           git config --global advice.detachedHead false
           git clone --depth 1 https://skia.googlesource.com/skia.git
