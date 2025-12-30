@@ -338,9 +338,9 @@ jobs:
           mkdir -p "$DEB_DIR/DEBIAN"
           
           cp lotio "$DEB_DIR/usr/local/bin/"
-          cp src/core/*.h "$DEB_DIR/usr/local/include/lotio/core/" 2>/dev/null || true
-          cp src/text/*.h "$DEB_DIR/usr/local/include/lotio/text/" 2>/dev/null || true
-          cp src/utils/*.h "$DEB_DIR/usr/local/include/lotio/utils/" 2>/dev/null || true
+          cp src/core/*.h "$DEB_DIR/usr/local/include/lotio/core/"
+          cp src/text/*.h "$DEB_DIR/usr/local/include/lotio/text/"
+          cp src/utils/*.h "$DEB_DIR/usr/local/include/lotio/utils/"
           
           cat > "$DEB_DIR/DEBIAN/control" << EOF
           Package: lotio
