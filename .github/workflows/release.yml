@@ -250,12 +250,14 @@ jobs:
       - name: Get source archive SHA256
         id: source_sha
         run: |
-          # Download source archive to calculate SHA256
+          # Create source archive from current checkout (matches GitHub's auto-generated archive)
           VERSION="${{ steps.version.outputs.VERSION }}"
-          curl -L -o source.tar.gz "https://github.com/matrunchyk/lotio/archive/refs/tags/${VERSION}.tar.gz"
-          SHA256=$(shasum -a 256 source.tar.gz | cut -d' ' -f1)
+          VERSION_NUMBER="${VERSION#v}"
+          # Create archive matching GitHub's format: lotio-<version>.tar.gz
+          tar --exclude='.git' --exclude='third_party/skia' -czf "lotio-${VERSION_NUMBER}.tar.gz" .
+          SHA256=$(shasum -a 256 "lotio-${VERSION_NUMBER}.tar.gz" | cut -d' ' -f1)
           echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
-          rm -f source.tar.gz
+          rm -f "lotio-${VERSION_NUMBER}.tar.gz"
 
       - name: Update Homebrew Formula
         if: steps.version.outputs.VERSION != ''
