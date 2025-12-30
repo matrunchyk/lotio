@@ -209,39 +209,39 @@ jobs:
             ### Packages
             
             **Developer package** (binary + headers + libraries for development):
-            - File: \`${{ steps.dev_package.outputs.FILENAME }}\`
-            - SHA256: \`${{ steps.dev_package.outputs.SHA256 }}\`
+            - File: `{{ steps.dev_package.outputs.FILENAME }}`
+            - SHA256: `{{ steps.dev_package.outputs.SHA256 }}`
             - Contains: binary, lotio headers, Skia static libraries, pkg-config file
             
             **Homebrew bottle** (pre-built binary for macOS):
-            - File: \`${{ steps.bottle.outputs.FILENAME }}\`
-            - SHA256: \`${{ steps.bottle.outputs.SHA256 }}\`
+            - File: `{{ steps.bottle.outputs.FILENAME }}`
+            - SHA256: `{{ steps.bottle.outputs.SHA256 }}`
             - Used automatically by Homebrew for fast installation
             
             **Debian package** (Linux ARM64):
-            - File: \`lotio_${{ steps.version.outputs.VERSION }}_arm64.deb\`
-            - Install: \`sudo dpkg -i lotio_${{ steps.version.outputs.VERSION }}_arm64.deb\`
+            - File: `lotio_${{ steps.version.outputs.VERSION }}_arm64.deb`
+            - Install: `sudo dpkg -i lotio_${{ steps.version.outputs.VERSION }}_arm64.deb`
             
             ### Installation
             
             **Homebrew (macOS) - Recommended:**
-            \`\`\`bash
+            ```bash
             brew tap matrunchyk/homebrew-lotio
             brew install lotio
-            \`\`\`
+            ```
             
             **Developer package (for programmatic use):**
-            \`\`\`bash
+            ```bash
             wget https://github.com/matrunchyk/lotio/releases/download/${{ steps.version.outputs.VERSION }}/${{ steps.dev_package.outputs.FILENAME }}
             tar -xzf ${{ steps.dev_package.outputs.FILENAME }}
             # Use binary, headers, and libraries from the package
-            \`\`\`
+            ```
             
             **Debian/Ubuntu (Linux ARM64):**
-            \`\`\`bash
+            ```bash
             wget https://github.com/matrunchyk/lotio/releases/download/${{ steps.version.outputs.VERSION }}/lotio_${{ steps.version.outputs.VERSION }}_arm64.deb
             sudo dpkg -i lotio_${{ steps.version.outputs.VERSION }}_arm64.deb
-            \`\`\`
+            ```
           draft: false
           prerelease: false
         env:
