@@ -4,7 +4,7 @@ set -e
 # Debug script to see the actual GN warning that's causing the build to fail
 # This mimics what the find_headers.py script does
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SKIA_ROOT="$PROJECT_ROOT/third_party/skia/skia"
 
 if [ ! -d "$SKIA_ROOT" ]; then

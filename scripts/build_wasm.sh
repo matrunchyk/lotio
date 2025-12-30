@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SKIA_ROOT="$PROJECT_ROOT/third_party/skia/skia"
 SKIA_LIB_DIR="$SKIA_ROOT/out/Wasm"
 SRC_DIR="$PROJECT_ROOT/src"

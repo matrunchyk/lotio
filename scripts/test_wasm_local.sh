@@ -4,7 +4,7 @@ set -e
 # Test script for local WASM build
 # This helps verify the WASM build works before pushing to CI
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "🧪 Testing WASM build locally..."
 echo ""

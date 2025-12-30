@@ -3,7 +3,8 @@ set -e
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKIA_ROOT="$SCRIPT_DIR/third_party/skia/skia"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SKIA_ROOT="$PROJECT_ROOT/third_party/skia/skia"
 
 if [ ! -d "$SKIA_ROOT" ]; then
     echo "Error: Skia directory not found at $SKIA_ROOT"

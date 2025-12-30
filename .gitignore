@@ -4,6 +4,7 @@ build/
 *.a
 *.so
 *.dylib
+lotio
 
 # Sample output directories (rendered frames)
 samples/*/output/

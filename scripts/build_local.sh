@@ -4,7 +4,7 @@ set -e
 # Local build script - mimics Docker build process for best DX
 # Works on macOS (and can be adapted for Linux)
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SKIA_ROOT="$PROJECT_ROOT/third_party/skia/skia"
 SKIA_LIB_DIR="$SKIA_ROOT/out/Release"
 SRC_DIR="$PROJECT_ROOT/src"
@@ -57,14 +57,34 @@ fi
 LDFLAGS="-L$SKIA_LIB_DIR $RPATH_FLAG"
 
 # Skia libraries - find actual library files
+# Link order matters: dependencies first, then main library
 SKIA_LIBS=""
-for lib in skottie skia skparagraph sksg skshaper skunicode_icu skunicode_core skresources jsonreader; do
-    if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
-        SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.a"
-    elif [ -f "$SKIA_LIB_DIR/lib${lib}.dylib" ]; then
-        SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.dylib"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS: Use -Wl,-force_load only for main libskia.a to avoid duplicate symbols
+    # Link dependencies first, then main library
+    for lib in jsonreader skresources skunicode_core skunicode_icu skshaper skparagraph sksg skottie; do
+        if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
+            SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.a"
+        elif [ -f "$SKIA_LIB_DIR/lib${lib}.dylib" ]; then
+            SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.dylib"
+        fi
+    done
+    # Main library with force_load
+    if [ -f "$SKIA_LIB_DIR/libskia.a" ]; then
+        SKIA_LIBS="$SKIA_LIBS -Wl,-force_load,$SKIA_LIB_DIR/libskia.a"
+    elif [ -f "$SKIA_LIB_DIR/libskia.dylib" ]; then
+        SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/libskia.dylib"
     fi
-done
+else
+    # Linux: Link static libraries directly
+    for lib in jsonreader skresources skunicode_core skunicode_icu skshaper skparagraph sksg skottie skia; do
+        if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
+            SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.a"
+        elif [ -f "$SKIA_LIB_DIR/lib${lib}.so" ]; then
+            SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.so"
+        fi
+    done
+fi
 
 # System libraries
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -91,7 +111,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     
     LIBS="$SKIA_LIBS -lwebp -lwebpdemux -lwebpmux -lpiex \
           -lfreetype -lpng16 $JPEG_LIB -lharfbuzz -licuuc -licui18n -licudata \
-          -lz -lfontconfig -lm -lpthread"
+          -lz -lfontconfig -lexpat -lm -lpthread"
 else
     LIBS="$SKIA_LIBS -lwebp -lwebpdemux -lwebpmux -lpiex \
           -lfreetype -lpng -ljpeg -lharfbuzz -licuuc -licui18n -licudata \

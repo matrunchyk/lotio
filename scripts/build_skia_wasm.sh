@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SKIA_ROOT="$PROJECT_ROOT/third_party/skia/skia"
 
 # Check for Emscripten
@@ -44,19 +44,19 @@ fi
 # Set up symlinks to system emscripten (if using Homebrew)
 if [ -z "$EMSDK" ] && command -v emcc >/dev/null 2>&1; then
     echo "Setting up symlinks to system emscripten..."
-    mkdir -p third_party/externals/emsdk/upstream/emscripten
+    mkdir -p "$PROJECT_ROOT/third_party/externals/emsdk/upstream/emscripten"
     # Symlink emscripten tools
-    ln -sf $(which emcc) third_party/externals/emsdk/upstream/emscripten/emcc 2>/dev/null || true
-    ln -sf $(which em++) third_party/externals/emsdk/upstream/emscripten/em++ 2>/dev/null || true
-    ln -sf $(which emar) third_party/externals/emsdk/upstream/emscripten/emar 2>/dev/null || true
-    ln -sf $(which emranlib) third_party/externals/emsdk/upstream/emscripten/emranlib 2>/dev/null || true
+    ln -sf $(which emcc) "$PROJECT_ROOT/third_party/externals/emsdk/upstream/emscripten/emcc" 2>/dev/null || true
+    ln -sf $(which em++) "$PROJECT_ROOT/third_party/externals/emsdk/upstream/emscripten/em++" 2>/dev/null || true
+    ln -sf $(which emar) "$PROJECT_ROOT/third_party/externals/emsdk/upstream/emscripten/emar" 2>/dev/null || true
+    ln -sf $(which emranlib) "$PROJECT_ROOT/third_party/externals/emsdk/upstream/emscripten/emranlib" 2>/dev/null || true
     # Symlink cache directory (for sysroot)
     if [ -d "/opt/homebrew/Cellar/emscripten" ]; then
         EMSDK_VERSION=$(ls -1 /opt/homebrew/Cellar/emscripten | head -1)
         CACHE_DIR="/opt/homebrew/Cellar/emscripten/$EMSDK_VERSION/libexec/cache"
         if [ -d "$CACHE_DIR" ]; then
-            rm -rf third_party/externals/emsdk/upstream/emscripten/cache
-            ln -sf "$CACHE_DIR" third_party/externals/emsdk/upstream/emscripten/cache
+            rm -rf "$PROJECT_ROOT/third_party/externals/emsdk/upstream/emscripten/cache"
+            ln -sf "$CACHE_DIR" "$PROJECT_ROOT/third_party/externals/emsdk/upstream/emscripten/cache"
             echo "Symlinked emscripten cache from Homebrew"
         fi
     fi
