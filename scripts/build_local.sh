@@ -118,10 +118,16 @@ else
     # IMPORTANT: Link order matters for static libraries!
     # When linking static libraries, the linker processes them left-to-right.
     # It only includes symbols from a library if they're needed by already-processed code.
-    # So if skottie needs symbols from sksg, then sksg must come AFTER skottie.
-    # Order: base dependencies -> skottie -> sksg/jsonreader (skottie deps) -> skia (main lib)
+    # Dependencies must come AFTER the libraries that need them.
+    # 
+    # Dependency chain:
+    # - skottie depends on: skshaper, skunicode_icu, sksg, jsonreader
+    # - skparagraph depends on: skshaper, skunicode_icu
+    # - skshaper depends on: skunicode_icu, skunicode_core
+    # 
+    # Order: base -> skparagraph -> skottie -> skshaper/skunicode (skottie deps) -> sksg/jsonreader -> skia
     MISSING_LIBS=()
-    for lib in skresources skunicode_core skunicode_icu skshaper skparagraph skottie sksg jsonreader skia; do
+    for lib in skresources skunicode_core skparagraph skottie skshaper skunicode_icu sksg jsonreader skia; do
         if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
             SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.a"
         elif [ -f "$SKIA_LIB_DIR/lib${lib}.so" ]; then
