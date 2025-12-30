@@ -247,16 +247,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get source archive SHA256
+        id: source_sha
+        run: |
+          # Download source archive to calculate SHA256
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          curl -L -o source.tar.gz "https://github.com/matrunchyk/lotio/archive/refs/tags/${VERSION}.tar.gz"
+          SHA256=$(shasum -a 256 source.tar.gz | cut -d' ' -f1)
+          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+          rm -f source.tar.gz
+
       - name: Update Homebrew Formula
         if: steps.version.outputs.VERSION != ''
-        continue-on-error: false
-        uses: dawidd6/action-homebrew-bump-formula@v7
-        with:
-          formula: lotio
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          tap: matrunchyk/homebrew-lotio
-          tag: ${{ steps.version.outputs.VERSION }}
-          message: "Update lotio to ${{ steps.version.outputs.VERSION }}"
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          chmod +x scripts/update_homebrew_formula.sh
+          ./scripts/update_homebrew_formula.sh \
+            "${{ steps.version.outputs.VERSION }}" \
+            "${{ steps.source_sha.outputs.SHA256 }}" \
+            "${{ steps.bottle.outputs.SHA256 }}" \
+            "${{ steps.bottle.outputs.ARCH }}"
 
   build-linux-deb:
     runs-on: ubuntu-latest  # Note: ubuntu-latest is x86_64, not ARM64
