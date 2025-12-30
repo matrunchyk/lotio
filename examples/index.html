@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lotio - Lottie Animation Renderer Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #fff;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #888;
+            margin-bottom: 30px;
+        }
+        
+        .demo-section {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .demo-section h2 {
+            color: #fff;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            background: #4a9eff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        
+        button:hover {
+            background: #3a8eef;
+        }
+        
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        label {
+            color: #ccc;
+            font-size: 14px;
+        }
+        
+        input[type="range"] {
+            width: 150px;
+        }
+        
+        input[type="color"] {
+            width: 50px;
+            height: 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        select {
+            background: #3a3a3a;
+            color: #fff;
+            border: 1px solid #555;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .canvas-container {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 20px;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        
+        canvas {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            transform: scale(0.5);
+            transform-origin: top left;
+        }
+        
+        .info {
+            background: #333;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        
+        .info strong {
+            color: #4a9eff;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        
+        .status.loading {
+            background: #4a4a4a;
+            color: #fff;
+        }
+        
+        .status.success {
+            background: #2d5a2d;
+            color: #90ee90;
+        }
+        
+        .status.error {
+            background: #5a2d2d;
+            color: #ff6b6b;
+        }
+        
+        .code-block {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 15px;
+            overflow-x: auto;
+        }
+        
+        .code-block code {
+            color: #a8d8ff;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Lotio - Lottie Animation Renderer</h1>
+        <p class="subtitle">High-performance WebAssembly-based Lottie animation renderer</p>
+        
+        <div class="demo-section">
+            <h2>Interactive Demo</h2>
+            
+            <div id="status" class="status loading">Loading WASM module...</div>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <label>Sample:</label>
+                    <select id="sampleSelect">
+                        <option value="sample1">Sample 1</option>
+                        <option value="sample2">Sample 2</option>
+                    </select>
+                </div>
+                
+                <button id="playBtn" disabled>Play</button>
+                <button id="pauseBtn" disabled>Pause</button>
+                <button id="stopBtn" disabled>Stop</button>
+                
+                <div class="control-group">
+                    <label>Time: <span id="timeValue">0.0</span>s</label>
+                    <input type="range" id="timeSlider" min="0" max="1" step="0.01" value="0" disabled>
+                </div>
+                
+                <div class="control-group">
+                    <label>FPS: <span id="fpsValue">30</span></label>
+                    <input type="range" id="fpsSlider" min="1" max="120" step="1" value="30">
+                </div>
+                
+                <div class="control-group">
+                    <label>BG Color:</label>
+                    <input type="color" id="bgColorPicker" value="#2a2a2a">
+                </div>
+            </div>
+            
+            <div class="canvas-container">
+                <canvas id="canvas"></canvas>
+            </div>
+            
+            <div id="info" class="info" style="display: none;"></div>
+        </div>
+        
+        <div class="demo-section">
+            <h2>Usage Example</h2>
+            <div class="code-block">
+                <code><pre>import Lotio, { FrameType, State } from '@matrunchyk/lotio';
+
+// Load font
+const fontResponse = await fetch('./fonts/OpenSans-Bold.ttf');
+const fontData = new Uint8Array(await fontResponse.arrayBuffer());
+
+// Load animation
+const animationResponse = await fetch('./animation.json');
+const animationData = await animationResponse.json();
+
+// Create animation
+const animation = new Lotio({
+  fonts: [{ name: 'OpenSans-Bold', data: fontData }],
+  fps: 30,
+  animation: animationData,
+  type: FrameType.PNG,
+  wasmPath: './lotio.wasm'
+});
+
+// Event handlers
+animation
+  .on('loaded', (anim) => anim.start())
+  .on('frame', () => {
+    animation.renderToCanvas(canvas);
+  });
+
+// Control
+animation.start();</pre></code>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import Lotio, { FrameType, State } from '../browser/index.js';
+        
+        let animation = null;
+        let isPlaying = false;
+        let bgColor = '#2a2a2a';
+        
+        const statusDiv = document.getElementById('status');
+        const infoDiv = document.getElementById('info');
+        const canvas = document.getElementById('canvas');
+        const sampleSelect = document.getElementById('sampleSelect');
+        const playBtn = document.getElementById('playBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const timeSlider = document.getElementById('timeSlider');
+        const timeValue = document.getElementById('timeValue');
+        const fpsSlider = document.getElementById('fpsSlider');
+        const fpsValue = document.getElementById('fpsValue');
+        const bgColorPicker = document.getElementById('bgColorPicker');
+        
+        // Convert images to data URIs for WASM
+        async function convertImagesToDataURIs(jsonData, sampleName) {
+            if (!jsonData.assets || !Array.isArray(jsonData.assets)) {
+                return jsonData;
+            }
+            
+            const modified = JSON.parse(JSON.stringify(jsonData));
+            
+            for (const asset of modified.assets) {
+                if (asset.e === 1) continue;
+                
+                if (asset.p && asset.u !== undefined) {
+                    const imagePath = asset.u + asset.p;
+                    const imageUrl = `./samples/${sampleName}/${imagePath}`;
+                    
+                    try {
+                        const imageResponse = await fetch(imageUrl);
+                        if (imageResponse.ok) {
+                            const imageBlob = await imageResponse.blob();
+                            const reader = new FileReader();
+                            const dataUri = await new Promise((resolve, reject) => {
+                                reader.onload = () => resolve(reader.result);
+                                reader.onerror = reject;
+                                reader.readAsDataURL(imageBlob);
+                            });
+                            
+                            asset.u = '';
+                            asset.p = dataUri;
+                            asset.e = 1;
+                        }
+                    } catch (error) {
+                        console.warn(`Error loading image ${imagePath}:`, error);
+                    }
+                }
+            }
+            
+            return modified;
+        }
+        
+        async function loadSample(sampleName) {
+            try {
+                statusDiv.className = 'status loading';
+                statusDiv.textContent = `Loading ${sampleName}...`;
+                
+                if (animation) {
+                    animation.destroy();
+                }
+                
+                // Load font
+                const fontResponse = await fetch('./fonts/OpenSans/OpenSans-Bold.ttf');
+                const fontData = new Uint8Array(await fontResponse.arrayBuffer());
+                
+                // Load animation
+                const animResponse = await fetch(`./samples/${sampleName}/data.json`);
+                const animData = await animResponse.json();
+                
+                // Convert images to data URIs
+                const processedAnim = await convertImagesToDataURIs(animData, sampleName);
+                
+                // Load text config if available
+                let textConfig = null;
+                try {
+                    const textConfigResponse = await fetch(`./samples/${sampleName}/text-config.json`);
+                    if (textConfigResponse.ok) {
+                        textConfig = await textConfigResponse.json();
+                    }
+                } catch (e) {
+                    // Text config is optional
+                }
+                
+                // Create animation
+                animation = new Lotio({
+                    fonts: [{ name: 'OpenSans-Bold', data: fontData }],
+                    fps: parseFloat(fpsSlider.value),
+                    animation: processedAnim,
+                    textConfig: textConfig,
+                    type: FrameType.PNG,
+                    wasmPath: '../browser/lotio.wasm'
+                });
+                
+                // Set up event handlers
+                animation
+                    .on('error', (error, anim) => {
+                        statusDiv.className = 'status error';
+                        statusDiv.textContent = `Error: ${error.message}`;
+                        console.error('Animation error:', error);
+                    })
+                    .on('loaded', (anim) => {
+                        statusDiv.className = 'status success';
+                        statusDiv.textContent = `${sampleName} loaded successfully!`;
+                        
+                        const info = anim.getAnimationInfo();
+                        infoDiv.style.display = 'block';
+                        infoDiv.innerHTML = `
+                            <strong>Animation Info:</strong><br>
+                            Sample: ${sampleName}<br>
+                            Size: ${info.width} x ${info.height}<br>
+                            Duration: ${info.duration.toFixed(2)}s<br>
+                            FPS: ${info.fps}<br>
+                            State: ${anim.getState()}
+                        `;
+                        
+                        timeSlider.max = info.duration;
+                        timeSlider.step = 1 / (info.fps || 30);
+                        
+                        playBtn.disabled = false;
+                        pauseBtn.disabled = false;
+                        stopBtn.disabled = false;
+                        timeSlider.disabled = false;
+                        
+                        updateFrame();
+                    })
+                    .on('start', () => {
+                        isPlaying = true;
+                        playBtn.disabled = true;
+                        pauseBtn.disabled = false;
+                    })
+                    .on('pause', () => {
+                        isPlaying = false;
+                        playBtn.disabled = false;
+                        pauseBtn.disabled = true;
+                    })
+                    .on('stop', () => {
+                        isPlaying = false;
+                        playBtn.disabled = false;
+                        pauseBtn.disabled = true;
+                    })
+                    .on('end', () => {
+                        isPlaying = false;
+                        playBtn.disabled = false;
+                        pauseBtn.disabled = true;
+                    })
+                    .on('frame', () => {
+                        if (animation) {
+                            animation.renderToCanvas(canvas, bgColor);
+                            const info = animation.getAnimationInfo();
+                            const frame = animation.getCurrentFrame();
+                            if (frame) {
+                                timeSlider.value = frame.time;
+                                timeValue.textContent = frame.time.toFixed(2);
+                            }
+                        }
+                    });
+                
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = `Error loading ${sampleName}: ${error.message}`;
+                console.error(error);
+            }
+        }
+        
+        function updateFrame() {
+            if (animation && !isPlaying) {
+                const time = parseFloat(timeSlider.value);
+                animation.seek(time);
+                animation.renderToCanvas(canvas, bgColor);
+                timeValue.textContent = time.toFixed(2);
+            }
+        }
+        
+        // Event listeners
+        sampleSelect.addEventListener('change', () => {
+            loadSample(sampleSelect.value);
+        });
+        
+        playBtn.addEventListener('click', () => {
+            if (animation) animation.start();
+        });
+        
+        pauseBtn.addEventListener('click', () => {
+            if (animation) animation.pause();
+        });
+        
+        stopBtn.addEventListener('click', () => {
+            if (animation) animation.stop();
+        });
+        
+        timeSlider.addEventListener('input', () => {
+            updateFrame();
+        });
+        
+        fpsSlider.addEventListener('input', () => {
+            fpsValue.textContent = fpsSlider.value;
+            if (animation) {
+                animation.setFps(parseFloat(fpsSlider.value));
+            }
+        });
+        
+        bgColorPicker.addEventListener('input', () => {
+            bgColor = bgColorPicker.value;
+            updateFrame();
+        });
+        
+        // Initialize
+        loadSample('sample1');
+    </script>
+</body>
+</html>
+

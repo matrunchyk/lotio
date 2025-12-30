@@ -497,4 +497,3 @@ void normalizeLottieTextNewlines(std::string& json) {
     LOG_DEBUG("Text newline normalization: replacedEscaped=\\u0003->\\r x" << replacedEscaped
               << ", replacedLiteral=0x03->\\r x" << replacedLiteral);
 }
-

@@ -37,6 +37,8 @@ make
 
 ## Usage
 
+### Command Line
+
 ```bash
 lotio [--png] [--webp] [--stream] [--debug] [--text-config <config.json>] <input.json> <output_dir> [fps]
 ```
@@ -59,6 +61,141 @@ lotio --png --stream animation.json - | ffmpeg -f image2pipe -i - output.mp4
 
 # With text configuration
 lotio --png --text-config text_config.json animation.json frames/
+```
+
+### Browser (WebAssembly)
+
+Install from npm/GitHub Packages:
+
+```bash
+npm install @matrunchyk/lotio
+```
+
+**Basic Usage:**
+
+```javascript
+import Lotio, { FrameType, State } from '@matrunchyk/lotio';
+
+// Load fonts
+const fontResponse = await fetch('./fonts/OpenSans-Bold.ttf');
+const fontData = new Uint8Array(await fontResponse.arrayBuffer());
+
+// Load animation
+const animationResponse = await fetch('./animation.json');
+const animationData = await animationResponse.json();
+
+// Create animation instance
+const animation = new Lotio({
+  fonts: [{ name: 'OpenSans-Bold', data: fontData }],
+  fps: 30,
+  animation: animationData,
+  textConfig: { /* optional text config */ },
+  type: FrameType.PNG,
+  wasmPath: './lotio.wasm'
+});
+
+// Event handlers (fluent interface)
+animation
+  .on('error', (error, anim) => {
+    console.error('Animation error:', error);
+  })
+  .on('loaded', (anim) => {
+    console.log('Animation loaded');
+    anim.start();
+  })
+  .on('start', (anim) => {
+    console.log('Animation started');
+  })
+  .on('pause', (anim) => {
+    console.log('Animation paused');
+  })
+  .on('stop', (anim) => {
+    console.log('Animation stopped');
+  })
+  .on('end', (anim) => {
+    console.log('Animation ended');
+  })
+  .on('frame', (frameNumber, time, anim) => {
+    // Render to canvas
+    const canvas = document.getElementById('canvas');
+    anim.renderToCanvas(canvas, '#2a2a2a');
+  });
+
+// Control methods
+animation
+  .setFps(60)           // Change FPS
+  .seek(10)             // Seek to frame 10
+  .start()              // Start playback
+  .pause()              // Pause
+  .stop();              // Stop and reset
+
+// Getters
+const fps = animation.getFps();
+const state = animation.getState(); // 'stopped' | 'paused' | 'loaded' | 'error' | 'playing'
+const frame = animation.getCurrentFrame();
+const info = animation.getAnimationInfo();
+
+// Render current frame to canvas
+const canvas = document.getElementById('canvas');
+animation.renderToCanvas(canvas, '#ffffff');
+
+// Cleanup
+animation.destroy();
+```
+
+**Full Example with Canvas:**
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Lotio Animation</title>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <button id="playBtn">Play</button>
+  <button id="pauseBtn">Pause</button>
+  <button id="stopBtn">Stop</button>
+  
+  <script type="module">
+    import Lotio from '@matrunchyk/lotio';
+    
+    let animation;
+    
+    async function init() {
+      // Load font
+      const fontRes = await fetch('./fonts/OpenSans-Bold.ttf');
+      const fontData = new Uint8Array(await fontRes.arrayBuffer());
+      
+      // Load animation
+      const animRes = await fetch('./animation.json');
+      const animData = await animRes.json();
+      
+      // Create animation
+      animation = new Lotio({
+        fonts: [{ name: 'OpenSans-Bold', data: fontData }],
+        fps: 30,
+        animation: animData,
+        wasmPath: './lotio.wasm'
+      });
+      
+      const canvas = document.getElementById('canvas');
+      
+      // Render frames
+      animation.on('frame', () => {
+        animation.renderToCanvas(canvas);
+      });
+      
+      // Controls
+      document.getElementById('playBtn').onclick = () => animation.start();
+      document.getElementById('pauseBtn').onclick = () => animation.pause();
+      document.getElementById('stopBtn').onclick = () => animation.stop();
+    }
+    
+    init();
+  </script>
+</body>
+</html>
 ```
 
 ## Samples

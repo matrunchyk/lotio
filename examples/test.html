@@ -1,0 +1,361 @@
+<!-- Version: 1767069652 -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Lotio WASM Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        .left-pane {
+            width: 50%;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid #ccc;
+            background: #f9f9f9;
+        }
+        .right-pane {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #canvas {
+            margin-top: 30px;
+            border: 1px solid #ccc;
+            display: block;
+            transform: scale(0.5);
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        .controls input[type="range"] {
+            width: 100%;
+        }
+        .info {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        h1 {
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="left-pane">
+            <h1>Lotio WebAssembly Test</h1>
+            
+            <div class="controls">
+                <label>
+                    Sample:
+                    <select id="sampleSelect">
+                        <option value="sample1">Sample 1</option>
+                        <option value="sample2">Sample 2</option>
+                    </select>
+                </label>
+            </div>
+            
+            <div class="info" id="status">Loading WASM module...</div>
+            <div class="info" id="info" style="display: none;"></div>
+            
+            <div class="controls">
+                <label>
+                    Time: <span id="timeValue">0.0</span>s
+                    <input type="range" id="timeSlider" min="0" max="1" step="0.01" value="0">
+                </label>
+                <br><br>
+                <label>
+                    FPS: <span id="fpsValue">30</span>
+                    <input type="range" id="fpsSlider" min="1" max="120" step="1" value="30">
+                </label>
+                <br><br>
+                <label>
+                    Background Color:
+                    <input type="color" id="bgColorPicker" value="#2a2a2a">
+                </label>
+                <br><br>
+                <button id="playBtn">Play</button>
+            </div>
+        </div>
+        
+        <div class="right-pane">
+            <canvas id="canvas"></canvas>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { initLotio, createAnimation, renderFrameToCanvas, cleanup, registerFont } from '../browser/wasm.js';
+        
+        let animationInfo = null;
+        let isPlaying = false;
+        let startTime = 0;
+        let animationFrameId = null;
+        
+        const statusDiv = document.getElementById('status');
+        const infoDiv = document.getElementById('info');
+        const canvas = document.getElementById('canvas');
+        const slider = document.getElementById('timeSlider');
+        const timeValue = document.getElementById('timeValue');
+        const fpsSlider = document.getElementById('fpsSlider');
+        const fpsValue = document.getElementById('fpsValue');
+        const bgColorPicker = document.getElementById('bgColorPicker');
+        const playBtn = document.getElementById('playBtn');
+        const sampleSelect = document.getElementById('sampleSelect');
+        
+        let bgColor = '#2a2a2a'; // Default background color
+        
+        let wasmInitialized = false;
+        
+        // Convert image file paths to data URIs for WASM compatibility
+        async function convertImagesToDataURIs(jsonData, sampleName) {
+            if (!jsonData.assets || !Array.isArray(jsonData.assets)) {
+                return jsonData;
+            }
+            
+            // Create a deep copy to avoid mutating the original
+            const modified = JSON.parse(JSON.stringify(jsonData));
+            
+            // Process each asset that is an image
+            for (const asset of modified.assets) {
+                // Skip if already embedded (e: 1) or if it's not an image asset
+                if (asset.e === 1) {
+                    continue; // Already embedded as data URI
+                }
+                
+                if (asset.p && asset.u !== undefined) {
+                    // This is an image asset with a path that needs to be loaded
+                    const imagePath = asset.u + asset.p;
+                    const imageUrl = `./samples/${sampleName}/${imagePath}`;
+                    
+                    try {
+                        statusDiv.textContent = `Loading image: ${imagePath}...`;
+                        const imageResponse = await fetch(imageUrl);
+                        if (imageResponse.ok) {
+                            const imageBlob = await imageResponse.blob();
+                            const reader = new FileReader();
+                            const dataUri = await new Promise((resolve, reject) => {
+                                reader.onload = () => resolve(reader.result);
+                                reader.onerror = reject;
+                                reader.readAsDataURL(imageBlob);
+                            });
+                            
+                            // Replace the path with data URI and mark as embedded
+                            asset.u = '';
+                            asset.p = dataUri;
+                            asset.e = 1; // Mark as embedded
+                            console.log(`✅ Converted ${imagePath} to data URI`);
+                        } else {
+                            console.warn(`⚠️ Could not load image: ${imageUrl}`);
+                        }
+                    } catch (error) {
+                        console.warn(`⚠️ Error loading image ${imagePath}:`, error);
+                    }
+                }
+            }
+            
+            return modified;
+        }
+        
+        async function loadSample(sampleName) {
+            try {
+                console.log(`[DEBUG] loadSample called with: ${sampleName}`);
+                
+                // Stop animation if playing
+                if (isPlaying) {
+                    isPlaying = false;
+                    playBtn.textContent = 'Play';
+                    if (animationFrameId) {
+                        cancelAnimationFrame(animationFrameId);
+                        animationFrameId = null;
+                    }
+                }
+                
+                statusDiv.textContent = `Loading ${sampleName}...`;
+                statusDiv.style.background = '#f5f5f5';
+                
+                // Load the animation JSON
+                const url = `./samples/${sampleName}/data.json`;
+                console.log(`[DEBUG] Fetching: ${url}`);
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Failed to load ./samples/${sampleName}/data.json (HTTP ${response.status})`);
+                }
+                
+                let jsonData = await response.json();
+                
+                // Convert image paths to data URIs
+                statusDiv.textContent = `Processing images for ${sampleName}...`;
+                jsonData = await convertImagesToDataURIs(jsonData, sampleName);
+                
+                // Try to load text config if available
+                let textConfig = null;
+                try {
+                    const textConfigResponse = await fetch(`./samples/${sampleName}/text-config.json`);
+                    if (textConfigResponse.ok) {
+                        textConfig = await textConfigResponse.json();
+                        statusDiv.textContent = `Text config loaded. Creating ${sampleName} animation...`;
+                    }
+                } catch (e) {
+                    // Text config is optional
+                }
+                
+                statusDiv.textContent = `Creating ${sampleName} animation...`;
+                animationInfo = createAnimation(jsonData, textConfig);
+                
+                statusDiv.textContent = `${sampleName} loaded successfully!`;
+                statusDiv.style.background = '#d4edda';
+                
+                infoDiv.style.display = 'block';
+                infoDiv.innerHTML = `
+                    <strong>Animation Info:</strong><br>
+                    Sample: ${sampleName}<br>
+                    Size: ${animationInfo.width} x ${animationInfo.height}<br>
+                    Duration: ${animationInfo.duration.toFixed(2)}s<br>
+                    FPS: ${animationInfo.fps.toFixed(2)}
+                `;
+                
+                // Set slider max to duration
+                slider.max = animationInfo.duration;
+                slider.step = 1 / animationInfo.fps;
+                slider.value = 0;
+                
+                // Initial render
+                updateFrame();
+                
+            } catch (error) {
+                statusDiv.textContent = `Error loading ${sampleName}: ${error.message}`;
+                statusDiv.style.background = '#f8d7da';
+                console.error(error);
+            }
+        }
+        
+        async function init() {
+            try {
+                statusDiv.textContent = 'Initializing WASM module...';
+                await initLotio('../browser/lotio.wasm');
+                wasmInitialized = true;
+                
+                statusDiv.textContent = 'Loading fonts...';
+                
+                // Load OpenSans-Bold font (matches the font name in data.json)
+                // IMPORTANT: Register fonts BEFORE creating the animation
+                try {
+                    const fontResponse = await fetch('./fonts/OpenSans/OpenSans-Bold.ttf');
+                    if (fontResponse.ok) {
+                        const fontArrayBuffer = await fontResponse.arrayBuffer();
+                        const fontData = new Uint8Array(fontArrayBuffer);
+                        registerFont('OpenSans-Bold', fontData);
+                        console.log('✅ OpenSans-Bold font loaded and registered');
+                    } else {
+                        console.warn('⚠️ Could not load OpenSans-Bold.ttf, text may not render');
+                    }
+                } catch (e) {
+                    console.error('❌ Error loading font:', e);
+                }
+                
+                // Load initial sample
+                await loadSample('sample1');
+                
+                // Handle sample selection change
+                sampleSelect.addEventListener('change', async (e) => {
+                    await loadSample(e.target.value);
+                });
+                
+                slider.addEventListener('input', () => {
+                    if (!isPlaying) {
+                        updateFrame();
+                    }
+                });
+                
+                fpsSlider.addEventListener('input', () => {
+                    fpsValue.textContent = fpsSlider.value;
+                    // If playing, restart animation with new FPS
+                    if (isPlaying && animationInfo) {
+                        const currentTime = parseFloat(slider.value);
+                        const targetFPS = parseFloat(fpsSlider.value);
+                        const animationFPS = animationInfo.fps || 30;
+                        const speedMultiplier = targetFPS / animationFPS;
+                        startTime = performance.now() - (currentTime / speedMultiplier * 1000);
+                    }
+                });
+                
+                bgColorPicker.addEventListener('input', () => {
+                    bgColor = bgColorPicker.value;
+                    if (!isPlaying) {
+                        updateFrame();
+                    }
+                });
+                
+                playBtn.addEventListener('click', () => {
+                    isPlaying = !isPlaying;
+                    playBtn.textContent = isPlaying ? 'Pause' : 'Play';
+                    
+                    if (isPlaying) {
+                        startTime = performance.now() - (parseFloat(slider.value) * 1000);
+                        animate();
+                    } else {
+                        if (animationFrameId) {
+                            cancelAnimationFrame(animationFrameId);
+                            animationFrameId = null;
+                        }
+                    }
+                });
+                
+            } catch (error) {
+                statusDiv.textContent = `Error: ${error.message}`;
+                statusDiv.style.background = '#f8d7da';
+                console.error(error);
+            }
+        }
+        
+        function updateFrame() {
+            const time = parseFloat(slider.value);
+            timeValue.textContent = time.toFixed(2);
+            try {
+                renderFrameToCanvas(canvas, time, bgColor);
+                // Adjust canvas container size to match scaled canvas
+                const canvasContainer = canvas.parentElement;
+                canvasContainer.style.width = (canvas.width * 0.5) + 'px';
+                canvasContainer.style.height = (canvas.height * 0.5) + 'px';
+            } catch (error) {
+                console.error('Error rendering frame:', error);
+            }
+        }
+        
+        function animate() {
+            if (!isPlaying) return;
+            
+            const targetFPS = parseFloat(fpsSlider.value);
+            const animationFPS = animationInfo.fps || 30;
+            const speedMultiplier = targetFPS / animationFPS;
+            
+            const elapsed = (performance.now() - startTime) / 1000;
+            const time = (elapsed * speedMultiplier) % animationInfo.duration;
+            slider.value = time;
+            timeValue.textContent = time.toFixed(2);
+            updateFrame();
+            
+            animationFrameId = requestAnimationFrame(animate);
+        }
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            cleanup();
+        });
+        
+        init();
+    </script>
+</body>
+</html>
+

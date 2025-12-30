@@ -1,0 +1,37 @@
+{
+  "name": "@matrunchyk/lotio",
+  "version": "1.0.0",
+  "description": "High-performance Lottie animation frame renderer for the browser using WebAssembly",
+  "type": "module",
+  "main": "browser/index.js",
+  "module": "browser/index.js",
+  "exports": {
+    ".": {
+      "import": "./browser/index.js",
+      "require": "./browser/index.js"
+    }
+  },
+  "files": [
+    "browser/",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/matrunchyk/lotio.git"
+  },
+  "keywords": [
+    "lottie",
+    "animation",
+    "webassembly",
+    "wasm",
+    "skia",
+    "renderer",
+    "canvas"
+  ],
+  "author": "matrunchyk",
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}
+
