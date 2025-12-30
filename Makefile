@@ -66,7 +66,7 @@ check-skia:
 	@if [ ! -f "$(SKIA_LIB_DIR)/libskia.a" ] && [ ! -f "$(SKIA_LIB_DIR)/libskia.dylib" ] && [ ! -f "$(SKIA_LIB_DIR)/libskia.so" ]; then \
 		echo "❌ Skia library not found at $(SKIA_LIB_DIR)"; \
 		echo "📦 Building Skia first..."; \
-		./install_skia.sh; \
+		./scripts/install_skia.sh; \
 	fi
 
 build: all

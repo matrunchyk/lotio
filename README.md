@@ -27,10 +27,10 @@ xcode-select --install
 **Build:**
 ```bash
 # Build Skia (first time only, takes a while)
-./install_skia.sh
+./scripts/install_skia.sh
 
 # Build lotio
-./build_local.sh
+./scripts/build_local.sh
 # or
 make
 ```
@@ -274,7 +274,7 @@ Reload Cursor/VS Code after cloning: `Cmd+Shift+P` → "Reload Window"
 **Skia build fails:**
 - Ensure all dependencies are installed
 - Check sufficient disk space (Skia build is large)
-- Review error messages in `install_skia.sh` output
+- Review error messages in `scripts/install_skia.sh` output
 
 **Linker errors:**
 - Verify Skia libraries exist in `third_party/skia/skia/out/Release/`

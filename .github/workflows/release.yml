@@ -55,19 +55,19 @@ jobs:
           git config --global advice.detachedHead false
           git clone --depth 1 https://skia.googlesource.com/skia.git
           cd skia
-          chmod +x "$GITHUB_WORKSPACE/sync_skia_deps.sh"
-          "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
+          chmod +x "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh"
+          "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
       - name: Build Skia
         run: |
-          chmod +x install_skia.sh
-          ./install_skia.sh
+          chmod +x scripts/install_skia.sh
+          ./scripts/install_skia.sh
 
       - name: Build lotio
         run: |
-          chmod +x build_local.sh
-          ./build_local.sh
+          chmod +x scripts/build_local.sh
+          ./scripts/build_local.sh
 
       - name: Test binary
         run: |
@@ -331,19 +331,19 @@ jobs:
           git config --global advice.detachedHead false
           git clone --depth 1 https://skia.googlesource.com/skia.git
           cd skia
-          chmod +x "$GITHUB_WORKSPACE/sync_skia_deps.sh"
-          "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
+          chmod +x "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh"
+          "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
       - name: Build Skia
         run: |
-          chmod +x install_skia.sh
-          ./install_skia.sh
+          chmod +x scripts/install_skia.sh
+          ./scripts/install_skia.sh
 
       - name: Build lotio
         run: |
-          chmod +x build_local.sh
-          ./build_local.sh
+          chmod +x scripts/build_local.sh
+          ./scripts/build_local.sh
 
       - name: Test binary
         run: |
@@ -435,19 +435,19 @@ jobs:
           git config --global advice.detachedHead false
           git clone --depth 1 https://skia.googlesource.com/skia.git
           cd skia
-          chmod +x "$GITHUB_WORKSPACE/sync_skia_deps.sh"
-          "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
+          chmod +x "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh"
+          "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
       - name: Build Skia for WASM
         run: |
-          chmod +x build_skia_wasm.sh
-          ./build_skia_wasm.sh
+          chmod +x scripts/build_skia_wasm.sh
+          ./scripts/build_skia_wasm.sh
 
       - name: Build lotio WASM
         run: |
-          chmod +x build_wasm.sh
-          ./build_wasm.sh
+          chmod +x scripts/build_wasm.sh
+          ./scripts/build_wasm.sh
 
       - name: Create WASM package
         id: wasm_package
