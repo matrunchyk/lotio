@@ -2,7 +2,7 @@ name: Build, Package and Release
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
     tags:
       - 'v*'
   workflow_dispatch:
@@ -84,10 +84,12 @@ jobs:
           cp lotio "$PKG_NAME/"
           
           # Headers (for development)
-          mkdir -p "$PKG_NAME/include/lotio"
-          cp -r src/core/*.h "$PKG_NAME/include/lotio/core/" 2>/dev/null || true
-          cp -r src/text/*.h "$PKG_NAME/include/lotio/text/" 2>/dev/null || true
-          cp -r src/utils/*.h "$PKG_NAME/include/lotio/utils/" 2>/dev/null || true
+          mkdir -p "$PKG_NAME/include/lotio/core"
+          mkdir -p "$PKG_NAME/include/lotio/text"
+          mkdir -p "$PKG_NAME/include/lotio/utils"
+          cp src/core/*.h "$PKG_NAME/include/lotio/core/" 2>/dev/null || true
+          cp src/text/*.h "$PKG_NAME/include/lotio/text/" 2>/dev/null || true
+          cp src/utils/*.h "$PKG_NAME/include/lotio/utils/" 2>/dev/null || true
           
           # Skia static libraries (for linking)
           mkdir -p "$PKG_NAME/lib"
@@ -136,9 +138,9 @@ jobs:
           cp lotio "$BOTTLE_DIR/bin/"
           
           # Copy headers
-          cp -r src/core/*.h "$BOTTLE_DIR/include/lotio/core/" 2>/dev/null || true
-          cp -r src/text/*.h "$BOTTLE_DIR/include/lotio/text/" 2>/dev/null || true
-          cp -r src/utils/*.h "$BOTTLE_DIR/include/lotio/utils/" 2>/dev/null || true
+          cp src/core/*.h "$BOTTLE_DIR/include/lotio/core/" 2>/dev/null || true
+          cp src/text/*.h "$BOTTLE_DIR/include/lotio/text/" 2>/dev/null || true
+          cp src/utils/*.h "$BOTTLE_DIR/include/lotio/utils/" 2>/dev/null || true
           
           # Copy Skia static libraries
           SKIA_LIB_DIR="third_party/skia/skia/out/Release"
@@ -246,9 +248,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Homebrew Formula
-        # Only update for semantic version tags (v1.1.0, v2.0.0, etc.)
-        # Skip date-SHA tags (v20251229-abc123) as they're for CI/testing
-        if: steps.version.outputs.VERSION != '' && contains(steps.version.outputs.VERSION, '.')
+        if: steps.version.outputs.VERSION != ''
         continue-on-error: false
         uses: dawidd6/action-homebrew-bump-formula@v7
         with:
