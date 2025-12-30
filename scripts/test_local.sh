@@ -28,7 +28,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     # Build Skia if needed
     if [ ! -f "third_party/skia/skia/out/Release/libskia.a" ]; then
         echo "📦 Building Skia (this will take a while)..."
-        ./install_skia.sh
+        ./scripts/install_skia.sh
     else
         echo "✅ Skia already built"
     fi
@@ -36,7 +36,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     
     # Build project
     echo "🔨 Building lotio..."
-    ./build_local.sh
+    ./scripts/build_local.sh
     echo ""
     
     # Test binary

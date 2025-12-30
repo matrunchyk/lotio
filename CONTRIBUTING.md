@@ -15,8 +15,8 @@
 
 3. **Build:**
    ```bash
-   ./install_skia.sh  # First time only
-   ./build_local.sh
+   ./scripts/install_skia.sh  # First time only
+   ./scripts/build_local.sh
    ```
 
 ## Code Organization
@@ -42,7 +42,7 @@
 ## Adding New Features
 
 1. Add source files to the appropriate module directory
-2. Update `build_local.sh` and `Makefile` if adding new source files
+2. Update `scripts/build_local.sh` and `Makefile` if adding new source files
 3. Follow existing code structure and patterns
 4. Update headers in the same directory as implementation files
 
@@ -59,7 +59,7 @@ Test your changes locally:
 
 ```bash
 # Build
-./build_local.sh
+./scripts/build_local.sh
 
 # Test binary
 ./lotio --help

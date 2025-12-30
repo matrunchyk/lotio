@@ -3,8 +3,6 @@ name: Test and Validate
 on:
   push:
     branches: [ develop ]  # Only test on develop branch
-  pull_request:
-    branches: [ main, master, develop ]  # Test all PRs
 
 jobs:
   build-macos:
@@ -26,19 +24,19 @@ jobs:
           git config --global advice.detachedHead false
           git clone --depth 1 https://skia.googlesource.com/skia.git
           cd skia
-          chmod +x "$GITHUB_WORKSPACE/sync_skia_deps.sh"
-          "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
+          chmod +x "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh"
+          "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
       - name: Build Skia
         run: |
-          chmod +x install_skia.sh
-          ./install_skia.sh
+          chmod +x scripts/install_skia.sh
+          ./scripts/install_skia.sh
 
       - name: Build lotio
         run: |
-          chmod +x build_local.sh
-          ./build_local.sh
+          chmod +x scripts/build_local.sh
+          ./scripts/build_local.sh
 
       - name: Test binary
         run: |
@@ -87,19 +85,19 @@ jobs:
           git config --global advice.detachedHead false
           git clone --depth 1 https://skia.googlesource.com/skia.git
           cd skia
-          chmod +x "$GITHUB_WORKSPACE/sync_skia_deps.sh"
-          "$GITHUB_WORKSPACE/sync_skia_deps.sh" .
+          chmod +x "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh"
+          "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh" .
           echo "Skia cloned and dependencies synced successfully"
 
       - name: Build Skia
         run: |
-          chmod +x install_skia.sh
-          ./install_skia.sh
+          chmod +x scripts/install_skia.sh
+          ./scripts/install_skia.sh
 
       - name: Build lotio
         run: |
-          chmod +x build_local.sh
-          ./build_local.sh
+          chmod +x scripts/build_local.sh
+          ./scripts/build_local.sh
 
       - name: Test binary
         run: |

@@ -4,12 +4,12 @@ set -e
 # Debug script to see the actual GN warning that's causing the build to fail
 # This mimics what the find_headers.py script does
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SKIA_ROOT="$PROJECT_ROOT/third_party/skia/skia"
 
 if [ ! -d "$SKIA_ROOT" ]; then
     echo "Error: Skia directory not found at $SKIA_ROOT"
-    echo "Run ./install_skia.sh first to fetch Skia"
+    echo "Run ./scripts/install_skia.sh first to fetch Skia"
     exit 1
 fi
 
@@ -24,7 +24,7 @@ fi
 # Check if out/Release exists
 if [ ! -d "out/Release" ]; then
     echo "Error: out/Release directory not found"
-    echo "Run ./install_skia.sh first to generate build files"
+    echo "Run ./scripts/install_skia.sh first to generate build files"
     exit 1
 fi
 

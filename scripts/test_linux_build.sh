@@ -29,13 +29,13 @@ docker run --rm --platform linux/amd64 -v "$(pwd):/workspace" -w /workspace \
         echo '✅ Dependencies installed'
         echo ''
         echo '🔨 Building Skia (this will take 10-20 minutes)...'
-        chmod +x install_skia.sh
-        ./install_skia.sh
+        chmod +x scripts/install_skia.sh
+        ./scripts/install_skia.sh
         
         echo ''
         echo '🔨 Building lotio...'
-        chmod +x build_local.sh
-        ./build_local.sh
+        chmod +x scripts/build_local.sh
+        ./scripts/build_local.sh
         
         echo ''
         echo '✅ Build successful!'

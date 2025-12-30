@@ -2,7 +2,8 @@
 
 # Quick script to check Skia build status
 
-SKIA_ROOT="third_party/skia/skia"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SKIA_ROOT="$PROJECT_ROOT/third_party/skia/skia"
 BUILD_DIR="$SKIA_ROOT/out/Release"
 
 echo "🔍 Checking Skia build status..."
