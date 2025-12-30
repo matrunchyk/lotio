@@ -21,7 +21,12 @@ FORMULA_PATH="Formula/lotio.rb"
 TEMP_DIR=$(mktemp -d)
 
 echo "Cloning tap repository..."
-git clone "https://github.com/${TAP_REPO}.git" "$TEMP_DIR"
+# Use token for authentication if provided
+if [ -n "$HOMEBREW_TAP_TOKEN" ]; then
+  git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${TAP_REPO}.git" "$TEMP_DIR"
+else
+  git clone "https://github.com/${TAP_REPO}.git" "$TEMP_DIR"
+fi
 cd "$TEMP_DIR"
 
 # Update the formula
@@ -42,8 +47,18 @@ echo "Committing changes..."
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
 git add "$FORMULA_PATH"
-git commit -m "Update lotio to ${VERSION}" || echo "No changes to commit"
-git push origin main
+
+# Check if there are changes to commit
+if git diff --staged --quiet; then
+  echo "No changes to commit (formula already up-to-date)"
+else
+  git commit -m "Update lotio to ${VERSION}"
+  # Push using token if provided
+  if [ -n "$HOMEBREW_TAP_TOKEN" ]; then
+    git remote set-url origin "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${TAP_REPO}.git"
+  fi
+  git push origin main
+fi
 
 echo "✅ Formula updated successfully!"
 cd -
