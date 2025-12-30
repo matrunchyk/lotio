@@ -5,6 +5,9 @@ build/
 *.so
 *.dylib
 
+# Sample output directories (rendered frames)
+samples/*/output/
+
 # WASM build artifacts
 lotio.wasm
 lotio.js
