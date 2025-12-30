@@ -2,7 +2,7 @@ name: Build, Package and Release
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
     tags:
       - 'v*'
   workflow_dispatch:
@@ -84,10 +84,12 @@ jobs:
           cp lotio "$PKG_NAME/"
           
           # Headers (for development)
-          mkdir -p "$PKG_NAME/include/lotio"
-          cp -r src/core/*.h "$PKG_NAME/include/lotio/core/" 2>/dev/null || true
-          cp -r src/text/*.h "$PKG_NAME/include/lotio/text/" 2>/dev/null || true
-          cp -r src/utils/*.h "$PKG_NAME/include/lotio/utils/" 2>/dev/null || true
+          mkdir -p "$PKG_NAME/include/lotio/core"
+          mkdir -p "$PKG_NAME/include/lotio/text"
+          mkdir -p "$PKG_NAME/include/lotio/utils"
+          cp src/core/*.h "$PKG_NAME/include/lotio/core/"
+          cp src/text/*.h "$PKG_NAME/include/lotio/text/"
+          cp src/utils/*.h "$PKG_NAME/include/lotio/utils/"
           
           # Skia static libraries (for linking)
           mkdir -p "$PKG_NAME/lib"
@@ -136,9 +138,9 @@ jobs:
           cp lotio "$BOTTLE_DIR/bin/"
           
           # Copy headers
-          cp -r src/core/*.h "$BOTTLE_DIR/include/lotio/core/" 2>/dev/null || true
-          cp -r src/text/*.h "$BOTTLE_DIR/include/lotio/text/" 2>/dev/null || true
-          cp -r src/utils/*.h "$BOTTLE_DIR/include/lotio/utils/" 2>/dev/null || true
+          cp src/core/*.h "$BOTTLE_DIR/include/lotio/core/"
+          cp src/text/*.h "$BOTTLE_DIR/include/lotio/text/"
+          cp src/utils/*.h "$BOTTLE_DIR/include/lotio/utils/"
           
           # Copy Skia static libraries
           SKIA_LIB_DIR="third_party/skia/skia/out/Release"
@@ -207,56 +209,68 @@ jobs:
             ### Packages
             
             **Developer package** (binary + headers + libraries for development):
-            - File: \`${{ steps.dev_package.outputs.FILENAME }}\`
-            - SHA256: \`${{ steps.dev_package.outputs.SHA256 }}\`
+            - File: `{{ steps.dev_package.outputs.FILENAME }}`
+            - SHA256: `{{ steps.dev_package.outputs.SHA256 }}`
             - Contains: binary, lotio headers, Skia static libraries, pkg-config file
             
             **Homebrew bottle** (pre-built binary for macOS):
-            - File: \`${{ steps.bottle.outputs.FILENAME }}\`
-            - SHA256: \`${{ steps.bottle.outputs.SHA256 }}\`
+            - File: `{{ steps.bottle.outputs.FILENAME }}`
+            - SHA256: `{{ steps.bottle.outputs.SHA256 }}`
             - Used automatically by Homebrew for fast installation
             
             **Debian package** (Linux ARM64):
-            - File: \`lotio_${{ steps.version.outputs.VERSION }}_arm64.deb\`
-            - Install: \`sudo dpkg -i lotio_${{ steps.version.outputs.VERSION }}_arm64.deb\`
+            - File: `lotio_${{ steps.version.outputs.VERSION }}_arm64.deb`
+            - Install: `sudo dpkg -i lotio_${{ steps.version.outputs.VERSION }}_arm64.deb`
             
             ### Installation
             
             **Homebrew (macOS) - Recommended:**
-            \`\`\`bash
+            ```bash
             brew tap matrunchyk/homebrew-lotio
             brew install lotio
-            \`\`\`
+            ```
             
             **Developer package (for programmatic use):**
-            \`\`\`bash
+            ```bash
             wget https://github.com/matrunchyk/lotio/releases/download/${{ steps.version.outputs.VERSION }}/${{ steps.dev_package.outputs.FILENAME }}
             tar -xzf ${{ steps.dev_package.outputs.FILENAME }}
             # Use binary, headers, and libraries from the package
-            \`\`\`
+            ```
             
             **Debian/Ubuntu (Linux ARM64):**
-            \`\`\`bash
+            ```bash
             wget https://github.com/matrunchyk/lotio/releases/download/${{ steps.version.outputs.VERSION }}/lotio_${{ steps.version.outputs.VERSION }}_arm64.deb
             sudo dpkg -i lotio_${{ steps.version.outputs.VERSION }}_arm64.deb
-            \`\`\`
+            ```
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get source archive SHA256
+        id: source_sha
+        run: |
+          # Create source archive from current checkout (matches GitHub's auto-generated archive)
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          VERSION_NUMBER="${VERSION#v}"
+          # Create archive matching GitHub's format: lotio-<version>.tar.gz
+          tar --exclude='.git' --exclude='third_party/skia' -czf "lotio-${VERSION_NUMBER}.tar.gz" .
+          SHA256=$(shasum -a 256 "lotio-${VERSION_NUMBER}.tar.gz" | cut -d' ' -f1)
+          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+          rm -f "lotio-${VERSION_NUMBER}.tar.gz"
+
       - name: Update Homebrew Formula
-        # Only update for semantic version tags (v1.1.0, v2.0.0, etc.)
-        # Skip date-SHA tags (v20251229-abc123) as they're for CI/testing
-        if: steps.version.outputs.VERSION != '' && contains(steps.version.outputs.VERSION, '.')
-        continue-on-error: false
-        uses: dawidd6/action-homebrew-bump-formula@v7
-        with:
-          formula: lotio
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          tap: matrunchyk/homebrew-lotio
-          tag: ${{ steps.version.outputs.VERSION }}
-          message: "Update lotio to ${{ steps.version.outputs.VERSION }}"
+        if: steps.version.outputs.VERSION != ''
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          chmod +x scripts/update_homebrew_formula.sh
+          export HOMEBREW_TAP_TOKEN="${{ secrets.HOMEBREW_TAP_TOKEN }}"
+          ./scripts/update_homebrew_formula.sh \
+            "${{ steps.version.outputs.VERSION }}" \
+            "${{ steps.source_sha.outputs.SHA256 }}" \
+            "${{ steps.bottle.outputs.SHA256 }}" \
+            "${{ steps.bottle.outputs.ARCH }}"
 
   build-linux-deb:
     runs-on: ubuntu-latest  # Note: ubuntu-latest is x86_64, not ARM64
@@ -338,9 +352,9 @@ jobs:
           mkdir -p "$DEB_DIR/DEBIAN"
           
           cp lotio "$DEB_DIR/usr/local/bin/"
-          cp src/core/*.h "$DEB_DIR/usr/local/include/lotio/core/" 2>/dev/null || true
-          cp src/text/*.h "$DEB_DIR/usr/local/include/lotio/text/" 2>/dev/null || true
-          cp src/utils/*.h "$DEB_DIR/usr/local/include/lotio/utils/" 2>/dev/null || true
+          cp src/core/*.h "$DEB_DIR/usr/local/include/lotio/core/"
+          cp src/text/*.h "$DEB_DIR/usr/local/include/lotio/text/"
+          cp src/utils/*.h "$DEB_DIR/usr/local/include/lotio/utils/"
           
           cat > "$DEB_DIR/DEBIAN/control" << EOF
           Package: lotio
