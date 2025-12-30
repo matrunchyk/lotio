@@ -205,6 +205,71 @@ This directory contains build, test, and utility scripts for the `lotio` project
 
 ---
 
+### `test_bottle.sh`
+**Purpose:** Tests Homebrew bottle creation locally before CI
+
+**Usage:**
+```bash
+./scripts/test_bottle.sh
+```
+
+**When to use:**
+- **Before pushing to `main` branch** (saves 40 minutes of CI time!)
+- Testing bottle structure changes
+- Validating release workflow bottle creation
+- Debugging bottle creation issues
+
+**Prerequisites:**
+- Binary must be built: `./scripts/build_local.sh`
+- Skia must be built: `./scripts/install_skia.sh`
+
+**What it does:**
+- Creates bottle directory structure (matches CI exactly)
+- Copies binary, headers, and libraries
+- Creates pkg-config file
+- Generates tarball with correct structure
+- Calculates SHA256
+- Tests tarball extraction
+- Validates extracted structure
+- **Automatically cleans up** test files on exit
+
+**Output:**
+- Test tarball: `lotio-<version>-<arch>.bottle.tar.gz`
+- Detailed validation report
+- SHA256 checksum
+
+**Benefits:**
+- ✅ Catch bottle creation errors in seconds instead of waiting 40 minutes
+- ✅ Validate directory structure before CI
+- ✅ Test pkg-config file format
+- ✅ Verify all required files are included
+
+**Example output:**
+```
+🧪 Testing Homebrew Bottle Creation
+===================================
+📋 Test Configuration:
+   Version: v20251230-test
+   Architecture: arm64
+   Bottle Arch: arm64_big_sur
+   Homebrew Prefix: /opt/homebrew
+
+📁 Creating bottle directory structure...
+📦 Copying binary...
+   ✅ Binary copied
+📦 Copying headers...
+   ✅ Copied 15 headers
+📦 Copying Skia libraries...
+   ✅ Copied 8 Skia libraries
+📦 Creating tarball...
+   ✅ Tarball created: lotio-20251230-test.arm64_big_sur.bottle.tar.gz (15.2M)
+   ✅ SHA256: abc123...
+
+✅ Bottle Creation Test Passed!
+```
+
+---
+
 ## Utility Scripts
 
 ### `check_build.sh`
