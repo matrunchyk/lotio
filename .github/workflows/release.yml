@@ -123,6 +123,7 @@ jobs:
       - name: Create Homebrew bottle
         id: bottle
         run: |
+          set -e  # Exit on any error
           VERSION="${{ steps.version.outputs.VERSION }}"
           VERSION_NUMBER="${VERSION#v}"
           
@@ -136,6 +137,12 @@ jobs:
             HOMEBREW_PREFIX="/usr/local"
           fi
           
+          # Verify binary exists
+          if [ ! -f "lotio" ]; then
+            echo "❌ Error: lotio binary not found!"
+            exit 1
+          fi
+          
           # Create bottle directory structure with Homebrew prefix
           # Structure: lotio/<version>/<prefix>/bin, etc.
           BOTTLE_DIR="lotio/${VERSION_NUMBER}${HOMEBREW_PREFIX}"
@@ -146,22 +153,37 @@ jobs:
           mkdir -p "$BOTTLE_DIR/lib/pkgconfig"
           
           # Copy binary
-          cp lotio "$BOTTLE_DIR/bin/"
+          echo "📦 Copying binary..."
+          cp lotio "$BOTTLE_DIR/bin/" || { echo "❌ Failed to copy binary"; exit 1; }
           
           # Copy headers
-          cp src/core/*.h "$BOTTLE_DIR/include/lotio/core/"
-          cp src/text/*.h "$BOTTLE_DIR/include/lotio/text/"
-          cp src/utils/*.h "$BOTTLE_DIR/include/lotio/utils/"
+          echo "📦 Copying headers..."
+          if ! cp src/core/*.h "$BOTTLE_DIR/include/lotio/core/" 2>/dev/null; then
+            echo "⚠️  Warning: No core headers found"
+          fi
+          if ! cp src/text/*.h "$BOTTLE_DIR/include/lotio/text/" 2>/dev/null; then
+            echo "⚠️  Warning: No text headers found"
+          fi
+          if ! cp src/utils/*.h "$BOTTLE_DIR/include/lotio/utils/" 2>/dev/null; then
+            echo "⚠️  Warning: No utils headers found"
+          fi
           
           # Copy Skia static libraries
+          echo "📦 Copying Skia libraries..."
           SKIA_LIB_DIR="third_party/skia/skia/out/Release"
+          LIB_COUNT=0
           for lib in skottie skia skparagraph sksg skshaper skunicode_icu skunicode_core skresources jsonreader; do
             if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
-              cp "$SKIA_LIB_DIR/lib${lib}.a" "$BOTTLE_DIR/lib/"
+              cp "$SKIA_LIB_DIR/lib${lib}.a" "$BOTTLE_DIR/lib/" || { echo "❌ Failed to copy lib${lib}.a"; exit 1; }
+              LIB_COUNT=$((LIB_COUNT + 1))
+            else
+              echo "⚠️  Warning: $SKIA_LIB_DIR/lib${lib}.a not found"
             fi
           done
+          echo "✅ Copied $LIB_COUNT Skia libraries"
           
           # Create pkg-config file with relocatable prefix
+          echo "📦 Creating pkg-config file..."
           cat > "$BOTTLE_DIR/lib/pkgconfig/lotio.pc" << EOF
           prefix=\${pcfiledir}/../..
           exec_prefix=\${prefix}
@@ -175,11 +197,33 @@ jobs:
           Cflags: -I\${includedir}
           EOF
           
+          # Verify directory structure before creating tarball
+          if [ ! -d "lotio" ]; then
+            echo "❌ Error: lotio directory not found!"
+            exit 1
+          fi
+          
           # Create tarball (Homebrew bottle format)
           # The tarball should contain: lotio/<version>/<prefix>/...
-          tar -czf "lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz" "lotio"
+          echo "📦 Creating tarball..."
+          tar -czf "lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz" "lotio" || { echo "❌ Failed to create tarball"; exit 1; }
           
+          # Verify tarball was created
+          if [ ! -f "lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz" ]; then
+            echo "❌ Error: Tarball was not created!"
+            exit 1
+          fi
+          
+          # Calculate SHA256
           SHA256=$(shasum -a 256 "lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz" | cut -d' ' -f1)
+          if [ -z "$SHA256" ]; then
+            echo "❌ Error: Failed to calculate SHA256"
+            exit 1
+          fi
+          
+          echo "✅ Bottle created successfully: lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz"
+          echo "✅ SHA256: $SHA256"
+          
           echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
           echo "FILENAME=lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz" >> $GITHUB_OUTPUT
           echo "ARCH=$BOTTLE_ARCH" >> $GITHUB_OUTPUT
