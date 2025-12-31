@@ -1,9 +1,5 @@
 CompileFlags:
-    Add:
-      - -I/Users/thebook/Downloads/cpp/third_party/skia/skia
-      - -I/Users/thebook/Downloads/cpp/third_party/skia/skia/include
-      - -I/Users/thebook/Downloads/cpp/third_party/skia/skia/modules
-      - -I/Users/thebook/Downloads/cpp/src
-      - -std=c++17
-
-
+  Add: 
+    - -I.vscode_skia_include
+    - -Ithird_party/skia/skia/include
+    - -Ithird_party/skia/skia/modules

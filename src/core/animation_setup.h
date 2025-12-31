@@ -1,8 +1,8 @@
 #ifndef ANIMATION_SETUP_H
 #define ANIMATION_SETUP_H
 
-#include "modules/skottie/include/Skottie.h"
-#include "include/core/SkFontMgr.h"
+#include <skia/modules/skottie/include/Skottie.h>
+#include <skia/core/SkFontMgr.h>
 #include <string>
 #include <memory>
 

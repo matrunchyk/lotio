@@ -94,6 +94,33 @@ for path in "${EXPECTED_PATHS[@]}"; do
     fi
 done
 
+# Verify Skia headers are present (REQUIRED for programmatic use)
+echo ""
+echo "🔍 Verifying Skia headers (required for programmatic use)..."
+SKIA_HEADER_PATHS=(
+    "$BOTTLE_DIR/include/skia/core/SkCanvas.h"
+    "$BOTTLE_DIR/include/skia/core/SkFontMgr.h"
+    "$BOTTLE_DIR/include/skia/modules/skottie/include/Skottie.h"
+    "$BOTTLE_DIR/include/skia/modules/skresources/include/SkResources.h"
+)
+MISSING_HEADERS=0
+for path in "${SKIA_HEADER_PATHS[@]}"; do
+    if [ -e "$path" ]; then
+        echo "   ✅ $path"
+    else
+        echo "   ❌ Missing: $path"
+        MISSING_HEADERS=$((MISSING_HEADERS + 1))
+    fi
+done
+
+if [ $MISSING_HEADERS -gt 0 ]; then
+    echo ""
+    echo "❌ ERROR: $MISSING_HEADERS critical Skia headers are missing!"
+    echo "   Developers won't be able to use lotio programmatically"
+    exit 1
+fi
+echo "   ✅ All critical Skia headers present"
+
 # Test extracting the tarball
 echo ""
 echo "🧪 Testing tarball extraction..."
