@@ -256,7 +256,7 @@ animation.start();</pre></code>
     </div>
     
     <script type="module">
-        import Lotio, { FrameType, State } from '../browser/index.js';
+        import Lotio, { FrameType, State } from './browser/index.js';
         
         let animation = null;
         let isPlaying = false;
@@ -352,7 +352,7 @@ animation.start();</pre></code>
                     animation: processedAnim,
                     textConfig: textConfig,
                     type: FrameType.PNG,
-                    wasmPath: '../browser/lotio.wasm'
+                    wasmPath: './browser/lotio.wasm'
                 });
                 
                 // Set up event handlers

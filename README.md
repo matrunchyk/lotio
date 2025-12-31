@@ -246,11 +246,46 @@ g++ -I/opt/homebrew/include -L/opt/homebrew/lib \
     your_app.cpp -o your_app
 ```
 
-Or use pkg-config:
+Or use pkg-config (recommended):
 
 ```bash
 g++ $(pkg-config --cflags --libs lotio) your_app.cpp -o your_app
 ```
+
+### Using Skia Directly
+
+The lotio package includes Skia headers and libraries, so you can use Skia features directly in your code:
+
+```cpp
+// Use Skia directly
+#include <skia/core/SkCanvas.h>
+#include <skia/core/SkSurface.h>
+#include <skia/modules/skottie/include/Skottie.h>
+
+// Use lotio
+#include <lotio/core/animation_setup.h>
+
+int main() {
+    // Use Skia API directly
+    SkImageInfo info = SkImageInfo::MakeN32(800, 600, kOpaque_SkAlphaType);
+    auto surface = SkSurfaces::Raster(info);
+    
+    // Use lotio functions
+    AnimationSetupResult result = setupAndCreateAnimation("input.json", "");
+    
+    return 0;
+}
+```
+
+Compile with:
+```bash
+g++ $(pkg-config --cflags --libs lotio) your_app.cpp -o your_app
+```
+
+The pkg-config file includes all necessary include paths:
+- `-I${includedir}` - Lotio headers
+- `-I${includedir}/skia` - Skia core headers
+- `-I${includedir}/skia/gen` - Skia generated headers
 
 ## Project Structure
 

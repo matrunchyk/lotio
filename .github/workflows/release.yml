@@ -21,6 +21,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: false
 
       - name: Generate version
         id: version
@@ -91,8 +92,43 @@ jobs:
           cp src/text/*.h "$PKG_NAME/include/lotio/text/"
           cp src/utils/*.h "$PKG_NAME/include/lotio/utils/"
           
-          # Skia static libraries (for linking)
+          # Skia headers (for developers to use Skia directly)
+          SKIA_ROOT="third_party/skia/skia"
+          SKIA_INCLUDE_DIR="$SKIA_ROOT/include"
+          SKIA_MODULES_DIR="$SKIA_ROOT/modules"
+          SKIA_GEN_DIR="$SKIA_ROOT/out/Release/gen"
+          
+          # Copy main Skia headers
+          if [ -d "$SKIA_INCLUDE_DIR" ]; then
+            mkdir -p "$PKG_NAME/include/skia"
+            cp -r "$SKIA_INCLUDE_DIR"/* "$PKG_NAME/include/skia/" 2>/dev/null || true
+          fi
+          
+          # Copy module headers
+          if [ -d "$SKIA_MODULES_DIR" ]; then
+            for module in skottie skparagraph sksg skshaper skunicode skresources jsonreader; do
+              if [ -d "$SKIA_MODULES_DIR/$module/include" ]; then
+                mkdir -p "$PKG_NAME/include/skia/modules/$module"
+                cp -r "$SKIA_MODULES_DIR/$module/include"/* "$PKG_NAME/include/skia/modules/$module/" 2>/dev/null || true
+              fi
+            done
+          fi
+          
+          # Copy generated headers
+          if [ -d "$SKIA_GEN_DIR" ]; then
+            mkdir -p "$PKG_NAME/include/skia/gen"
+            cp -r "$SKIA_GEN_DIR"/*.h "$PKG_NAME/include/skia/gen/" 2>/dev/null || true
+          fi
+          
+          # liblotio.a library
           mkdir -p "$PKG_NAME/lib"
+          if [ -f "liblotio.a" ]; then
+            cp liblotio.a "$PKG_NAME/lib/"
+          else
+            echo "⚠️  Warning: liblotio.a not found"
+          fi
+          
+          # Skia static libraries (for linking)
           SKIA_LIB_DIR="third_party/skia/skia/out/Release"
           for lib in skottie skia skparagraph sksg skshaper skunicode_icu skunicode_core skresources jsonreader; do
             if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
@@ -111,8 +147,8 @@ jobs:
           Name: lotio
           Description: High-performance Lottie animation frame renderer using Skia
           Version: ${VERSION#v}
-          Libs: -L\${libdir} -lskottie -lsksg -ljsonreader -lskia -lskparagraph -lskshaper -lskunicode_icu -lskunicode_core -lskresources
-          Cflags: -I\${includedir}
+          Libs: -L\${libdir} -llotio -lskottie -lsksg -ljsonreader -lskia -lskparagraph -lskshaper -lskunicode_icu -lskunicode_core -lskresources
+          Cflags: -I\${includedir} -I\${includedir}/skia -I\${includedir}/skia/gen
           EOF
           
           tar -czf "${PKG_NAME}.tar.gz" "$PKG_NAME"
@@ -239,6 +275,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: false
 
       - name: Set version from macOS job
         id: version
@@ -305,15 +342,47 @@ jobs:
           DEB_DIR="deb-package"
           
           mkdir -p "$DEB_DIR/usr/local/bin"
+          mkdir -p "$DEB_DIR/usr/local/lib"
           mkdir -p "$DEB_DIR/usr/local/include/lotio/core"
           mkdir -p "$DEB_DIR/usr/local/include/lotio/text"
           mkdir -p "$DEB_DIR/usr/local/include/lotio/utils"
           mkdir -p "$DEB_DIR/DEBIAN"
           
           cp lotio "$DEB_DIR/usr/local/bin/"
+          if [ -f "liblotio.a" ]; then
+            cp liblotio.a "$DEB_DIR/usr/local/lib/"
+          fi
           cp src/core/*.h "$DEB_DIR/usr/local/include/lotio/core/"
           cp src/text/*.h "$DEB_DIR/usr/local/include/lotio/text/"
           cp src/utils/*.h "$DEB_DIR/usr/local/include/lotio/utils/"
+          
+          # Skia headers (for developers to use Skia directly)
+          SKIA_ROOT="third_party/skia/skia"
+          SKIA_INCLUDE_DIR="$SKIA_ROOT/include"
+          SKIA_MODULES_DIR="$SKIA_ROOT/modules"
+          SKIA_GEN_DIR="$SKIA_ROOT/out/Release/gen"
+          
+          # Copy main Skia headers
+          if [ -d "$SKIA_INCLUDE_DIR" ]; then
+            mkdir -p "$DEB_DIR/usr/local/include/skia"
+            cp -r "$SKIA_INCLUDE_DIR"/* "$DEB_DIR/usr/local/include/skia/" 2>/dev/null || true
+          fi
+          
+          # Copy module headers
+          if [ -d "$SKIA_MODULES_DIR" ]; then
+            for module in skottie skparagraph sksg skshaper skunicode skresources jsonreader; do
+              if [ -d "$SKIA_MODULES_DIR/$module/include" ]; then
+                mkdir -p "$DEB_DIR/usr/local/include/skia/modules/$module"
+                cp -r "$SKIA_MODULES_DIR/$module/include"/* "$DEB_DIR/usr/local/include/skia/modules/$module/" 2>/dev/null || true
+              fi
+            done
+          fi
+          
+          # Copy generated headers
+          if [ -d "$SKIA_GEN_DIR" ]; then
+            mkdir -p "$DEB_DIR/usr/local/include/skia/gen"
+            cp -r "$SKIA_GEN_DIR"/*.h "$DEB_DIR/usr/local/include/skia/gen/" 2>/dev/null || true
+          fi
           
           cat > "$DEB_DIR/DEBIAN/control" << EOF
           Package: lotio
@@ -360,6 +429,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: false
 
       - name: Set version from macOS job
         id: version
@@ -452,9 +522,6 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           VERSION_NUMBER="${VERSION#v}"
           
-          # Update package.json version
-          npm version $VERSION_NUMBER --no-git-tag-version
-          
           # Copy necessary files for npm package
           mkdir -p npm-package
           cp -r browser npm-package/
@@ -462,6 +529,29 @@ jobs:
           cp README.md npm-package/
           
           cd npm-package
+          
+          # Update package.json version directly (more reliable than npm version)
+          # Convert date-SHA format to semver-compatible format: 0.0.0-YYYYMMDD-SHA
+          # For semantic versions (v1.2.3), use as-is
+          if echo "$VERSION_NUMBER" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
+            # Already a semantic version
+            NEW_VERSION="$VERSION_NUMBER"
+          else
+            # Date-SHA format: convert to 0.0.0-YYYYMMDD-SHA
+            NEW_VERSION="0.0.0-${VERSION_NUMBER}"
+          fi
+          
+          # Update version in package.json using jq or sed
+          if command -v jq >/dev/null 2>&1; then
+            jq ".version = \"$NEW_VERSION\"" package.json > package.json.tmp && mv package.json.tmp package.json
+          else
+            # Fallback to sed
+            sed -i.bak "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" package.json
+            rm -f package.json.bak
+          fi
+          
+          echo "Updated package.json version to: $NEW_VERSION"
+          cat package.json | grep version
           
           # Configure npm for GitHub Packages
           echo "@matrunchyk:registry=https://npm.pkg.github.com" > .npmrc

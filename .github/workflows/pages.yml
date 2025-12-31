@@ -21,18 +21,25 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install markdown library
+        run: |
+          pip install markdown
+
       - name: Build documentation
         run: |
-          mkdir -p _site
-          cp examples/index.html _site/
-          cp -r browser _site/
-          cp -r examples/samples _site/
-          cp -r examples/fonts _site/
-          cp -r docs _site/
+          chmod +x scripts/build_docs.py
+          python3 scripts/build_docs.py
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
