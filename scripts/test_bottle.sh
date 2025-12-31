@@ -63,19 +63,26 @@ chmod +x scripts/create_bottle.sh
 ./scripts/create_bottle.sh "$TEST_VERSION" "$BOTTLE_ARCH" "$HOMEBREW_PREFIX"
 
 # Get counts for summary
-HEADER_COUNT=$(find "lotio/${TEST_VERSION_NUMBER}${HOMEBREW_PREFIX}/include" -name "*.h" 2>/dev/null | wc -l | tr -d ' ')
-LIB_COUNT=$(find "lotio/${TEST_VERSION_NUMBER}${HOMEBREW_PREFIX}/lib" -name "*.a" 2>/dev/null | wc -l | tr -d ' ')
+# Note: Bottle structure is lotio/<version>/bin, not lotio/<version>/<prefix>/bin
+LOTIO_HEADER_COUNT=$(find "lotio/${TEST_VERSION_NUMBER}/include/lotio" -name "*.h" 2>/dev/null | wc -l | tr -d ' ')
+SKIA_HEADER_COUNT=$(find "lotio/${TEST_VERSION_NUMBER}/include/skia" -name "*.h" 2>/dev/null | wc -l | tr -d ' ')
+TOTAL_HEADER_COUNT=$((LOTIO_HEADER_COUNT + SKIA_HEADER_COUNT))
+LIB_COUNT=$(find "lotio/${TEST_VERSION_NUMBER}/lib" -name "*.a" 2>/dev/null | wc -l | tr -d ' ')
 BOTTLE_FILENAME="lotio-${TEST_VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz"
 TARBALL_SIZE=$(du -h "$BOTTLE_FILENAME" 2>/dev/null | cut -f1 || echo "unknown")
 SHA256=$(shasum -a 256 "$BOTTLE_FILENAME" 2>/dev/null | cut -d' ' -f1 || echo "")
 
 # Verify directory structure
+# Homebrew bottles should NOT include the prefix in the path
+# Structure: lotio/<version>/bin, lotio/<version>/lib, etc.
 echo ""
 echo "🔍 Verifying directory structure..."
-BOTTLE_DIR="lotio/${TEST_VERSION_NUMBER}${HOMEBREW_PREFIX}"
+BOTTLE_DIR="lotio/${TEST_VERSION_NUMBER}"
 EXPECTED_PATHS=(
     "$BOTTLE_DIR/bin/lotio"
+    "$BOTTLE_DIR/lib/liblotio.a"
     "$BOTTLE_DIR/lib/pkgconfig/lotio.pc"
+    "$BOTTLE_DIR/include/skia"
 )
 
 for path in "${EXPECTED_PATHS[@]}"; do
@@ -99,10 +106,13 @@ if ! tar -xzf "../lotio-${TEST_VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz"; th
 fi
 
 # Verify extracted structure
+# Homebrew bottles should NOT include the prefix in the path
 echo "🔍 Verifying extracted structure..."
 EXTRACTED_PATHS=(
-    "lotio/${TEST_VERSION_NUMBER}${HOMEBREW_PREFIX}/bin/lotio"
-    "lotio/${TEST_VERSION_NUMBER}${HOMEBREW_PREFIX}/lib/pkgconfig/lotio.pc"
+    "lotio/${TEST_VERSION_NUMBER}/bin/lotio"
+    "lotio/${TEST_VERSION_NUMBER}/lib/liblotio.a"
+    "lotio/${TEST_VERSION_NUMBER}/lib/pkgconfig/lotio.pc"
+    "lotio/${TEST_VERSION_NUMBER}/include/skia"
 )
 
 for path in "${EXTRACTED_PATHS[@]}"; do
@@ -117,8 +127,8 @@ done
 # Test binary from extracted tarball
 echo ""
 echo "🧪 Testing extracted binary..."
-if [ -f "lotio/${TEST_VERSION_NUMBER}${HOMEBREW_PREFIX}/bin/lotio" ]; then
-    if "./lotio/${TEST_VERSION_NUMBER}${HOMEBREW_PREFIX}/bin/lotio" --help >/dev/null 2>&1; then
+if [ -f "lotio/${TEST_VERSION_NUMBER}/bin/lotio" ]; then
+    if "./lotio/${TEST_VERSION_NUMBER}/bin/lotio" --help >/dev/null 2>&1; then
         echo "   ✅ Extracted binary works"
     else
         echo "   ⚠️  Warning: Extracted binary doesn't run (may need dependencies)"
@@ -136,7 +146,9 @@ echo "✅ Bottle Creation Test Passed!"
 echo ""
 echo "📊 Summary:"
 echo "   • Binary: ✅"
-echo "   • Headers: ✅ ($HEADER_COUNT files)"
+echo "   • Lotio Headers: ✅ ($LOTIO_HEADER_COUNT files)"
+echo "   • Skia Headers: ✅ ($SKIA_HEADER_COUNT files)"
+echo "   • Total Headers: ✅ ($TOTAL_HEADER_COUNT files)"
 echo "   • Libraries: ✅ ($LIB_COUNT files)"
 echo "   • pkg-config: ✅"
 echo "   • Tarball: ✅ ($TARBALL_SIZE)"

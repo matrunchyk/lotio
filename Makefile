@@ -20,6 +20,7 @@ check-skia:
 clean:
 	@echo "🧹 Cleaning..."
 	@rm -f lotio
+	@rm -f liblotio.a
 	@rm -f src/**/*.o src/*.o 2>/dev/null || true
 	@echo "✅ Clean complete"
 

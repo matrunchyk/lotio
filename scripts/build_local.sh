@@ -220,9 +220,8 @@ else
     LIBS="$LIBS -lX11 -lGL -lGLU"
 fi
 
-# Source files (matching your modular structure)
-SOURCES=(
-    "$SRC_DIR/main.cpp"
+# Source files for library (excluding main.cpp)
+LIBRARY_SOURCES=(
     "$SRC_DIR/core/argument_parser.cpp"
     "$SRC_DIR/core/animation_setup.cpp"
     "$SRC_DIR/core/frame_encoder.cpp"
@@ -237,17 +236,21 @@ SOURCES=(
     "$SRC_DIR/text/json_manipulation.cpp"
 )
 
-# Output binary
-TARGET="$PROJECT_ROOT/lotio"
+# Main entry point (separate from library)
+MAIN_SOURCE="$SRC_DIR/main.cpp"
 
-echo "📝 Compiling source files..."
-echo "   Sources: ${#SOURCES[@]} files"
+# Output files
+TARGET="$PROJECT_ROOT/lotio"
+LIBRARY_TARGET="$PROJECT_ROOT/liblotio.a"
+
+echo "📝 Building liblotio library..."
+echo "   Library sources: ${#LIBRARY_SOURCES[@]} files"
 echo "   Include: $SKIA_ROOT"
 echo ""
 
-# Compile all source files
-OBJECTS=()
-for src in "${SOURCES[@]}"; do
+# Compile library source files
+LIBRARY_OBJECTS=()
+for src in "${LIBRARY_SOURCES[@]}"; do
     if [ ! -f "$src" ]; then
         echo "⚠️  Warning: Source file not found: $src"
         continue
@@ -255,20 +258,53 @@ for src in "${SOURCES[@]}"; do
     obj="${src%.cpp}.o"
     echo "   Compiling: $(basename $src)"
     $CXX $CXXFLAGS $INCLUDES -c "$src" -o "$obj"
-    OBJECTS+=("$obj")
+    LIBRARY_OBJECTS+=("$obj")
 done
 
+# Create static library
 echo ""
-echo "🔗 Linking..."
-$CXX $CXXFLAGS -o "$TARGET" "${OBJECTS[@]}" $LDFLAGS $LIBS
+echo "📚 Creating liblotio.a..."
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS: use libtool
+    libtool -static -o "$LIBRARY_TARGET" "${LIBRARY_OBJECTS[@]}" || {
+        echo "❌ Failed to create liblotio.a"
+        exit 1
+    }
+else
+    # Linux: use ar
+    ar rcs "$LIBRARY_TARGET" "${LIBRARY_OBJECTS[@]}" || {
+        echo "❌ Failed to create liblotio.a"
+        exit 1
+    }
+fi
+
+echo "✅ Created: $LIBRARY_TARGET"
+
+# Compile main.cpp separately
+echo ""
+echo "📝 Compiling main entry point..."
+if [ ! -f "$MAIN_SOURCE" ]; then
+    echo "❌ Error: Main source file not found: $MAIN_SOURCE"
+    exit 1
+fi
+MAIN_OBJECT="${MAIN_SOURCE%.cpp}.o"
+echo "   Compiling: $(basename $MAIN_SOURCE)"
+$CXX $CXXFLAGS $INCLUDES -c "$MAIN_SOURCE" -o "$MAIN_OBJECT"
+
+# Link binary: main.o + liblotio.a + Skia libraries
+echo ""
+echo "🔗 Linking binary..."
+$CXX $CXXFLAGS -o "$TARGET" "$MAIN_OBJECT" "$LIBRARY_TARGET" $LDFLAGS $LIBS
 
 echo ""
 echo "🧹 Cleaning up object files..."
-rm -f "${OBJECTS[@]}"
+rm -f "${LIBRARY_OBJECTS[@]}"
+rm -f "$MAIN_OBJECT"
 
 echo ""
 echo "✅ Build complete!"
 echo "   Binary: $TARGET"
+echo "   Library: $LIBRARY_TARGET"
 echo ""
 echo "📋 Usage:"
 echo "   $TARGET --png --webp input.json output_dir [fps]"

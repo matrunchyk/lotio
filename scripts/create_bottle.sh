@@ -46,10 +46,12 @@ if [ ! -f "lotio" ]; then
     exit 1
 fi
 
-# Create bottle directory structure with Homebrew prefix
-# Structure: lotio/<version>/<prefix>/bin, etc.
+# Create bottle directory structure WITHOUT prefix
+# Homebrew bottles should NOT include the prefix in the path
+# Structure: lotio/<version>/bin, lotio/<version>/lib, etc.
+# Homebrew will automatically relocate to the correct prefix during installation
 # Note: Create in temp location first to avoid conflict with 'lotio' binary
-TEMP_BOTTLE_DIR=".bottle_temp/lotio/${VERSION_NUMBER}${HOMEBREW_PREFIX}"
+TEMP_BOTTLE_DIR=".bottle_temp/lotio/${VERSION_NUMBER}"
 mkdir -p "$TEMP_BOTTLE_DIR/bin"
 mkdir -p "$TEMP_BOTTLE_DIR/include/lotio/core"
 mkdir -p "$TEMP_BOTTLE_DIR/include/lotio/text"
@@ -60,8 +62,8 @@ mkdir -p "$TEMP_BOTTLE_DIR/lib/pkgconfig"
 echo "📦 Copying binary..."
 cp lotio "$TEMP_BOTTLE_DIR/bin/" || { echo "❌ Failed to copy binary"; exit 1; }
 
-# Copy headers
-echo "📦 Copying headers..."
+# Copy lotio headers
+echo "📦 Copying lotio headers..."
 if ! cp src/core/*.h "$TEMP_BOTTLE_DIR/include/lotio/core/" 2>/dev/null; then
     echo "⚠️  Warning: No core headers found"
 fi
@@ -70,6 +72,63 @@ if ! cp src/text/*.h "$TEMP_BOTTLE_DIR/include/lotio/text/" 2>/dev/null; then
 fi
 if ! cp src/utils/*.h "$TEMP_BOTTLE_DIR/include/lotio/utils/" 2>/dev/null; then
     echo "⚠️  Warning: No utils headers found"
+fi
+
+# Copy Skia headers
+echo "📦 Copying Skia headers..."
+SKIA_ROOT="third_party/skia/skia"
+SKIA_INCLUDE_DIR="$SKIA_ROOT/include"
+SKIA_MODULES_DIR="$SKIA_ROOT/modules"
+SKIA_GEN_DIR="$SKIA_ROOT/out/Release/gen"
+
+# Copy main Skia headers
+if [ -d "$SKIA_INCLUDE_DIR" ]; then
+    mkdir -p "$TEMP_BOTTLE_DIR/include/skia"
+    # Copy all header files and subdirectories from Skia include
+    cp -r "$SKIA_INCLUDE_DIR"/* "$TEMP_BOTTLE_DIR/include/skia/" 2>/dev/null || {
+        echo "⚠️  Warning: Failed to copy some Skia core headers (may be expected)"
+    }
+    echo "✅ Copied Skia core headers"
+else
+    echo "⚠️  Warning: Skia include directory not found at $SKIA_INCLUDE_DIR"
+fi
+
+# Copy module headers (skottie, skparagraph, etc.)
+if [ -d "$SKIA_MODULES_DIR" ]; then
+    MODULE_COUNT=0
+    for module in skottie skparagraph sksg skshaper skunicode skresources jsonreader; do
+        if [ -d "$SKIA_MODULES_DIR/$module/include" ]; then
+            mkdir -p "$TEMP_BOTTLE_DIR/include/skia/modules/$module"
+            cp -r "$SKIA_MODULES_DIR/$module/include"/* "$TEMP_BOTTLE_DIR/include/skia/modules/$module/" 2>/dev/null || true
+            MODULE_COUNT=$((MODULE_COUNT + 1))
+        fi
+    done
+    if [ $MODULE_COUNT -gt 0 ]; then
+        echo "✅ Copied Skia module headers ($MODULE_COUNT modules)"
+    fi
+else
+    echo "⚠️  Warning: Skia modules directory not found at $SKIA_MODULES_DIR"
+fi
+
+# Copy generated header if it exists
+if [ -f "$SKIA_GEN_DIR/skia.h" ]; then
+    mkdir -p "$TEMP_BOTTLE_DIR/include/skia/gen"
+    cp "$SKIA_GEN_DIR/skia.h" "$TEMP_BOTTLE_DIR/include/skia/gen/" 2>/dev/null || true
+    echo "✅ Copied generated skia.h"
+elif [ -d "$SKIA_GEN_DIR" ]; then
+    # Copy all generated headers if the directory exists
+    mkdir -p "$TEMP_BOTTLE_DIR/include/skia/gen"
+    cp -r "$SKIA_GEN_DIR"/*.h "$TEMP_BOTTLE_DIR/include/skia/gen/" 2>/dev/null || true
+    echo "✅ Copied generated headers"
+fi
+
+# Copy liblotio.a library
+echo "📦 Copying liblotio.a..."
+if [ -f "liblotio.a" ]; then
+    cp liblotio.a "$TEMP_BOTTLE_DIR/lib/" || { echo "❌ Failed to copy liblotio.a"; exit 1; }
+    echo "✅ Copied liblotio.a"
+else
+    echo "⚠️  Warning: liblotio.a not found (build may not have created it)"
 fi
 
 # Copy Skia static libraries
@@ -97,8 +156,8 @@ includedir=\${exec_prefix}/include
 Name: lotio
 Description: High-performance Lottie animation frame renderer using Skia
 Version: ${VERSION_NUMBER}
-Libs: -L\${libdir} -lskottie -lskia -lskparagraph -lsksg -lskshaper -lskunicode_icu -lskunicode_core -lskresources -ljsonreader
-Cflags: -I\${includedir}
+Libs: -L\${libdir} -llotio -lskottie -lskia -lskparagraph -lsksg -lskshaper -lskunicode_icu -lskunicode_core -lskresources -ljsonreader
+Cflags: -I\${includedir} -I\${includedir}/skia -I\${includedir}/skia/gen
 EOF
 
 # Move temp directory to final location (avoiding conflict with 'lotio' binary)
@@ -127,7 +186,8 @@ if [ ! -d "lotio" ]; then
 fi
 
 # Create tarball (Homebrew bottle format)
-# The tarball should contain: lotio/<version>/<prefix>/...
+# The tarball should contain: lotio/<version>/bin, lotio/<version>/lib, etc.
+# Homebrew will automatically relocate to the correct prefix during installation
 echo "📦 Creating tarball..."
 BOTTLE_FILENAME="lotio-${VERSION_NUMBER}.${BOTTLE_ARCH}.bottle.tar.gz"
 tar -czf "$BOTTLE_FILENAME" "lotio" || { echo "❌ Failed to create tarball"; exit 1; }
