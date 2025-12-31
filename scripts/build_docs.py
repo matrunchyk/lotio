@@ -71,9 +71,10 @@ def add_language_classes_to_pre(html):
 def convert_markdown_to_html(md_content):
     """Convert markdown to HTML"""
     # Protect script tags and their content from markdown processing
+    # Use HTML comment format to avoid markdown processing
     script_blocks = []
     def protect_script(match):
-        placeholder = f'__SCRIPT_BLOCK_{len(script_blocks)}__'
+        placeholder = f'<!-- SCRIPT_BLOCK_{len(script_blocks)} -->'
         script_blocks.append(match.group(0))  # Store entire script tag with content
         return placeholder
     
@@ -97,7 +98,7 @@ def convert_markdown_to_html(md_content):
         
         # Restore script blocks (unchanged)
         for i, script_block in enumerate(script_blocks):
-            placeholder = f'__SCRIPT_BLOCK_{i}__'
+            placeholder = f'<!-- SCRIPT_BLOCK_{i} -->'
             html = html.replace(placeholder, script_block)
         
         return html
@@ -330,7 +331,7 @@ def convert_markdown_to_html(md_content):
         
         # Restore script blocks (unchanged)
         for i, script_block in enumerate(script_blocks):
-            placeholder = f'__SCRIPT_BLOCK_{i}__'
+            placeholder = f'<!-- SCRIPT_BLOCK_{i} -->'
             # Remove any <p> tags that might wrap the placeholder
             html = re.sub(r'<p>\s*' + re.escape(placeholder) + r'\s*</p>', placeholder, html, flags=re.MULTILINE)
             html = re.sub(r'<p>\s*' + re.escape(placeholder) + r'\s*</p>', placeholder, html)

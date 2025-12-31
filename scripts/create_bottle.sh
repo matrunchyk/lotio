@@ -74,52 +74,126 @@ if ! cp src/utils/*.h "$TEMP_BOTTLE_DIR/include/lotio/utils/" 2>/dev/null; then
     echo "⚠️  Warning: No utils headers found"
 fi
 
-# Copy Skia headers
+# Copy Skia headers (REQUIRED for programmatic use)
 echo "📦 Copying Skia headers..."
 SKIA_ROOT="third_party/skia/skia"
 SKIA_INCLUDE_DIR="$SKIA_ROOT/include"
 SKIA_MODULES_DIR="$SKIA_ROOT/modules"
 SKIA_GEN_DIR="$SKIA_ROOT/out/Release/gen"
 
-# Copy main Skia headers
-if [ -d "$SKIA_INCLUDE_DIR" ]; then
-    mkdir -p "$TEMP_BOTTLE_DIR/include/skia"
-    # Copy all header files and subdirectories from Skia include
-    cp -r "$SKIA_INCLUDE_DIR"/* "$TEMP_BOTTLE_DIR/include/skia/" 2>/dev/null || {
-        echo "⚠️  Warning: Failed to copy some Skia core headers (may be expected)"
-    }
-    echo "✅ Copied Skia core headers"
-else
-    echo "⚠️  Warning: Skia include directory not found at $SKIA_INCLUDE_DIR"
+# Copy main Skia headers (REQUIRED)
+if [ ! -d "$SKIA_INCLUDE_DIR" ]; then
+    echo "❌ ERROR: Skia include directory not found at $SKIA_INCLUDE_DIR"
+    echo "   Cannot create bottle without Skia headers - developers need them!"
+    exit 1
 fi
 
-# Copy module headers (skottie, skparagraph, etc.)
-if [ -d "$SKIA_MODULES_DIR" ]; then
-    MODULE_COUNT=0
-    for module in skottie skparagraph sksg skshaper skunicode skresources jsonreader; do
-        if [ -d "$SKIA_MODULES_DIR/$module/include" ]; then
+mkdir -p "$TEMP_BOTTLE_DIR/include/skia"
+if ! cp -r "$SKIA_INCLUDE_DIR"/* "$TEMP_BOTTLE_DIR/include/skia/" 2>/dev/null; then
+    echo "❌ ERROR: Failed to copy Skia core headers"
+    echo "   This will prevent developers from using lotio programmatically"
+    exit 1
+fi
+
+# Verify critical headers were copied
+if [ ! -d "$TEMP_BOTTLE_DIR/include/skia/core" ]; then
+    echo "❌ ERROR: Skia core headers not found after copy"
+    exit 1
+fi
+echo "✅ Copied Skia core headers"
+
+# Copy module headers (REQUIRED)
+if [ ! -d "$SKIA_MODULES_DIR" ]; then
+    echo "❌ ERROR: Skia modules directory not found at $SKIA_MODULES_DIR"
+    exit 1
+fi
+
+MODULE_COUNT=0
+CRITICAL_MODULES=("skottie" "skresources")  # Critical for lotio
+for module in skottie skparagraph sksg skshaper skunicode skresources jsonreader; do
+    # jsonreader has a different structure (no include/ subdirectory)
+    if [ "$module" = "jsonreader" ]; then
+        # jsonreader has headers directly in the module directory
+        if [ -f "$SKIA_MODULES_DIR/$module/SkJSONReader.h" ]; then
             mkdir -p "$TEMP_BOTTLE_DIR/include/skia/modules/$module"
-            cp -r "$SKIA_MODULES_DIR/$module/include"/* "$TEMP_BOTTLE_DIR/include/skia/modules/$module/" 2>/dev/null || true
+            if cp "$SKIA_MODULES_DIR/$module/SkJSONReader.h" "$TEMP_BOTTLE_DIR/include/skia/modules/$module/" 2>/dev/null; then
+                MODULE_COUNT=$((MODULE_COUNT + 1))
+            fi
+        fi
+    elif [ -d "$SKIA_MODULES_DIR/$module/include" ]; then
+        # Copy the include directory itself to preserve the structure
+        # Source: modules/skottie/include/Skottie.h
+        # Dest: include/skia/modules/skottie/include/Skottie.h
+        mkdir -p "$TEMP_BOTTLE_DIR/include/skia/modules/$module"
+        if ! cp -r "$SKIA_MODULES_DIR/$module/include" "$TEMP_BOTTLE_DIR/include/skia/modules/$module/" 2>/dev/null; then
+            # Check if this is a critical module
+            is_critical=0
+            for critical in "${CRITICAL_MODULES[@]}"; do
+                if [ "$module" = "$critical" ]; then
+                    is_critical=1
+                    break
+                fi
+            done
+            if [ $is_critical -eq 1 ]; then
+                echo "❌ ERROR: Failed to copy critical module $module headers"
+                exit 1
+            else
+                echo "⚠️  Warning: Failed to copy $module headers"
+            fi
+        else
             MODULE_COUNT=$((MODULE_COUNT + 1))
         fi
-    done
-    if [ $MODULE_COUNT -gt 0 ]; then
-        echo "✅ Copied Skia module headers ($MODULE_COUNT modules)"
+    else
+        # Check if this is a critical module
+        is_critical=0
+        for critical in "${CRITICAL_MODULES[@]}"; do
+            if [ "$module" = "$critical" ]; then
+                is_critical=1
+                break
+            fi
+        done
+        if [ $is_critical -eq 1 ]; then
+            echo "❌ ERROR: Critical module $module headers not found at $SKIA_MODULES_DIR/$module/include"
+            exit 1
+        else
+            echo "⚠️  Warning: $module/include directory not found"
+        fi
     fi
-else
-    echo "⚠️  Warning: Skia modules directory not found at $SKIA_MODULES_DIR"
+done
+
+if [ $MODULE_COUNT -eq 0 ]; then
+    echo "❌ ERROR: No Skia module headers were copied"
+    exit 1
 fi
 
-# Copy generated header if it exists
+# Verify skottie headers (critical for lotio)
+if [ ! -f "$TEMP_BOTTLE_DIR/include/skia/modules/skottie/include/Skottie.h" ]; then
+    echo "❌ ERROR: Skottie.h not found - lotio headers require this!"
+    echo "   Expected: $TEMP_BOTTLE_DIR/include/skia/modules/skottie/include/Skottie.h"
+    exit 1
+fi
+
+# Verify skresources headers (critical for lotio)
+if [ ! -f "$TEMP_BOTTLE_DIR/include/skia/modules/skresources/include/SkResources.h" ]; then
+    echo "❌ ERROR: SkResources.h not found - lotio headers require this!"
+    echo "   Expected: $TEMP_BOTTLE_DIR/include/skia/modules/skresources/include/SkResources.h"
+    exit 1
+fi
+
+echo "✅ Copied Skia module headers ($MODULE_COUNT modules)"
+
+# Copy generated header if it exists (optional but recommended)
 if [ -f "$SKIA_GEN_DIR/skia.h" ]; then
     mkdir -p "$TEMP_BOTTLE_DIR/include/skia/gen"
-    cp "$SKIA_GEN_DIR/skia.h" "$TEMP_BOTTLE_DIR/include/skia/gen/" 2>/dev/null || true
-    echo "✅ Copied generated skia.h"
+    if cp "$SKIA_GEN_DIR/skia.h" "$TEMP_BOTTLE_DIR/include/skia/gen/" 2>/dev/null; then
+        echo "✅ Copied generated skia.h"
+    fi
 elif [ -d "$SKIA_GEN_DIR" ]; then
     # Copy all generated headers if the directory exists
     mkdir -p "$TEMP_BOTTLE_DIR/include/skia/gen"
-    cp -r "$SKIA_GEN_DIR"/*.h "$TEMP_BOTTLE_DIR/include/skia/gen/" 2>/dev/null || true
-    echo "✅ Copied generated headers"
+    if cp -r "$SKIA_GEN_DIR"/*.h "$TEMP_BOTTLE_DIR/include/skia/gen/" 2>/dev/null; then
+        echo "✅ Copied generated headers"
+    fi
 fi
 
 # Copy liblotio.a library

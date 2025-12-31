@@ -54,12 +54,31 @@ else
 fi
 
 # Add Homebrew include paths for macOS
+# Note: We add $SKIA_ROOT for relative includes in .cpp files (e.g., "include/core/SkCanvas.h")
+# We also create a temporary include structure that makes <skia/...> work during build
+# This matches the installed structure: include/skia/core/SkCanvas.h
+# Structure needed: temp_include/skia/core/SkCanvas.h and temp_include/skia/modules/skottie/include/Skottie.h
+TEMP_INCLUDE_DIR=$(mktemp -d)
+mkdir -p "$TEMP_INCLUDE_DIR/skia"
+# Create symlinks to match installed structure:
+# - skia/core/ -> include/core/ (for <skia/core/SkCanvas.h>)
+# - skia/modules/ -> modules/ (for <skia/modules/skottie/include/Skottie.h>)
+ln -sf "$SKIA_ROOT/include/core" "$TEMP_INCLUDE_DIR/skia/core" 2>/dev/null || true
+ln -sf "$SKIA_ROOT/include" "$TEMP_INCLUDE_DIR/skia/include" 2>/dev/null || true
+ln -sf "$SKIA_ROOT/modules" "$TEMP_INCLUDE_DIR/skia/modules" 2>/dev/null || true
+
 if [[ "$OSTYPE" == "darwin"* ]]; then
     HOMEBREW_PREFIX=$(brew --prefix 2>/dev/null || echo "/opt/homebrew")
-    INCLUDES="-I$SKIA_ROOT -I$SRC_DIR -I$HOMEBREW_PREFIX/include -I$HOMEBREW_PREFIX/include/fontconfig -I$HOMEBREW_PREFIX/include/freetype2"
+    INCLUDES="-I$SKIA_ROOT -I$TEMP_INCLUDE_DIR -I$SRC_DIR -I$HOMEBREW_PREFIX/include -I$HOMEBREW_PREFIX/include/fontconfig -I$HOMEBREW_PREFIX/include/freetype2"
 else
-    INCLUDES="-I$SKIA_ROOT -I$SRC_DIR"
+    INCLUDES="-I$SKIA_ROOT -I$TEMP_INCLUDE_DIR -I$SRC_DIR"
 fi
+
+# Cleanup function for temp directory
+cleanup_temp_include() {
+    rm -rf "$TEMP_INCLUDE_DIR" 2>/dev/null || true
+}
+trap cleanup_temp_include EXIT
 
 # Library paths and flags
 LDFLAGS="-L$SKIA_LIB_DIR $RPATH_FLAG"

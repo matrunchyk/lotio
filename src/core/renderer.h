@@ -1,8 +1,8 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
-#include "modules/skottie/include/Skottie.h"
-#include "include/core/SkSurface.h"
+#include <skia/modules/skottie/include/Skottie.h>
+#include <skia/core/SkSurface.h>
 #include <string>
 #include <atomic>
 
