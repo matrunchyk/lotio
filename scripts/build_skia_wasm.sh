@@ -41,25 +41,44 @@ if [ ! -f "bin/gn" ] || ! file bin/gn | grep -q "$(uname -m)"; then
     python3 bin/fetch-gn
 fi
 
-# Set up symlinks to system emscripten (if using Homebrew)
-if [ -z "$EMSDK" ] && command -v emcc >/dev/null 2>&1; then
-    echo "Setting up symlinks to system emscripten..."
-    mkdir -p "$PROJECT_ROOT/third_party/externals/emsdk/upstream/emscripten"
+# Set up symlinks to emscripten tools so Skia can find them
+# Skia expects emscripten at third_party/externals/emsdk/upstream/emscripten/
+# This works for both Homebrew installations and EMSDK installations
+if command -v emcc >/dev/null 2>&1; then
+    echo "Setting up symlinks to emscripten tools for Skia..."
+    mkdir -p "$SKIA_ROOT/third_party/externals/emsdk/upstream/emscripten"
+    
     # Symlink emscripten tools
-    ln -sf $(which emcc) "$PROJECT_ROOT/third_party/externals/emsdk/upstream/emscripten/emcc" 2>/dev/null || true
-    ln -sf $(which em++) "$PROJECT_ROOT/third_party/externals/emsdk/upstream/emscripten/em++" 2>/dev/null || true
-    ln -sf $(which emar) "$PROJECT_ROOT/third_party/externals/emsdk/upstream/emscripten/emar" 2>/dev/null || true
-    ln -sf $(which emranlib) "$PROJECT_ROOT/third_party/externals/emsdk/upstream/emscripten/emranlib" 2>/dev/null || true
+    EMC_PATH=$(which emcc)
+    EMPP_PATH=$(which em++)
+    EMAR_PATH=$(which emar)
+    EMRANLIB_PATH=$(which emranlib 2>/dev/null || which emnm 2>/dev/null || echo "")
+    
+    ln -sf "$EMC_PATH" "$SKIA_ROOT/third_party/externals/emsdk/upstream/emscripten/emcc" 2>/dev/null || true
+    ln -sf "$EMPP_PATH" "$SKIA_ROOT/third_party/externals/emsdk/upstream/emscripten/em++" 2>/dev/null || true
+    ln -sf "$EMAR_PATH" "$SKIA_ROOT/third_party/externals/emsdk/upstream/emscripten/emar" 2>/dev/null || true
+    if [ -n "$EMRANLIB_PATH" ]; then
+        ln -sf "$EMRANLIB_PATH" "$SKIA_ROOT/third_party/externals/emsdk/upstream/emscripten/emranlib" 2>/dev/null || true
+    fi
+    
     # Symlink cache directory (for sysroot)
-    if [ -d "/opt/homebrew/Cellar/emscripten" ]; then
+    if [ -n "$EMSDK" ] && [ -d "$EMSDK/upstream/emscripten/cache" ]; then
+        # EMSDK installation - use its cache
+        rm -rf "$SKIA_ROOT/third_party/externals/emsdk/upstream/emscripten/cache" 2>/dev/null || true
+        ln -sf "$EMSDK/upstream/emscripten/cache" "$SKIA_ROOT/third_party/externals/emsdk/upstream/emscripten/cache" 2>/dev/null || true
+        echo "Symlinked emscripten cache from EMSDK"
+    elif [ -d "/opt/homebrew/Cellar/emscripten" ]; then
+        # Homebrew installation
         EMSDK_VERSION=$(ls -1 /opt/homebrew/Cellar/emscripten | head -1)
         CACHE_DIR="/opt/homebrew/Cellar/emscripten/$EMSDK_VERSION/libexec/cache"
         if [ -d "$CACHE_DIR" ]; then
-            rm -rf "$PROJECT_ROOT/third_party/externals/emsdk/upstream/emscripten/cache"
-            ln -sf "$CACHE_DIR" "$PROJECT_ROOT/third_party/externals/emsdk/upstream/emscripten/cache"
+            rm -rf "$SKIA_ROOT/third_party/externals/emsdk/upstream/emscripten/cache" 2>/dev/null || true
+            ln -sf "$CACHE_DIR" "$SKIA_ROOT/third_party/externals/emsdk/upstream/emscripten/cache" 2>/dev/null || true
             echo "Symlinked emscripten cache from Homebrew"
         fi
     fi
+    
+    echo "✅ Symlinks created for emscripten tools"
 fi
 
 # Set up environment to use system emcc
