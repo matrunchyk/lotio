@@ -31,8 +31,13 @@ fi
 
 # Emscripten compiler
 CXX=em++
-CXXFLAGS="-std=c++17 -O3 -DNDEBUG -Wall -Wextra \
-    -sUSE_FREETYPE=1 \
+
+# Compilation flags (used during -c compilation phase)
+COMPILE_FLAGS="-std=c++17 -O3 -DNDEBUG -Wall -Wextra"
+
+# Linker flags (used during linking phase only)
+# Note: -sUSE_FREETYPE and -sUSE_LIBPNG are linker flags but can be specified during compilation
+LINK_FLAGS="-sUSE_FREETYPE=1 \
     -sUSE_LIBPNG=1 \
     -sALLOW_MEMORY_GROWTH=1 \
     -sEXPORTED_FUNCTIONS=_lotio_init,_lotio_get_info,_lotio_render_frame,_lotio_render_frame_png,_lotio_cleanup,_lotio_register_font,_malloc,_free \
@@ -41,12 +46,30 @@ CXXFLAGS="-std=c++17 -O3 -DNDEBUG -Wall -Wextra \
     -sEXPORT_NAME=createLotioModule \
     --bind"
 
-INCLUDES="-I$SKIA_ROOT -I$SRC_DIR"
+# Create temporary include structure for <skia/...> includes
+# This matches the installed structure: include/skia/core/SkCanvas.h
+TEMP_INCLUDE_DIR=$(mktemp -d)
+mkdir -p "$TEMP_INCLUDE_DIR/skia"
+# Create symlinks to match installed structure:
+# - skia/core/ -> include/core/ (for <skia/core/SkCanvas.h>)
+# - skia/modules/ -> modules/ (for <skia/modules/skottie/include/Skottie.h>)
+ln -sf "$SKIA_ROOT/include/core" "$TEMP_INCLUDE_DIR/skia/core" 2>/dev/null || true
+ln -sf "$SKIA_ROOT/include" "$TEMP_INCLUDE_DIR/skia/include" 2>/dev/null || true
+ln -sf "$SKIA_ROOT/modules" "$TEMP_INCLUDE_DIR/skia/modules" 2>/dev/null || true
+
+INCLUDES="-I$SKIA_ROOT -I$TEMP_INCLUDE_DIR -I$SRC_DIR"
 LDFLAGS="-L$SKIA_LIB_DIR"
 
+# Cleanup function for temp directory
+cleanup_temp_include() {
+    rm -rf "$TEMP_INCLUDE_DIR" 2>/dev/null || true
+}
+trap cleanup_temp_include EXIT
+
 # Skia libraries (static) - only include what exists
+# Note: skunicode outputs as libskunicode.a (not libskunicode_core.a) for WASM builds
 SKIA_LIBS=""
-for lib in skottie skia skparagraph sksg skshaper skunicode_core skresources jsonreader; do
+for lib in skottie skia skparagraph sksg skshaper skunicode skresources jsonreader; do
     if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
         SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.a"
     else
@@ -81,13 +104,13 @@ for src in "${SOURCES[@]}"; do
     fi
     obj="${src%.cpp}.o"
     echo "   Compiling: $(basename $src)"
-    $CXX $CXXFLAGS $INCLUDES -c "$src" -o "$obj"
+    $CXX $COMPILE_FLAGS $INCLUDES -c "$src" -o "$obj"
     OBJECTS+=("$obj")
 done
 
 echo ""
 echo "🔗 Linking..."
-$CXX $CXXFLAGS -o "$OUTPUT" "${OBJECTS[@]}" $LDFLAGS $SKIA_LIBS
+$CXX $COMPILE_FLAGS $LINK_FLAGS -o "$OUTPUT" "${OBJECTS[@]}" $LDFLAGS $SKIA_LIBS
 
 echo ""
 echo "🧹 Cleaning up object files..."
