@@ -86,6 +86,22 @@ if command -v emcc >/dev/null 2>&1; then
             mkdir -p "$SKIA_ROOT/third_party/externals/emsdk/upstream"
             ln -sf "$EMSDK_EMSCRIPTEN_DIR" "$SKIA_ROOT/third_party/externals/emsdk/upstream/emscripten"
             echo "✅ Symlinked emscripten directory from: $EMSDK_EMSCRIPTEN_DIR"
+            
+            # Fix Node.js path in .emscripten config if it exists and is wrong
+            EMSDK_CONFIG="$SKIA_ROOT/third_party/externals/emsdk/upstream/emscripten/.emscripten"
+            if [ -f "$EMSDK_CONFIG" ]; then
+                NODE_PATH=$(which node 2>/dev/null || echo "")
+                if [ -n "$NODE_PATH" ] && [ -f "$NODE_PATH" ]; then
+                    # Update NODE_JS in the config file
+                    if grep -q "^NODE_JS" "$EMSDK_CONFIG" 2>/dev/null; then
+                        # Use sed to update the NODE_JS line, handling both ' and " quotes
+                        sed -i.bak "s|^NODE_JS.*=.*|NODE_JS = ['$NODE_PATH']|" "$EMSDK_CONFIG" 2>/dev/null || \
+                        sed -i '' "s|^NODE_JS.*=.*|NODE_JS = ['$NODE_PATH']|" "$EMSDK_CONFIG" 2>/dev/null || true
+                        rm -f "$EMSDK_CONFIG.bak" 2>/dev/null || true
+                        echo "✅ Updated Node.js path in .emscripten config to: $NODE_PATH"
+                    fi
+                fi
+            fi
         else
             # Fallback: create individual symlinks
             EMPP_PATH=$(which em++)
@@ -107,17 +123,10 @@ if command -v emcc >/dev/null 2>&1; then
             echo "✅ Created individual symlinks for emscripten tools"
         fi
         
-        # Symlink cache directory (for sysroot)
-        if [ -d "/opt/homebrew/Cellar/emscripten" ]; then
-            # Homebrew installation
-            EMSDK_VERSION=$(ls -1 /opt/homebrew/Cellar/emscripten | head -1)
-            CACHE_DIR="/opt/homebrew/Cellar/emscripten/$EMSDK_VERSION/libexec/cache"
-            if [ -d "$CACHE_DIR" ]; then
-                rm -rf "$SKIA_ROOT/third_party/externals/emsdk/upstream/emscripten/cache" 2>/dev/null || true
-                ln -sf "$CACHE_DIR" "$SKIA_ROOT/third_party/externals/emsdk/upstream/emscripten/cache" 2>/dev/null || true
-                echo "Symlinked emscripten cache from Homebrew"
-            fi
-        fi
+        # Don't symlink cache directory - let emcc use its own cache
+        # The cache directory needs to be writable, so symlinking can cause issues
+        # emcc will create its own cache if needed
+        echo "Note: Emscripten will use its own cache directory"
     fi
     
     echo "✅ Symlinks created for emscripten tools"
@@ -141,6 +150,7 @@ GN_ARGS="target_cpu=\"wasm32\" \
     skia_use_libpng_encode=true \
     skia_use_libpng_decode=true \
     skia_use_libwebp_decode=true \
+    skia_use_libwebp_encode=true \
     skia_use_wuffs=true \
     skia_enable_pdf=false \
     skia_use_fontconfig=false \
@@ -155,7 +165,16 @@ echo "Generating build files with GN for WebAssembly..."
 bin/gn gen out/Wasm --args="$GN_ARGS"
 
 echo "Building Skia for WebAssembly (this will take a while)..."
-ninja -C out/Wasm
+# Build only the libraries we need, not CanvasKit
+# Use GN target format (root target is :target, module targets are modules/path:target)
+# Build core libraries first (avoiding CanvasKit which requires features we don't have)
+ninja -C out/Wasm :skia modules/skottie:skottie modules/sksg:sksg modules/skshaper:skshaper modules/skunicode:skunicode modules/skresources:skresources modules/jsonreader:jsonreader
+
+# Try to build skparagraph (may fail if ICU/HarfBuzz disabled, that's OK)
+if ! ninja -C out/Wasm modules/skparagraph:skparagraph 2>/dev/null; then
+    echo "⚠️  Warning: skparagraph failed to build (likely due to disabled ICU/HarfBuzz)"
+    echo "This is OK if lotio doesn't require paragraph features"
+fi
 
 echo "✅ Skia built for WebAssembly"
 
