@@ -32,9 +32,45 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3 \
+            ninja-build \
+            git
+
       - name: Install markdown library
         run: |
           pip install markdown
+
+      - name: Install Emscripten
+        uses: mymindstorm/setup-emsdk@v12
+        with:
+          version: latest
+          no-cache: true
+
+      - name: Fetch Skia
+        run: |
+          mkdir -p third_party/skia
+          cd third_party/skia
+          rm -rf skia
+          git config --global advice.detachedHead false
+          git clone --depth 1 https://skia.googlesource.com/skia.git
+          cd skia
+          chmod +x "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh"
+          "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh" .
+          echo "Skia cloned and dependencies synced successfully"
+
+      - name: Build Skia for WASM
+        run: |
+          chmod +x scripts/build_skia_wasm.sh
+          ./scripts/build_skia_wasm.sh
+
+      - name: Build WASM
+        run: |
+          chmod +x scripts/build_wasm.sh
+          ./scripts/build_wasm.sh
 
       - name: Build documentation
         run: |
