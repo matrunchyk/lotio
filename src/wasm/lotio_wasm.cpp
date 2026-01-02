@@ -387,7 +387,7 @@ protected:
     }
     
     sk_sp<SkTypeface> onMatchFamilyStyle(const char familyName[],
-                                        const SkFontStyle& style) const override {
+                                        const SkFontStyle& /* style */) const override {
         // First try exact match by family name
         auto familyIt = familyFonts_.find(familyName);
         if (familyIt != familyFonts_.end()) {
@@ -443,9 +443,9 @@ protected:
     
     sk_sp<SkTypeface> onMatchFamilyStyleCharacter(const char familyName[],
                                                   const SkFontStyle& style,
-                                                  const char* bcp47[],
-                                                  int bcp47Count,
-                                                  SkUnichar character) const override {
+                                                  const char* /* bcp47 */[],
+                                                  int /* bcp47Count */,
+                                                  SkUnichar /* character */) const override {
         return onMatchFamilyStyle(familyName, style);
     }
     
@@ -471,7 +471,7 @@ protected:
         return nullptr;
     }
     
-    sk_sp<SkTypeface> onMakeFromFile(const char path[], int ttcIndex) const override {
+    sk_sp<SkTypeface> onMakeFromFile(const char* /* path */, int /* ttcIndex */) const override {
         return nullptr;
     }
     
@@ -499,7 +499,7 @@ private:
             return index == 0 ? typeface_ : nullptr;
         }
         
-        sk_sp<SkTypeface> matchStyle(const SkFontStyle& style) override {
+        sk_sp<SkTypeface> matchStyle(const SkFontStyle& /* style */) override {
             return typeface_;
         }
         
