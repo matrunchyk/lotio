@@ -50,4 +50,12 @@ echo ""
 echo "✅ WASM build complete!"
 echo ""
 echo "📦 Generated files:"
-ls -lh lotio.wasm lotio.js wasm/lotio_wasm.js 2>/dev/null || echo "   (Some files may not exist yet)"
+if [ -f "$PROJECT_ROOT/browser/lotio.js" ] && [ -f "$PROJECT_ROOT/browser/lotio.wasm" ]; then
+    ls -lh "$PROJECT_ROOT/browser/lotio.js" "$PROJECT_ROOT/browser/lotio.wasm"
+    echo ""
+    echo "✅ WASM files are in browser/ directory (correct location)"
+else
+    echo "   ❌ WASM files not found in browser/ directory"
+    echo "   Expected: browser/lotio.js and browser/lotio.wasm"
+    exit 1
+fi

@@ -5,20 +5,13 @@ export async function initLotio(wasmPath = './lotio.wasm') {
     // Load Emscripten module
     let jsPath = wasmPath.replace('.wasm', '.js');
     
-    // Resolve path relative to current page URL to ensure correct loading
-    // Script tags resolve relative to the page's base URL
-    try {
-        // If path is already absolute, use it as-is
-        if (!jsPath.startsWith('http://') && !jsPath.startsWith('https://') && !jsPath.startsWith('//')) {
-            // Resolve relative path to ensure it's correct
-            const resolvedUrl = new URL(jsPath, window.location.href);
-            // Use pathname to keep it relative (script tags work with relative paths)
-            jsPath = resolvedUrl.pathname + (resolvedUrl.search || '') + (resolvedUrl.hash || '');
-            console.log('Resolved JS path:', jsPath, 'from wasmPath:', wasmPath);
-        }
-    } catch (e) {
-        // If URL resolution fails, use the path as-is
-        console.warn('Failed to resolve JS path, using as-is:', jsPath, e);
+    // Keep relative paths as-is - script tags resolve relative to the page's base URL
+    // Script tags work best with relative paths like './browser/lotio.js'
+    // Only convert to absolute if it's already an absolute URL (http/https)
+    if (!jsPath.startsWith('http://') && !jsPath.startsWith('https://') && !jsPath.startsWith('//')) {
+        // Path is relative - keep it relative for script tags
+        // Script tags will resolve it relative to the current page automatically
+        // No need to convert to absolute path
     }
     
     // Check if already loaded

@@ -66,16 +66,41 @@ cleanup_temp_include() {
 }
 trap cleanup_temp_include EXIT
 
-# Skia libraries (static) - only include what exists
-# Note: skunicode outputs as libskunicode.a (not libskunicode_core.a) for WASM builds
+# Skia libraries (static)
+# Required libraries (must exist)
+REQUIRED_LIBS="skottie skia sksg skshaper skresources jsonreader"
+# Optional libraries (may not exist if features are disabled)
+OPTIONAL_LIBS="skparagraph skunicode"
+
 SKIA_LIBS=""
-for lib in skottie skia skparagraph sksg skshaper skunicode skresources jsonreader; do
+MISSING_REQUIRED=""
+
+# Check required libraries
+for lib in $REQUIRED_LIBS; do
     if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
         SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.a"
     else
-        echo "⚠️  Warning: $SKIA_LIB_DIR/lib${lib}.a not found, skipping"
+        MISSING_REQUIRED="$MISSING_REQUIRED $lib"
     fi
 done
+
+# Check optional libraries
+for lib in $OPTIONAL_LIBS; do
+    if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
+        SKIA_LIBS="$SKIA_LIBS $SKIA_LIB_DIR/lib${lib}.a"
+    fi
+done
+
+# Fail if required libraries are missing
+if [ -n "$MISSING_REQUIRED" ]; then
+    echo "❌ Error: Required Skia libraries not found:"
+    for lib in $MISSING_REQUIRED; do
+        echo "   - $SKIA_LIB_DIR/lib${lib}.a"
+    done
+    echo ""
+    echo "Please rebuild Skia for WASM: ./scripts/build_skia_wasm.sh"
+    exit 1
+fi
 
 # Source files (exclude files that use fontconfig/filesystem)
 # Include font_utils and text_sizing for font measurement and auto-fitting
@@ -90,23 +115,41 @@ SOURCES=(
     "$SRC_DIR/text/text_sizing.cpp"
 )
 
-OUTPUT="$PROJECT_ROOT/lotio.js"
+# Output to browser/ directory (where the files are expected)
+BROWSER_DIR="$PROJECT_ROOT/browser"
+mkdir -p "$BROWSER_DIR"
+OUTPUT="$BROWSER_DIR/lotio.js"
 
 echo "🔨 Building lotio for WebAssembly..."
 echo ""
 
+# Create temporary directory for object files
+OBJ_DIR=$(mktemp -d)
+trap "rm -rf $OBJ_DIR" EXIT
+
 # Compile
 OBJECTS=()
+MISSING_SOURCES=""
 for src in "${SOURCES[@]}"; do
     if [ ! -f "$src" ]; then
-        echo "⚠️  Warning: Source file not found: $src"
+        MISSING_SOURCES="$MISSING_SOURCES $src"
         continue
     fi
-    obj="${src%.cpp}.o"
+    obj_name=$(basename "${src%.cpp}.o")
+    obj="$OBJ_DIR/$obj_name"
     echo "   Compiling: $(basename $src)"
     $CXX $COMPILE_FLAGS $INCLUDES -c "$src" -o "$obj"
     OBJECTS+=("$obj")
 done
+
+# Fail if required source files are missing
+if [ -n "$MISSING_SOURCES" ]; then
+    echo "❌ Error: Required source files not found:"
+    for src in $MISSING_SOURCES; do
+        echo "   - $src"
+    done
+    exit 1
+fi
 
 echo ""
 echo "🔗 Linking..."
@@ -114,10 +157,12 @@ $CXX $COMPILE_FLAGS $LINK_FLAGS -o "$OUTPUT" "${OBJECTS[@]}" $LDFLAGS $SKIA_LIBS
 
 echo ""
 echo "🧹 Cleaning up object files..."
-rm -f "${OBJECTS[@]}"
+rm -rf "$OBJ_DIR"
 
 echo ""
 echo "✅ Build complete!"
 echo "   Output: $OUTPUT"
 echo "   Also generated: ${OUTPUT%.js}.wasm (WASM binary)"
+echo ""
+echo "📦 Files are in browser/ directory and ready for use"
 
