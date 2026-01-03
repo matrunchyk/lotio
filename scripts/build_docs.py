@@ -359,6 +359,7 @@ def build_docs():
         ("overview.md", "index.html", "Overview", "overview"),
         ("overview.md", "overview.html", "Overview", "overview"),
         ("cli.md", "cli.html", "CLI", "cli"),
+        ("docker.md", "docker.html", "Docker", "docker"),
         ("js-library.md", "js-library.html", "JS Library", "js-library"),
         ("cpp-library.md", "cpp-library.html", "C++ Library", "cpp-library"),
     ]
@@ -385,15 +386,17 @@ def build_docs():
         
         # Set active page
         active_classes = {
-            "overview": ("class=\"active\"", "", "", ""),
-            "cli": ("", "class=\"active\"", "", ""),
-            "js-library": ("", "", "class=\"active\"", ""),
-            "cpp-library": ("", "", "", "class=\"active\""),
+            "overview": ("class=\"active\"", "", "", "", ""),
+            "cli": ("", "class=\"active\"", "", "", ""),
+            "docker": ("", "", "class=\"active\"", "", ""),
+            "js-library": ("", "", "", "class=\"active\"", ""),
+            "cpp-library": ("", "", "", "", "class=\"active\""),
         }
         
-        overview_active, cli_active, js_active, cpp_active = active_classes.get(active_page, ("", "", "", ""))
+        overview_active, cli_active, docker_active, js_active, cpp_active = active_classes.get(active_page, ("", "", "", "", ""))
         html = html.replace("{{OVERVIEW_ACTIVE}}", overview_active)
         html = html.replace("{{CLI_ACTIVE}}", cli_active)
+        html = html.replace("{{DOCKER_ACTIVE}}", docker_active)
         html = html.replace("{{JS_ACTIVE}}", js_active)
         html = html.replace("{{CPP_ACTIVE}}", cpp_active)
         

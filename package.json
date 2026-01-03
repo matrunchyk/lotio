@@ -32,6 +32,9 @@
   "license": "MIT",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
+  },
+  "scripts": {
+    "docs:build": "python3 scripts/build_docs.py",
+    "docs:run": "cd _site && python3 -m http.server 8181"
   }
 }
-

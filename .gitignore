@@ -8,6 +8,8 @@ lotio
 
 # Sample output directories (rendered frames)
 samples/*/output/
+*.mov
+*.mp4
 
 # WASM build artifacts
 lotio.wasm

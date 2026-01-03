@@ -40,20 +40,24 @@ RUN git config --global advice.detachedHead false
 # Set up Skia build directory
 WORKDIR /skia-build
 
-# Fetch Skia deps
+# Fetch Skia deps (clones Skia to /skia-build/skia)
 COPY scripts/fetch_skia_deps.sh /tmp/fetch_skia_deps.sh
 RUN chmod +x /tmp/fetch_skia_deps.sh && /tmp/fetch_skia_deps.sh
 
-# Install Skia
-COPY scripts/install_skia.sh /tmp/install_skia.sh
-RUN chmod +x /tmp/install_skia.sh && /tmp/install_skia.sh
+# Build Skia directly (install_skia.sh expects project structure, so we build manually)
+RUN echo "[BUILD] Building Skia..." && \
+    cd /skia-build/skia && \
+    python3 bin/fetch-gn && \
+    ./bin/gn gen out/Release --args='target_cpu="arm64" is_official_build=true is_debug=false skia_enable_skottie=true skia_enable_fontmgr_fontconfig=true skia_enable_fontmgr_custom_directory=true skia_use_freetype=true skia_use_libpng_encode=true skia_use_libpng_decode=true skia_use_libwebp_decode=true skia_use_wuffs=true skia_enable_pdf=false' && \
+    ninja -C out/Release && \
+    echo "[BUILD] Skia built successfully"
 
 ########################################################################################
-# Stage 2: Render Builder - Compile skottie_renderer binary on Ubuntu
+# Stage 2: Render Builder - Compile lotio binary on Ubuntu
 FROM ubuntu:22.04 AS render-builder
 
 # Install build dependencies
-RUN echo "[BUILD] Installing build dependencies for skottie_renderer on Ubuntu..." && \
+RUN echo "[BUILD] Installing build dependencies for lotio on Ubuntu..." && \
     apt-get update && \
     apt-get install -y \
     gcc \
@@ -83,27 +87,59 @@ COPY --from=skia-builder /skia-build/skia/include /skia/include
 COPY --from=skia-builder /skia-build/skia/modules /skia/modules
 COPY --from=skia-builder /skia-build/skia/src /skia/src
 
-# Copy skottie_renderer source
-COPY src/skottie_renderer.cpp .
+# Copy lotio source files
+COPY src/ ./src/
 
-RUN echo "[BUILD] Compiling skottie_renderer with dynamic linking (Ubuntu 22.04)..." && \
+RUN echo "[BUILD] Compiling lotio with dynamic linking (Ubuntu 22.04)..." && \
     echo "[BUILD] Verifying Skia libraries..." && \
-    ls -lh /skia-libs/*.so* 2>/dev/null | head -20 || echo "[BUILD] WARNING: No Skia libraries found in /skia-libs/" && \
-    echo "[BUILD] Building skottie_renderer..." && \
+    ls -lh /skia-libs/*.a 2>/dev/null | head -20 || echo "[BUILD] WARNING: No Skia libraries found in /skia-libs/" && \
+    echo "[BUILD] Setting up include structure..." && \
+    mkdir -p /tmp_include/skia && \
+    ln -sf /skia/include/core /tmp_include/skia/core 2>/dev/null || true && \
+    ln -sf /skia/include /tmp_include/skia/include 2>/dev/null || true && \
+    ln -sf /skia/modules /tmp_include/skia/modules 2>/dev/null || true && \
+    echo "[BUILD] Building lotio..." && \
     cd /build && \
-    g++ -std=c++17 -O3 -march=native -DNDEBUG \
-        skottie_renderer.cpp \
-        -I/skia \
+    # Compile library sources (use /skia as base for relative includes in Skia headers)
+    g++ -std=c++17 -O3 -DNDEBUG -I/tmp_include -I/skia -I./src -c \
+        src/core/argument_parser.cpp \
+        src/core/animation_setup.cpp \
+        src/core/frame_encoder.cpp \
+        src/core/renderer.cpp \
+        src/utils/crash_handler.cpp \
+        src/utils/logging.cpp \
+        src/utils/string_utils.cpp \
+        src/text/text_config.cpp \
+        src/text/text_processor.cpp \
+        src/text/font_utils.cpp \
+        src/text/text_sizing.cpp \
+        src/text/json_manipulation.cpp && \
+    # Compile main
+    g++ -std=c++17 -O3 -DNDEBUG -I/tmp_include -I/skia -I./src -c src/main.cpp -o main.o && \
+    # Link binary
+    g++ -std=c++17 -O3 -DNDEBUG \
+        *.o \
         -L/skia-libs \
         -Wl,-rpath,/skia-libs \
-        -lskottie -lskia -lskparagraph -lsksg -lskshaper \
-        -lskunicode_icu -lskunicode_core -lskresources \
-        -ljsonreader -lwebp -lwebpdemux -lwebpmux -lpiex \
+        -Wl,--start-group \
+        /skia-libs/libskresources.a \
+        /skia-libs/libskparagraph.a \
+        /skia-libs/libskottie.a \
+        /skia-libs/libskshaper.a \
+        /skia-libs/libskunicode_icu.a \
+        /skia-libs/libskunicode_core.a \
+        -Wl,--end-group \
+        /skia-libs/libsksg.a \
+        /skia-libs/libjsonreader.a \
+        /skia-libs/libskia.a \
+        -lwebp -lwebpdemux -lwebpmux -lpiex \
         -lfreetype -lpng -ljpeg -lharfbuzz -licuuc -licui18n -licudata \
-        -lz -lfontconfig -lX11 -lGL -lm -lpthread \
-        -o /usr/local/bin/skottie_renderer && \
-        echo "skottie_renderer compiled successfully" && \
-        ls -lh /usr/local/bin/skottie_renderer
+        -lz -lfontconfig -lX11 -lGL -lGLU -lm -lpthread \
+        -o /usr/local/bin/lotio && \
+    echo "lotio compiled successfully" && \
+    ls -lh /usr/local/bin/lotio && \
+    rm -f *.o && \
+    rm -rf /tmp_include
 
 ########################################################################################
 # Stage 3: FFmpeg Builder - Build ffmpeg from source on Ubuntu
@@ -232,25 +268,20 @@ RUN echo "[BUILD] Verifying ffmpeg..." && \
 # Copy Skia libraries from skia-builder
 COPY --from=skia-builder /skia-build/skia/out/Release /opt/skia
 
-# Copy skottie_renderer binary from render-builder
-COPY --from=render-builder /usr/local/bin/skottie_renderer /usr/local/bin/skottie_renderer
+# Copy lotio binary from render-builder
+COPY --from=render-builder /usr/local/bin/lotio /usr/local/bin/lotio
 
-# Copy fonts if they exist
-COPY fonts /usr/local/share/fonts
-RUN if [ -d /usr/local/share/fonts ] && [ "$(ls -A /usr/local/share/fonts)" ]; then \
-        fc-cache -fv /usr/local/share/fonts && \
-        echo "[BUILD] Fonts installed and font cache updated"; \
-    else \
-        echo "[BUILD] No fonts directory found, skipping font installation"; \
-    fi
+# Copy fonts if they exist (optional)
+# Note: Fonts can be mounted at runtime if needed
+RUN echo "[BUILD] Font directory will be available for runtime font mounting"
 
 # Set environment variables
 ENV LD_LIBRARY_PATH=/opt/ffmpeg/lib:/opt/skia:/usr/lib/aarch64-linux-gnu:/usr/lib/x86_64-linux-gnu
 ENV PATH=/opt/ffmpeg/bin:/usr/local/bin:${PATH}
 
-# Verify skottie_renderer binary
-RUN echo "[BUILD] Verifying skottie_renderer binary..." && \
-    ldd /usr/local/bin/skottie_renderer | head -10 && \
+# Verify lotio binary
+RUN echo "[BUILD] Verifying lotio binary..." && \
+    ldd /usr/local/bin/lotio | head -10 && \
     echo "[BUILD] All dependencies resolved"
 
 # Copy entrypoint script
