@@ -615,5 +615,7 @@ jobs:
             ${{ secrets.DOCKER_HUB_USERNAME }}/lotio:${{ steps.version.outputs.VERSION_NUMBER }}
             ${{ secrets.DOCKER_HUB_USERNAME }}/lotio:${{ steps.version.outputs.VERSION }}
             ${{ secrets.DOCKER_HUB_USERNAME }}/lotio:latest
-          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/lotio:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/lotio:buildcache,mode=max
+          # Try to use cache from previous builds (if available)
+          # Note: cache-to removed to avoid disk space issues on GitHub runners
+          # The build cache is very large (Skia + FFmpeg) and exceeds runner disk space
+          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/lotio:latest
