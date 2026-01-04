@@ -41,7 +41,7 @@ The image is automatically built and pushed for each release. Available tags:
 If you need to build the image yourself (e.g., for custom modifications):
 
 ```bash
-docker build -t lotio:latest -f Dockerfile .
+docker build -t lotio:latest -f Dockerfile.lotio-ffmpeg .
 ```
 
 The Dockerfile uses a multi-stage build process:

@@ -2,7 +2,7 @@ name: Test and Validate
 
 on:
   push:
-    branches: [ develop ]  # Only test on develop branch
+    branches: [ main ]  # Only test on main branch
 
 jobs:
   build-macos:
