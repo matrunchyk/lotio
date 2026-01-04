@@ -27,7 +27,7 @@ SkFontStyle getSkFontStyle(const std::string& styleStr) {
 }
 
 // Helper function to measure rendered text width by scanning pixels (PIXEL_PERFECT mode)
-static SkScalar measureRenderedTextWidth(sk_sp<SkTextBlob> blob, const SkFont& font, const SkRect& blobBounds) {
+static SkScalar measureRenderedTextWidth(sk_sp<SkTextBlob> blob, const SkFont& /* font */, const SkRect& blobBounds) {
     // Create an off-screen surface to render the text
     // Use a surface that matches the rendering characteristics
     int padding = 20;  // Extra padding for anti-aliasing

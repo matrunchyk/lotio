@@ -73,7 +73,7 @@ int parseArguments(int argc, char* argv[], Arguments& args) {
                 } else if (modeStr == "pixel-perfect" || modeStr == "pixelperfect") {
                     args.text_measurement_mode = TextMeasurementMode::PIXEL_PERFECT;
                 } else {
-                    LOG_CERR("Error: Invalid --text-measurement-mode value: " << argv[i] << std::endl;
+                    LOG_CERR("Error: Invalid --text-measurement-mode value: " << argv[i]) << std::endl;
                     LOG_CERR("  Valid values: fast, accurate, pixel-perfect") << std::endl;
                     return 1;
                 }
