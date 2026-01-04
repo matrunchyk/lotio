@@ -115,6 +115,10 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
+      - name: Generate date tag
+        id: date
+        run: echo "DATE=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
+
       - name: Build and push skia image
         uses: docker/build-push-action@v5
         with:
@@ -124,7 +128,7 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/skia:latest
-            ${{ secrets.DOCKER_HUB_USERNAME }}/skia:$(date +%Y%m%d)
+            ${{ secrets.DOCKER_HUB_USERNAME }}/skia:${{ steps.date.outputs.DATE }}
           cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/skia:latest
           cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/skia:latest,mode=max
 
@@ -160,6 +164,10 @@ jobs:
             exit 1
           }
 
+      - name: Generate date tag
+        id: date
+        run: echo "DATE=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
+
       - name: Build and push lotio image
         uses: docker/build-push-action@v5
         with:
@@ -169,7 +177,7 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/lotio:latest
-            ${{ secrets.DOCKER_HUB_USERNAME }}/lotio:$(date +%Y%m%d)
+            ${{ secrets.DOCKER_HUB_USERNAME }}/lotio:${{ steps.date.outputs.DATE }}
           cache-from: |
             type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/skia:latest
             type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/lotio:latest
@@ -207,6 +215,10 @@ jobs:
             exit 1
           }
 
+      - name: Generate date tag
+        id: date
+        run: echo "DATE=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
+
       - name: Build and push lotio-ffmpeg image
         uses: docker/build-push-action@v5
         with:
@@ -216,7 +228,7 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/lotio-ffmpeg:latest
-            ${{ secrets.DOCKER_HUB_USERNAME }}/lotio-ffmpeg:$(date +%Y%m%d)
+            ${{ secrets.DOCKER_HUB_USERNAME }}/lotio-ffmpeg:${{ steps.date.outputs.DATE }}
           cache-from: |
             type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/lotio:latest
             type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/lotio-ffmpeg:latest
