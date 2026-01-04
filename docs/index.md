@@ -10,13 +10,13 @@ High-performance Lottie animation frame renderer for the browser using WebAssemb
 npm install @matrunchyk/lotio
 ```
 
-**Note:** To use GitHub Packages, you need to configure npm:
+**Note:** To use GitHub Packages, configure npm:
 
 ```bash
 echo "@matrunchyk:registry=https://npm.pkg.github.com" >> ~/.npmrc
 ```
 
-Then authenticate with a GitHub Personal Access Token with `read:packages` permission.
+The package is public and does not require authentication.
 
 ## Quick Start
 

@@ -16,7 +16,7 @@ npm install @matrunchyk/lotio
 echo "@matrunchyk:registry=https://npm.pkg.github.com" >> ~/.npmrc
 ```
 
-Then authenticate with a GitHub Personal Access Token with `read:packages` permission.
+The package is public and does not require authentication.
 
 ## Quick Start
 

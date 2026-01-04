@@ -52,14 +52,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          registry-url: 'https://npm.pkg.github.com'
-          scope: '@matrunchyk'
+
+      - name: Configure npm for GitHub Packages
+        run: |
+          echo "@matrunchyk:registry=https://npm.pkg.github.com" >> ~/.npmrc
 
       - name: Install lotio npm package
         run: |
           npm install @matrunchyk/lotio
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build documentation
         run: |
