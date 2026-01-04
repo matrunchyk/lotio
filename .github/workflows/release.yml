@@ -210,6 +210,11 @@ jobs:
             - Contains: `lotio.wasm`, `lotio.js`, `lotio_wasm.js`
             - See package README for usage instructions
             
+            **Docker image** (Linux ARM64):
+            - Image: `matrunchyk/lotio:${{ steps.version.outputs.VERSION }}`
+            - Also available as: `matrunchyk/lotio:latest`
+            - Contains: lotio binary, ffmpeg, and all dependencies
+            
             ### Installation
             
             **Homebrew (macOS) - Recommended:**
@@ -236,6 +241,14 @@ jobs:
             wget https://github.com/matrunchyk/lotio/releases/download/${{ steps.version.outputs.VERSION }}/lotio-wasm-${{ steps.version.outputs.VERSION }}.tar.gz
             tar -xzf lotio-wasm-${{ steps.version.outputs.VERSION }}.tar.gz
             # Use lotio_wasm.js in your web application
+            ```
+            
+            **Docker:**
+            ```bash
+            docker pull matrunchyk/lotio:${{ steps.version.outputs.VERSION }}
+            # Or use latest
+            docker pull matrunchyk/lotio:latest
+            docker run --rm -v $(pwd):/workspace matrunchyk/lotio:latest --help
             ```
           draft: false
           prerelease: false
@@ -561,3 +574,46 @@ jobs:
           npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-docker:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: build-and-release
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Set version from macOS job
+        id: version
+        run: |
+          VERSION="${{ needs.build-and-release.outputs.version }}"
+          VERSION_NUMBER="${VERSION#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION_NUMBER=$VERSION_NUMBER" >> $GITHUB_OUTPUT
+          echo "Using version: $VERSION"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/lotio:${{ steps.version.outputs.VERSION_NUMBER }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/lotio:${{ steps.version.outputs.VERSION }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/lotio:latest
+          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/lotio:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/lotio:buildcache,mode=max

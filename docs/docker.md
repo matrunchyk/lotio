@@ -4,17 +4,41 @@ Lotio provides a Docker image for easy deployment and consistent rendering acros
 
 ## Quick Start
 
+Pull the pre-built image from Docker Hub and run:
+
 ```bash
+docker pull matrunchyk/lotio:latest
+
 docker run --rm \
   -v "$(pwd)/input:/workspace/input:ro" \
   -v "$(pwd)/output:/workspace/output" \
-  lotio:latest \
+  matrunchyk/lotio:latest \
   input.json - 30 --output /workspace/output/video.mov
 ```
+
+## Pulling from Docker Hub
+
+Pre-built Docker images are available on Docker Hub:
+
+```bash
+# Pull the latest version
+docker pull matrunchyk/lotio:latest
+
+# Pull a specific version
+docker pull matrunchyk/lotio:1.2.3
+docker pull matrunchyk/lotio:v1.2.3
+```
+
+The image is automatically built and pushed for each release. Available tags:
+- `latest` - Always points to the most recent release
+- `v1.2.3` - Specific version tag
+- `1.2.3` - Version number without 'v' prefix
 
 ## Building the Image
 
 ### From Source
+
+If you need to build the image yourself (e.g., for custom modifications):
 
 ```bash
 docker build -t lotio:latest -f Dockerfile .
@@ -44,7 +68,7 @@ The Dockerfile uses a multi-stage build process:
 docker run --rm \
   -v "$(pwd)/animation.json:/workspace/input.json:ro" \
   -v "$(pwd):/workspace/output" \
-  lotio:latest \
+  matrunchyk/lotio:latest \
   /workspace/input.json - 30 --output /workspace/output/output.mov
 ```
 
@@ -54,7 +78,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd)/samples:/workspace/input:ro" \
   -v "$(pwd):/workspace/output" \
-  lotio:latest \
+  matrunchyk/lotio:latest \
   /workspace/input/data.json - 30 --output /workspace/output/video.mov
 ```
 
@@ -103,7 +127,7 @@ The `--text-measurement-mode` option controls the accuracy vs performance trade-
 docker run --rm \
   -v "$(pwd)/animation.json:/workspace/input.json:ro" \
   -v "$(pwd):/workspace/output" \
-  lotio:latest \
+  matrunchyk/lotio:latest \
   /workspace/input.json - 30 --output /workspace/output/video.mov
 ```
 
@@ -113,7 +137,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd)/samples:/workspace/input:ro" \
   -v "$(pwd):/workspace/output" \
-  lotio:latest \
+  matrunchyk/lotio:latest \
   --text-config /workspace/input/text-config.json \
   /workspace/input/data.json - 30 \
   --output /workspace/output/video.mov
@@ -125,7 +149,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd)/samples:/workspace/input:ro" \
   -v "$(pwd):/workspace/output" \
-  lotio:latest \
+  matrunchyk/lotio:latest \
   --text-config /workspace/input/text-config.json \
   --text-padding 0.95 \
   --text-measurement-mode pixel-perfect \
@@ -139,7 +163,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd)/animation.json:/workspace/input.json:ro" \
   -v "$(pwd):/workspace/output" \
-  lotio:latest \
+  matrunchyk/lotio:latest \
   --debug \
   /workspace/input.json - 30 \
   --output /workspace/output/video.mov
@@ -151,7 +175,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd)/animation.json:/workspace/input.json:ro" \
   -v "$(pwd):/workspace/output" \
-  lotio:latest \
+  matrunchyk/lotio:latest \
   --png --webp --debug \
   /workspace/input.json - 30 \
   --output /workspace/output/video.mov
@@ -205,7 +229,7 @@ Text configuration works the same as the CLI. Mount your text config file and re
 docker run --rm \
   -v "$(pwd)/samples:/workspace/input:ro" \
   -v "$(pwd):/workspace/output" \
-  lotio:latest \
+  matrunchyk/lotio:latest \
   --text-config /workspace/input/text-config.json \
   /workspace/input/data.json - 30 \
   --output /workspace/output/video.mov
@@ -239,7 +263,7 @@ docker run --rm \
   -v "$(pwd)/fonts:/usr/local/share/fonts:ro" \
   -v "$(pwd)/animation.json:/workspace/input.json:ro" \
   -v "$(pwd):/workspace/output" \
-  lotio:latest \
+  matrunchyk/lotio:latest \
   /workspace/input.json - 30 \
   --output /workspace/output/video.mov
 ```
@@ -284,7 +308,7 @@ Enable debug output to see detailed information:
 docker run --rm \
   -v "$(pwd)/animation.json:/workspace/input.json:ro" \
   -v "$(pwd):/workspace/output" \
-  lotio:latest \
+  matrunchyk/lotio:latest \
   --debug \
   /workspace/input.json - 30 \
   --output /workspace/output/video.mov
@@ -309,10 +333,11 @@ The Docker image can be used in CI/CD pipelines:
 ```yaml
 - name: Render animation
   run: |
+    docker pull matrunchyk/lotio:latest
     docker run --rm \
       -v "${{ github.workspace }}/animation.json:/workspace/input.json:ro" \
       -v "${{ github.workspace }}/output:/workspace/output" \
-      lotio:latest \
+      matrunchyk/lotio:latest \
       /workspace/input.json - 30 \
       --output /workspace/output/video.mov
 ```
