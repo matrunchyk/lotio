@@ -9,12 +9,22 @@ set -e
 OUTPUT_VIDEO="output.mov"
 LOTIO_ARGS=()
 FPS=""
+TEXT_PADDING="0.97"
+TEXT_MEASUREMENT_MODE="accurate"
 
 # Parse arguments: extract --output for video file, pass everything else to lotio
 while [[ $# -gt 0 ]]; do
     case $1 in
         --output|-o)
             OUTPUT_VIDEO="$2"
+            shift 2
+            ;;
+        --text-padding|-p)
+            TEXT_PADDING="$2"
+            shift 2
+            ;;
+        --text-measurement-mode|-m)
+            TEXT_MEASUREMENT_MODE="$2"
             shift 2
             ;;
         --help|-h)
@@ -24,10 +34,12 @@ while [[ $# -gt 0 ]]; do
             echo "All lotio arguments are supported and passed through."
             echo ""
             echo "Additional options:"
-            echo "  --output, -o FILE    Output video file (default: output.mov)"
+            echo "  --output, -o FILE              Output video file (default: output.mov)"
+            echo "  --text-padding, -p VALUE       Text padding factor (0.0-1.0, default: 0.97)"
+            echo "  --text-measurement-mode, -m MODE  Text measurement mode: fast|accurate|pixel-perfect (default: accurate)"
             echo ""
             echo "lotio usage:"
-            lotio --help 2>&1 || echo "  lotio [--png] [--webp] [--stream] [--debug] [--text-config <config.json>] <input.json> <output_dir> [fps]"
+            lotio --help 2>&1 || echo "  lotio [--png] [--webp] [--stream] [--debug] [--text-config <config.json>] [--text-padding <0.0-1.0>] [--text-measurement-mode <fast|accurate|pixel-perfect>] <input.json> <output_dir> [fps]"
             echo ""
             echo "Note: --png and --stream are automatically added if not present (required for video encoding)"
             echo ""
@@ -57,7 +69,11 @@ for i in "${!LOTIO_ARGS[@]}"; do
         if [ $i -gt 0 ]; then
             prev_arg="${LOTIO_ARGS[$((i - 1))]}"
             # If previous arg is a flag that takes a value, this isn't fps
-            if [[ "$prev_arg" == "--text-config" ]]; then
+            if [[ "$prev_arg" == "--text-config" ]] || \
+               [[ "$prev_arg" == "--text-padding" ]] || \
+               [[ "$prev_arg" == "-p" ]] || \
+               [[ "$prev_arg" == "--text-measurement-mode" ]] || \
+               [[ "$prev_arg" == "-m" ]]; then
                 is_fps=false
             fi
         fi
@@ -94,6 +110,10 @@ if [ "$HAS_STREAM" = false ]; then
     LOTIO_ARGS=("--stream" "${LOTIO_ARGS[@]}")
 fi
 
+# Add text padding and measurement mode options
+LOTIO_ARGS+=("--text-padding" "$TEXT_PADDING")
+LOTIO_ARGS+=("--text-measurement-mode" "$TEXT_MEASUREMENT_MODE")
+
 # Build lotio command with all arguments
 LOTIO_CMD=("lotio" "${LOTIO_ARGS[@]}")
 
@@ -101,6 +121,8 @@ echo "[RENDER] Starting frame rendering..."
 echo "[RENDER] lotio command: ${LOTIO_CMD[*]}"
 echo "[RENDER] Output video: $OUTPUT_VIDEO"
 echo "[RENDER] FPS: $FPS"
+echo "[RENDER] Text padding: $TEXT_PADDING"
+echo "[RENDER] Text measurement mode: $TEXT_MEASUREMENT_MODE"
 
 # Render frames and pipe to ffmpeg
 # Use ProRes 4444 codec for transparent MOV with alpha channel support

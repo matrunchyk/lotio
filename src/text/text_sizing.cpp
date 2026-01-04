@@ -8,7 +8,8 @@ float calculateOptimalFontSize(
     const FontInfo& fontInfo,
     const TextLayerConfig& config,
     const std::string& text,
-    float targetWidth
+    float targetWidth,
+    TextMeasurementMode mode
 ) {
     if (targetWidth <= 0) {
         return fontInfo.size;  // No constraint, use original size
@@ -17,7 +18,7 @@ float calculateOptimalFontSize(
     // Measure with current size
     float currentSize = fontInfo.size;
     float currentWidth = measureTextWidth(fontMgr, fontInfo.family, fontInfo.style, 
-                                         fontInfo.name, currentSize, text);
+                                         fontInfo.name, currentSize, text, mode);
     
     if (g_debug_mode) {
         LOG_COUT("[DEBUG] calculateOptimalFontSize: text=\"" << text << "\", currentSize=" << currentSize 
@@ -34,7 +35,7 @@ float calculateOptimalFontSize(
         for (int i = 0; i < 10; i++) {  // 10 iterations should be enough
             float testSize = (min + max) / 2.0f;
             float testWidth = measureTextWidth(fontMgr, fontInfo.family, fontInfo.style,
-                                              fontInfo.name, testSize, text);
+                                              fontInfo.name, testSize, text, mode);
             
             if (testWidth <= targetWidth) {
                 bestSize = testSize;
@@ -49,7 +50,7 @@ float calculateOptimalFontSize(
         // Text too wide, reduce size
         // First check if it fits at minimum size
         float minWidth = measureTextWidth(fontMgr, fontInfo.family, fontInfo.style,
-                                         fontInfo.name, config.minSize, text);
+                                         fontInfo.name, config.minSize, text, mode);
         if (minWidth > targetWidth) {
             // Doesn't fit even at min size - return -1 to indicate fallback needed
             if (g_debug_mode) {
@@ -67,7 +68,7 @@ float calculateOptimalFontSize(
         for (int i = 0; i < 15; i++) {  // More iterations for better precision
             float testSize = (min + max) / 2.0f;
             float testWidth = measureTextWidth(fontMgr, fontInfo.family, fontInfo.style,
-                                              fontInfo.name, testSize, text);
+                                              fontInfo.name, testSize, text, mode);
             
             if (testWidth <= targetWidth) {
                 // This size fits, try larger
@@ -86,7 +87,7 @@ float calculateOptimalFontSize(
         
         if (g_debug_mode) {
             float finalWidth = measureTextWidth(fontMgr, fontInfo.family, fontInfo.style,
-                                               fontInfo.name, bestSize, text);
+                                               fontInfo.name, bestSize, text, mode);
             LOG_COUT("[DEBUG] calculateOptimalFontSize: reduced from " << currentSize 
                      << " to " << bestSize << " (width: " << finalWidth << " / " << targetWidth << ")") << std::endl;
         }

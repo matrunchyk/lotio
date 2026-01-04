@@ -24,6 +24,8 @@ Lotio takes Lottie animation JSON files and renders them frame-by-frame into ima
    - Dynamic text value replacement
    - Auto-fit font sizing to fit text boxes
    - Custom font loading
+   - Configurable text padding (controls how much of text box width is used)
+   - Multiple text measurement modes (fast, accurate, pixel-perfect) for precision vs performance trade-offs
 4. **Streaming**: Can stream frames directly to stdout for piping to video encoders like ffmpeg
 
 ### Use Cases

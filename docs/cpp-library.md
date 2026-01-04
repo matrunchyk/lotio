@@ -34,8 +34,25 @@ Headers are organized by module:
 #include <lotio/core/frame_encoder.h>     // Frame encoding (PNG/WebP)
 #include <lotio/text/text_processor.h>    // Text processing
 #include <lotio/text/text_config.h>       // Text configuration
+#include <lotio/text/font_utils.h>        // Text measurement modes
 #include <lotio/utils/logging.h>          // Logging utilities
 ```
+
+### Text Measurement Mode
+
+```cpp
+enum class TextMeasurementMode {
+    FAST,          // Fastest, basic accuracy
+    ACCURATE,       // Good balance, accounts for kerning and glyph metrics (default)
+    PIXEL_PERFECT   // Most accurate, accounts for anti-aliasing and subpixel rendering
+};
+```
+
+The `TextMeasurementMode` enum controls the accuracy vs performance trade-off for measuring text width:
+
+- **`FAST`**: Fastest measurement using basic font metrics. Good for most cases but may underestimate width for some fonts.
+- **`ACCURATE`** (default): Good balance of accuracy and performance. Uses SkTextBlob bounds which accounts for kerning and glyph metrics. Recommended for most use cases.
+- **`PIXEL_PERFECT`**: Most accurate measurement by rendering text and scanning actual pixels. Accounts for anti-aliasing and subpixel rendering. Slower but most precise.
 
 ## Basic Usage
 
@@ -51,8 +68,13 @@ int main() {
     std::string inputJson = "animation.json";
     std::string textConfigJson = "";  // Optional
     
-    // Setup and create animation
-    AnimationSetupResult result = setupAndCreateAnimation(inputJson, textConfigJson);
+    // Setup and create animation with default text padding and measurement mode
+    AnimationSetupResult result = setupAndCreateAnimation(
+        inputJson, 
+        textConfigJson,
+        0.97f,  // textPadding: 97% of width (3% padding)
+        TextMeasurementMode::ACCURATE  // textMeasurementMode: good balance
+    );
     
     if (!result.success) {
         std::cerr << "Failed to setup animation: " << result.errorMessage << std::endl;
@@ -132,8 +154,17 @@ struct AnimationSetupResult {
 
 AnimationSetupResult setupAndCreateAnimation(
     const std::string& inputJsonPath,
-    const std::string& textConfigPath
+    const std::string& textConfigPath,
+    float textPadding = 0.97f,
+    TextMeasurementMode textMeasurementMode = TextMeasurementMode::ACCURATE
 );
+```
+
+**Parameters:**
+- `inputJsonPath`: Path to Lottie animation JSON file
+- `textConfigPath`: Path to text configuration JSON file (empty string if not used)
+- `textPadding`: Text padding factor (0.0-1.0, default: 0.97 = 3% padding). Controls how much of the target text box width is used for text sizing.
+- `textMeasurementMode`: Text measurement accuracy mode (default: `ACCURATE`). See `TextMeasurementMode` enum above.
 ```
 
 ### Frame Rendering
@@ -211,8 +242,13 @@ int main(int argc, char* argv[]) {
     std::string outputDir = argv[2];
     int fps = (argc > 3) ? std::stoi(argv[3]) : 25;
     
-    // Setup animation
-    AnimationSetupResult result = setupAndCreateAnimation(inputJson, "");
+    // Setup animation with custom text padding and measurement mode
+    AnimationSetupResult result = setupAndCreateAnimation(
+        inputJson, 
+        "",
+        0.95f,  // textPadding: 95% of width (5% padding)
+        TextMeasurementMode::PIXEL_PERFECT  // Most accurate measurement
+    );
     
     if (!result.success) {
         std::cerr << "Error: " << result.errorMessage << std::endl;

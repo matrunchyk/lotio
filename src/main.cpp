@@ -29,7 +29,12 @@ int main(int argc, char* argv[]) {
     g_debug_mode = args.debug_mode;
 
     // Setup and create animation
-    AnimationSetupResult setup_result = setupAndCreateAnimation(args.input_file, args.text_config_file);
+    AnimationSetupResult setup_result = setupAndCreateAnimation(
+        args.input_file, 
+        args.text_config_file,
+        args.text_padding,
+        args.text_measurement_mode
+    );
     if (!setup_result.success()) {
         return 1;
     }

@@ -30,6 +30,15 @@ export const State = {
 };
 
 /**
+ * Text measurement modes
+ */
+export const TextMeasurementMode = {
+    FAST: 'fast',
+    ACCURATE: 'accurate',
+    PIXEL_PERFECT: 'pixel-perfect'
+};
+
+/**
  * Event emitter implementation
  */
 class EventEmitter {
@@ -76,6 +85,8 @@ export class Lotio extends EventEmitter {
      * @param {number} options.fps - Frames per second (default: 30)
      * @param {Object|string} options.animation - Lottie animation JSON (object or string)
      * @param {Object|string} options.textConfig - Text configuration JSON (object or string)
+     * @param {number} options.textPadding - Text padding factor (0.0-1.0, default: 0.97)
+     * @param {string} options.textMeasurementMode - Text measurement mode: 'fast'|'accurate'|'pixel-perfect' (default: 'accurate')
      * @param {string} options.type - Output type: 'png' or 'webp' (default: 'png')
      * @param {string} options.wasmPath - Path to lotio.wasm file (default: './lotio.wasm')
      */
@@ -87,6 +98,8 @@ export class Lotio extends EventEmitter {
         this._fps = options.fps || 30;
         this._animation = options.animation || null;
         this._textConfig = options.textConfig || null;
+        this._textPadding = options.textPadding !== undefined ? options.textPadding : 0.97;
+        this._textMeasurementMode = options.textMeasurementMode || 'accurate';
         this._type = options.type || FrameType.PNG;
         this._state = State.STOPPED;
         this._wasmInitialized = false;
@@ -177,7 +190,9 @@ export class Lotio extends EventEmitter {
 
             this._animationInfo = createAnimation(
                 JSON.parse(animationJson),
-                textConfigJson ? JSON.parse(textConfigJson) : null
+                textConfigJson ? JSON.parse(textConfigJson) : null,
+                this._textPadding,
+                this._textMeasurementMode
             );
 
             this._currentTime = 0;
@@ -245,6 +260,14 @@ export class Lotio extends EventEmitter {
 
     getTextConfig() {
         return this._textConfig;
+    }
+
+    getTextPadding() {
+        return this._textPadding;
+    }
+
+    getTextMeasurementMode() {
+        return this._textMeasurementMode;
     }
 
     getType() {

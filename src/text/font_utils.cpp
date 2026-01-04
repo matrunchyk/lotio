@@ -4,8 +4,16 @@
 #include "include/core/SkFont.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkFontTypes.h"
+#include "include/core/SkTextBlob.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkColor.h"
 #include <regex>
 #include <algorithm>
+#include <cmath>
 
 SkFontStyle getSkFontStyle(const std::string& styleStr) {
     if (styleStr.find("Bold") != std::string::npos && styleStr.find("Italic") != std::string::npos) {
@@ -18,13 +26,91 @@ SkFontStyle getSkFontStyle(const std::string& styleStr) {
     return SkFontStyle::Normal();
 }
 
+// Helper function to measure rendered text width by scanning pixels (PIXEL_PERFECT mode)
+static SkScalar measureRenderedTextWidth(sk_sp<SkTextBlob> blob, const SkFont& font, const SkRect& blobBounds) {
+    // Create an off-screen surface to render the text
+    // Use a surface that matches the rendering characteristics
+    int padding = 20;  // Extra padding for anti-aliasing
+    int surfaceWidth = static_cast<int>(std::ceil(blobBounds.width())) + padding * 2;
+    int surfaceHeight = static_cast<int>(std::ceil(blobBounds.height())) + padding * 2;
+    
+    if (surfaceWidth <= 0 || surfaceHeight <= 0) {
+        return blobBounds.width();
+    }
+    
+    SkImageInfo info = SkImageInfo::MakeN32(
+        surfaceWidth,
+        surfaceHeight,
+        kPremul_SkAlphaType
+    );
+    
+    auto surface = SkSurfaces::Raster(info);
+    if (!surface) {
+        // Fallback to blob bounds if surface creation fails
+        return blobBounds.width();
+    }
+    
+    SkCanvas* canvas = surface->getCanvas();
+    canvas->clear(SK_ColorTRANSPARENT);
+    
+    // Render the text
+    SkPaint paint;
+    paint.setAntiAlias(true);
+    paint.setColor(SK_ColorBLACK);
+    
+    canvas->drawTextBlob(
+        blob,
+        padding - blobBounds.left(),
+        padding - blobBounds.top(),
+        paint
+    );
+    
+    // Get the image and find actual non-transparent bounds
+    sk_sp<SkImage> image = surface->makeImageSnapshot();
+    if (!image) {
+        return blobBounds.width();
+    }
+    
+    // Read pixels and find actual rendered bounds
+    SkPixmap pixmap;
+    if (!image->peekPixels(&pixmap)) {
+        return blobBounds.width();
+    }
+    
+    // Find leftmost and rightmost non-transparent pixels
+    int left = pixmap.width();
+    int right = 0;
+    bool foundPixel = false;
+    
+    for (int y = 0; y < pixmap.height(); y++) {
+        const uint32_t* row = pixmap.addr32(0, y);
+        for (int x = 0; x < pixmap.width(); x++) {
+            SkColor color = row[x];
+            if (SkColorGetA(color) > 0) {  // Non-transparent pixel
+                left = std::min(left, x);
+                right = std::max(right, x);
+                foundPixel = true;
+            }
+        }
+    }
+    
+    if (foundPixel && right >= left) {
+        // Return actual rendered width + small safety margin
+        return static_cast<SkScalar>(right - left + 1) + 1.0f;  // +1px safety
+    }
+    
+    // Fallback to blob bounds
+    return blobBounds.width();
+}
+
 SkScalar measureTextWidth(
     SkFontMgr* fontMgr,
     const std::string& fontFamily,
     const std::string& fontStyle,
     const std::string& fontName,  // Full name like "SegoeUI-Bold"
     float fontSize,
-    const std::string& text
+    const std::string& text,
+    TextMeasurementMode mode
 ) {
     // Try to get typeface using family and style
     sk_sp<SkTypeface> typeface = fontMgr->matchFamilyStyle(
@@ -49,6 +135,13 @@ SkScalar measureTextWidth(
     
     SkFont font(typeface, fontSize);
     
+    // Enable proper text rendering settings for ACCURATE and PIXEL_PERFECT modes
+    if (mode != TextMeasurementMode::FAST) {
+        font.setEdging(SkFont::Edging::kAntiAlias);
+        font.setSubpixel(true);
+        font.setHinting(SkFontHinting::kNormal);
+    }
+    
     // Split text by newlines (\r or \n) and measure each line
     // Return the width of the longest line
     SkScalar maxWidth = 0.0f;
@@ -58,11 +151,41 @@ SkScalar measureTextWidth(
         if (i == text.length() || text[i] == '\r' || text[i] == '\n') {
             // Measure current line
             if (!currentLine.empty()) {
-                SkRect bounds;
-                font.measureText(currentLine.c_str(), currentLine.length(), SkTextEncoding::kUTF8, &bounds);
-                maxWidth = std::max(maxWidth, bounds.width());
+                SkScalar width = 0.0f;
+                
+                if (mode == TextMeasurementMode::FAST) {
+                    // FAST mode: Use measureText() with bounds (current implementation)
+                    SkRect bounds;
+                    font.measureText(currentLine.c_str(), currentLine.length(), SkTextEncoding::kUTF8, &bounds);
+                    width = bounds.width();
+                } else {
+                    // ACCURATE or PIXEL_PERFECT mode: Use SkTextBlob
+                    sk_sp<SkTextBlob> blob = SkTextBlob::MakeFromString(
+                        currentLine.c_str(),
+                        font
+                    );
+                    
+                    if (blob) {
+                        SkRect blobBounds = blob->bounds();
+                        
+                        if (mode == TextMeasurementMode::ACCURATE) {
+                            // ACCURATE mode: Use blob bounds
+                            width = blobBounds.width();
+                        } else {
+                            // PIXEL_PERFECT mode: Render and measure actual pixels
+                            width = measureRenderedTextWidth(blob, font, blobBounds);
+                        }
+                    } else {
+                        // Fallback if blob creation fails
+                        SkRect bounds;
+                        font.measureText(currentLine.c_str(), currentLine.length(), SkTextEncoding::kUTF8, &bounds);
+                        width = bounds.width();
+                    }
+                }
+                
+                maxWidth = std::max(maxWidth, width);
                 if (g_debug_mode && (text.find('\n') != std::string::npos || text.find('\r') != std::string::npos)) {
-                    LOG_COUT("[DEBUG] Measured line: \"" << currentLine << "\" width: " << bounds.width()) << std::endl;
+                    LOG_COUT("[DEBUG] Measured line: \"" << currentLine << "\" width: " << width << " (mode: " << (mode == TextMeasurementMode::FAST ? "FAST" : (mode == TextMeasurementMode::ACCURATE ? "ACCURATE" : "PIXEL_PERFECT")) << ")") << std::endl;
                 }
             }
             currentLine.clear();
@@ -78,11 +201,36 @@ SkScalar measureTextWidth(
     
     // Handle last line if text doesn't end with newline
     if (!currentLine.empty()) {
-        SkRect bounds;
-        font.measureText(currentLine.c_str(), currentLine.length(), SkTextEncoding::kUTF8, &bounds);
-        maxWidth = std::max(maxWidth, bounds.width());
+        SkScalar width = 0.0f;
+        
+        if (mode == TextMeasurementMode::FAST) {
+            SkRect bounds;
+            font.measureText(currentLine.c_str(), currentLine.length(), SkTextEncoding::kUTF8, &bounds);
+            width = bounds.width();
+        } else {
+            sk_sp<SkTextBlob> blob = SkTextBlob::MakeFromString(
+                currentLine.c_str(),
+                font
+            );
+            
+            if (blob) {
+                SkRect blobBounds = blob->bounds();
+                
+                if (mode == TextMeasurementMode::ACCURATE) {
+                    width = blobBounds.width();
+                } else {
+                    width = measureRenderedTextWidth(blob, font, blobBounds);
+                }
+            } else {
+                SkRect bounds;
+                font.measureText(currentLine.c_str(), currentLine.length(), SkTextEncoding::kUTF8, &bounds);
+                width = bounds.width();
+            }
+        }
+        
+        maxWidth = std::max(maxWidth, width);
         if (g_debug_mode && (text.find('\n') != std::string::npos || text.find('\r') != std::string::npos)) {
-            LOG_COUT("[DEBUG] Measured line: \"" << currentLine << "\" width: " << bounds.width()) << std::endl;
+            LOG_COUT("[DEBUG] Measured line: \"" << currentLine << "\" width: " << width << " (mode: " << (mode == TextMeasurementMode::FAST ? "FAST" : (mode == TextMeasurementMode::ACCURATE ? "ACCURATE" : "PIXEL_PERFECT")) << ")") << std::endl;
         }
     }
     

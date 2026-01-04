@@ -3,15 +3,22 @@
 #include <filesystem>
 #include <string>
 #include <iostream>
+#include <algorithm>
+#include <cctype>
 
 void printUsage(const char* program_name) {
-    LOG_CERR("Usage: " << program_name << " [--png] [--webp] [--stream] [--debug] [--text-config <config.json>] <input.json> <output_dir> [fps]") << std::endl;
-    LOG_CERR("  --png:         Output frames as PNG files") << std::endl;
-    LOG_CERR("  --webp:        Output frames as WebP files") << std::endl;
-    LOG_CERR("  --stream:      Stream frames to stdout (for piping to ffmpeg)") << std::endl;
-    LOG_CERR("  --debug:       Enable debug output") << std::endl;
-    LOG_CERR("  --text-config: Path to text configuration JSON (for auto-fit and dynamic text values)") << std::endl;
-    LOG_CERR("  fps:           Frames per second for output (default: 25)") << std::endl;
+    LOG_CERR("Usage: " << program_name << " [--png] [--webp] [--stream] [--debug] [--text-config <config.json>] [--text-padding <0.0-1.0>] [--text-measurement-mode <fast|accurate|pixel-perfect>] <input.json> <output_dir> [fps]") << std::endl;
+    LOG_CERR("  --png:                  Output frames as PNG files") << std::endl;
+    LOG_CERR("  --webp:                 Output frames as WebP files") << std::endl;
+    LOG_CERR("  --stream:               Stream frames to stdout (for piping to ffmpeg)") << std::endl;
+    LOG_CERR("  --debug:                Enable debug output") << std::endl;
+    LOG_CERR("  --text-config:          Path to text configuration JSON (for auto-fit and dynamic text values)") << std::endl;
+    LOG_CERR("  --text-padding:         Text padding factor (0.0-1.0, default: 0.97 = 3% padding)") << std::endl;
+    LOG_CERR("  --text-measurement-mode: Text measurement mode (fast|accurate|pixel-perfect, default: accurate)") << std::endl;
+    LOG_CERR("                          fast: Fastest, basic accuracy") << std::endl;
+    LOG_CERR("                          accurate: Good balance, accounts for kerning and glyph metrics") << std::endl;
+    LOG_CERR("                          pixel-perfect: Most accurate, accounts for anti-aliasing") << std::endl;
+    LOG_CERR("  fps:                    Frames per second for output (default: 25)") << std::endl;
     LOG_CERR("") << std::endl;
     LOG_CERR("At least one of --png or --webp must be specified.") << std::endl;
     LOG_CERR("When --stream is used, output_dir can be '-' or any value (ignored).") << std::endl;
@@ -34,6 +41,44 @@ int parseArguments(int argc, char* argv[], Arguments& args) {
                 args.text_config_file = argv[++i];
             } else {
                 LOG_CERR("Error: --text-config requires a file path") << std::endl;
+                return 1;
+            }
+        } else if (arg == "--text-padding") {
+            if (i + 1 < argc) {
+                try {
+                    args.text_padding = std::stof(argv[++i]);
+                    if (args.text_padding < 0.0f || args.text_padding > 1.0f) {
+                        LOG_CERR("Error: --text-padding must be between 0.0 and 1.0") << std::endl;
+                        return 1;
+                    }
+                } catch (...) {
+                    LOG_CERR("Error: Invalid --text-padding value: " << argv[i]) << std::endl;
+                    return 1;
+                }
+            } else {
+                LOG_CERR("Error: --text-padding requires a value") << std::endl;
+                return 1;
+            }
+        } else if (arg == "--text-measurement-mode") {
+            if (i + 1 < argc) {
+                std::string modeStr = argv[++i];
+                // Convert to lowercase for case-insensitive matching
+                std::transform(modeStr.begin(), modeStr.end(), modeStr.begin(), ::tolower);
+                
+                // Handle both "pixel-perfect" and "pixelperfect"
+                if (modeStr == "fast") {
+                    args.text_measurement_mode = TextMeasurementMode::FAST;
+                } else if (modeStr == "accurate") {
+                    args.text_measurement_mode = TextMeasurementMode::ACCURATE;
+                } else if (modeStr == "pixel-perfect" || modeStr == "pixelperfect") {
+                    args.text_measurement_mode = TextMeasurementMode::PIXEL_PERFECT;
+                } else {
+                    LOG_CERR("Error: Invalid --text-measurement-mode value: " << argv[i] << std::endl;
+                    LOG_CERR("  Valid values: fast, accurate, pixel-perfect") << std::endl;
+                    return 1;
+                }
+            } else {
+                LOG_CERR("Error: --text-measurement-mode requires a value") << std::endl;
                 return 1;
             }
         } else if (arg == "--help" || arg == "-h") {

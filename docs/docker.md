@@ -71,6 +71,8 @@ All standard lotio arguments are supported:
 - `--stream` - Stream frames to stdout (automatically added if missing)
 - `--debug` - Enable debug output
 - `--text-config <file>` - Path to text configuration JSON
+- `--text-padding <0.0-1.0>` - Text padding factor (default: 0.97 = 3% padding)
+- `--text-measurement-mode <fast|accurate|pixel-perfect>` - Text measurement mode (default: accurate)
 - `<input.json>` - Input Lottie animation file (required)
 - `<output_dir>` - Output directory (use `-` for streaming)
 - `[fps]` - Frames per second (default: 25)
@@ -78,6 +80,20 @@ All standard lotio arguments are supported:
 ### Docker-Specific Arguments
 
 - `--output, -o <file>` - Output video file path (default: `output.mov`)
+- `--text-padding, -p <value>` - Text padding factor (0.0-1.0, default: 0.97)
+- `--text-measurement-mode, -m <mode>` - Text measurement mode: `fast` | `accurate` | `pixel-perfect` (default: `accurate`)
+
+#### Text Padding
+
+The `--text-padding` option controls how much of the target text box width is used for text sizing. A value of `0.97` means 97% of the target width is used, leaving 3% padding (1.5% per side).
+
+#### Text Measurement Mode
+
+The `--text-measurement-mode` option controls the accuracy vs performance trade-off:
+
+- **`fast`**: Fastest measurement using basic font metrics
+- **`accurate`** (default): Good balance, accounts for kerning and glyph metrics
+- **`pixel-perfect`**: Most accurate, accounts for anti-aliasing and subpixel rendering
 
 ## Examples
 
@@ -99,6 +115,20 @@ docker run --rm \
   -v "$(pwd):/workspace/output" \
   lotio:latest \
   --text-config /workspace/input/text-config.json \
+  /workspace/input/data.json - 30 \
+  --output /workspace/output/video.mov
+```
+
+### With Custom Text Padding and Measurement Mode
+
+```bash
+docker run --rm \
+  -v "$(pwd)/samples:/workspace/input:ro" \
+  -v "$(pwd):/workspace/output" \
+  lotio:latest \
+  --text-config /workspace/input/text-config.json \
+  --text-padding 0.95 \
+  --text-measurement-mode pixel-perfect \
   /workspace/input/data.json - 30 \
   --output /workspace/output/video.mov
 ```

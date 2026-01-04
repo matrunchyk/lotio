@@ -2,6 +2,7 @@
 #define ARGUMENT_PARSER_H
 
 #include <string>
+#include "../text/font_utils.h"
 
 // Command-line arguments structure
 struct Arguments {
@@ -13,6 +14,8 @@ struct Arguments {
     std::string output_dir;
     std::string text_config_file;
     float fps = 25.0f;
+    float text_padding = 0.97f;  // Text padding factor (0.0-1.0), default 0.97 (3% padding)
+    TextMeasurementMode text_measurement_mode = TextMeasurementMode::ACCURATE;  // Text measurement mode
 };
 
 // Parse command-line arguments

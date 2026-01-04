@@ -14,7 +14,9 @@
 // Read JSON file and apply text processing
 static std::string readAndProcessJson(
     const std::string& input_file,
-    const std::string& text_config_file
+    const std::string& text_config_file,
+    float textPadding,
+    TextMeasurementMode textMeasurementMode
 ) {
     // Read Lottie JSON file
     std::ifstream file(input_file);
@@ -35,19 +37,21 @@ static std::string readAndProcessJson(
     normalizeLottieTextNewlines(json_data);
     
     // Apply text configuration if config file is provided
-    processTextConfiguration(json_data, text_config_file);
+    processTextConfiguration(json_data, text_config_file, textPadding, textMeasurementMode);
     
     return json_data;
 }
 
 AnimationSetupResult setupAndCreateAnimation(
     const std::string& input_file,
-    const std::string& text_config_file
+    const std::string& text_config_file,
+    float textPadding,
+    TextMeasurementMode textMeasurementMode
 ) {
     AnimationSetupResult result;
     
     // Read and process JSON (apply text config if needed)
-    result.processed_json = readAndProcessJson(input_file, text_config_file);
+    result.processed_json = readAndProcessJson(input_file, text_config_file, textPadding, textMeasurementMode);
     if (result.processed_json.empty()) {
         return result;  // animation will be nullptr
     }

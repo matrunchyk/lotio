@@ -21,7 +21,7 @@ Then authenticate with a GitHub Personal Access Token with `read:packages` permi
 ## Quick Start
 
 ```javascript
-import Lotio, { FrameType, State } from '@matrunchyk/lotio';
+import Lotio, { FrameType, State, TextMeasurementMode } from '@matrunchyk/lotio';
 
 // Load font
 const fontResponse = await fetch('./fonts/OpenSans-Bold.ttf');
@@ -80,6 +80,20 @@ animation
       <label style="color: #ccc; font-size: 14px;">BG Color:</label>
       <input type="color" id="bgColorPicker" value="#2a2a2a" style="width: 50px; height: 30px; border: none; border-radius: 4px; cursor: pointer;">
     </div>
+    
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <label style="color: #ccc; font-size: 14px;">Text Padding: <span id="textPaddingValue">0.97</span></label>
+      <input type="range" id="textPaddingSlider" min="0.85" max="1.0" step="0.01" value="0.97" style="width: 150px;">
+    </div>
+    
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <label style="color: #ccc; font-size: 14px;">Measurement Mode:</label>
+      <select id="textMeasurementModeSelect" style="background: #3a3a3a; color: #fff; border: 1px solid #555; padding: 8px; border-radius: 4px; font-size: 14px;">
+        <option value="fast">Fast</option>
+        <option value="accurate" selected>Accurate</option>
+        <option value="pixel-perfect">Pixel Perfect</option>
+      </select>
+    </div>
   </div>
   
   <div style="background: #1a1a1a; border: 1px solid #444; border-radius: 4px; padding: 20px; display: inline-block; margin-top: 10px;">
@@ -89,9 +103,9 @@ animation
   <div id="demo-info" style="background: #333; padding: 15px; border-radius: 4px; margin-top: 15px; font-size: 13px; line-height: 1.6; display: none;"></div>
 </div>
 
-<script type="module">
+  <script type="module">
   (async () => {
-    let Lotio, FrameType, State;
+    let Lotio, FrameType, State, TextMeasurementMode;
     
     const statusDiv = document.getElementById('status');
     
@@ -109,6 +123,7 @@ animation
       Lotio = module.default;
       FrameType = module.FrameType;
       State = module.State;
+      TextMeasurementMode = module.TextMeasurementMode;
       
       console.log('Lotio module loaded successfully', { Lotio, FrameType, State });
       statusDiv.className = 'status loading';
@@ -133,6 +148,8 @@ animation
     let animation = null;
     let isPlaying = false;
     let bgColor = '#2a2a2a';
+    let textPadding = 0.97;
+    let textMeasurementMode = 'accurate';
     
     const infoDiv = document.getElementById('demo-info');
     const canvas = document.getElementById('demo-canvas');
@@ -147,6 +164,9 @@ animation
     const fpsSlider = document.getElementById('fpsSlider');
     const fpsValue = document.getElementById('fpsValue');
     const bgColorPicker = document.getElementById('bgColorPicker');
+    const textPaddingSlider = document.getElementById('textPaddingSlider');
+    const textPaddingValue = document.getElementById('textPaddingValue');
+    const textMeasurementModeSelect = document.getElementById('textMeasurementModeSelect');
   
   async function convertImagesToDataURIs(jsonData, sampleName) {
     if (!jsonData.assets || !Array.isArray(jsonData.assets)) {
@@ -221,6 +241,8 @@ animation
         fps: parseFloat(fpsSlider.value),
         animation: processedAnim,
         textConfig: textConfig,
+        textPadding: textPadding,
+        textMeasurementMode: textMeasurementMode,
         type: FrameType.PNG,
         wasmPath: './browser/lotio.wasm'
       });
@@ -350,6 +372,23 @@ animation
       updateFrame();
     });
     
+    textPaddingSlider.addEventListener('input', () => {
+      textPadding = parseFloat(textPaddingSlider.value);
+      textPaddingValue.textContent = textPadding.toFixed(2);
+      // Reload sample to apply new padding
+      if (animation) {
+        loadSample(sampleSelect.value);
+      }
+    });
+    
+    textMeasurementModeSelect.addEventListener('change', () => {
+      textMeasurementMode = textMeasurementModeSelect.value;
+      // Reload sample to apply new measurement mode
+      if (animation) {
+        loadSample(sampleSelect.value);
+      }
+    });
+    
     loadSample('sample1');
   })().catch(error => {
     const statusDiv = document.getElementById('status');
@@ -374,8 +413,22 @@ new Lotio(options)
 - `fps` (number): Frames per second (default: 30)
 - `animation` (Object|string): Lottie animation JSON (object or stringified)
 - `textConfig` (Object|string, optional): Text configuration JSON
+- `textPadding` (number, optional): Text padding factor (0.0-1.0, default: 0.97 = 3% padding)
+- `textMeasurementMode` (string, optional): Text measurement mode: `'fast'` | `'accurate'` | `'pixel-perfect'` (default: `'accurate'`)
 - `type` (string): Output type: `'png'` or `'webp'` (default: `'png'`)
 - `wasmPath` (string): Path to `lotio.wasm` file (default: `'./lotio.wasm'`)
+
+#### Text Padding
+
+The `textPadding` option controls how much of the target text box width is used for text sizing. A value of `0.97` means 97% of the target width is used, leaving 3% padding (1.5% per side). Lower values provide more padding, higher values allow text to use more of the available space.
+
+#### Text Measurement Mode
+
+The `textMeasurementMode` option controls the accuracy vs performance trade-off for measuring text width:
+
+- **`'fast'`**: Fastest measurement using basic font metrics. Good for most cases but may underestimate width for some fonts.
+- **`'accurate'`** (default): Good balance of accuracy and performance. Uses SkTextBlob bounds which accounts for kerning and glyph metrics. Recommended for most use cases.
+- **`'pixel-perfect'`**: Most accurate measurement by rendering text and scanning actual pixels. Accounts for anti-aliasing and subpixel rendering. Slower but most precise.
 
 ### Methods
 
@@ -396,6 +449,9 @@ new Lotio(options)
 - `setFonts(fonts)` - Set fonts array
 
 #### Getters
+
+- `getTextPadding()` - Get current text padding factor
+- `getTextMeasurementMode()` - Get current text measurement mode
 
 - `getFps()` - Get current FPS
 - `getAnimation()` - Get animation data
@@ -447,6 +503,9 @@ animation
 - `State.LOADED` - Animation is loaded
 - `State.ERROR` - Error state
 - `State.PLAYING` - Animation is playing
+- `TextMeasurementMode.FAST` - Fast text measurement mode
+- `TextMeasurementMode.ACCURATE` - Accurate text measurement mode (default)
+- `TextMeasurementMode.PIXEL_PERFECT` - Pixel-perfect text measurement mode
 
 ## Examples
 
@@ -489,6 +548,20 @@ const animation = new Lotio({
       "Patient_Name": "John Doe"
     }
   }
+});
+```
+
+### With Custom Text Padding and Measurement Mode
+
+```javascript
+import Lotio, { TextMeasurementMode } from '@matrunchyk/lotio';
+
+const animation = new Lotio({
+  animation: animationData,
+  textConfig: textConfigData,
+  textPadding: 0.95,  // Use 95% of width (5% padding)
+  textMeasurementMode: TextMeasurementMode.PIXEL_PERFECT,  // Most accurate measurement
+  wasmPath: './lotio.wasm'
 });
 ```
 

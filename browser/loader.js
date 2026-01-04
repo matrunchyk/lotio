@@ -25,6 +25,15 @@ export const State = {
 };
 
 /**
+ * Text measurement modes
+ */
+export const TextMeasurementMode = {
+    FAST: 'fast',
+    ACCURATE: 'accurate',
+    PIXEL_PERFECT: 'pixel-perfect'
+};
+
+/**
  * Event emitter implementation
  */
 class EventEmitter {

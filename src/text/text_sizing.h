@@ -12,7 +12,8 @@ float calculateOptimalFontSize(
     const FontInfo& fontInfo,
     const TextLayerConfig& config,
     const std::string& text,
-    float targetWidth
+    float targetWidth,
+    TextMeasurementMode mode = TextMeasurementMode::ACCURATE
 );
 
 #endif // TEXT_SIZING_H

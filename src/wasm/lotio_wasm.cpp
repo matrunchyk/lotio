@@ -140,7 +140,7 @@ static std::map<std::string, TextLayerConfig> parseTextConfigFromString(const st
 }
 
 // Helper to process text configuration from string (for WASM)
-static void processTextConfigurationFromString(std::string& json_data, const std::string& text_config_json, SkFontMgr* fontMgr = nullptr) {
+static void processTextConfigurationFromString(std::string& json_data, const std::string& text_config_json, SkFontMgr* fontMgr = nullptr, float textPadding = 0.97f, TextMeasurementMode textMeasurementMode = TextMeasurementMode::ACCURATE) {
     if (text_config_json.empty()) {
         return;
     }
@@ -199,25 +199,25 @@ static void processTextConfigurationFromString(std::string& json_data, const std
         }
         
         float currentWidth = measureTextWidth(tempFontMgr, fontInfo.family, fontInfo.style,
-                                             fontInfo.name, fontInfo.size, textToUse);
+                                             fontInfo.name, fontInfo.size, textToUse, textMeasurementMode);
         
-        // Apply a small padding to target width to prevent text from touching edges
-        // Use 97% of target width to leave ~3% padding (1.5% per side)
-        // This matches the native implementation for parity
-        float paddedTargetWidth = targetWidth * 0.97f;
+        // Apply padding to target width to prevent text from touching edges
+        // textPadding: 0.97 means 97% of target width (3% padding, 1.5% per side)
+        float paddedTargetWidth = targetWidth * textPadding;
         
         float optimalSize = calculateOptimalFontSize(
             tempFontMgr,
             fontInfo,
             config,
             textToUse,
-            paddedTargetWidth
+            paddedTargetWidth,
+            textMeasurementMode
         );
         
         float finalWidth = 0.0f;
         if (optimalSize >= 0) {
             finalWidth = measureTextWidth(tempFontMgr, fontInfo.family, fontInfo.style,
-                                         fontInfo.name, optimalSize, textToUse);
+                                         fontInfo.name, optimalSize, textToUse, textMeasurementMode);
         }
         
         if (optimalSize < 0) {
@@ -227,13 +227,13 @@ static void processTextConfigurationFromString(std::string& json_data, const std
             
             float fallbackMinWidth = measureTextWidth(tempFontMgr, fallbackFontInfo.family, 
                                                      fallbackFontInfo.style, fallbackFontInfo.name, 
-                                                     config.minSize, textToUse);
+                                                     config.minSize, textToUse, textMeasurementMode);
             
             if (fallbackMinWidth > paddedTargetWidth) {
                 optimalSize = config.minSize;
                 finalWidth = measureTextWidth(tempFontMgr, fallbackFontInfo.family,
                                              fallbackFontInfo.style, fallbackFontInfo.name,
-                                             config.minSize, textToUse);
+                                             config.minSize, textToUse, textMeasurementMode);
             } else {
                 float min = config.minSize;
                 float max = config.maxSize;
@@ -243,7 +243,7 @@ static void processTextConfigurationFromString(std::string& json_data, const std
                     float testSize = (min + max) / 2.0f;
                     float testWidth = measureTextWidth(tempFontMgr, fallbackFontInfo.family,
                                                       fallbackFontInfo.style, fallbackFontInfo.name,
-                                                      testSize, textToUse);
+                                                      testSize, textToUse, textMeasurementMode);
                     
                     if (testWidth <= paddedTargetWidth) {
                         bestSize = testSize;
@@ -256,7 +256,7 @@ static void processTextConfigurationFromString(std::string& json_data, const std
                 optimalSize = std::min(bestSize, config.maxSize);
                 finalWidth = measureTextWidth(tempFontMgr, fallbackFontInfo.family,
                                              fallbackFontInfo.style, fallbackFontInfo.name,
-                                             optimalSize, textToUse);
+                                             optimalSize, textToUse, textMeasurementMode);
             }
         }
         
@@ -534,7 +534,7 @@ static std::unique_ptr<WasmAnimationContext> g_context;
 
 extern "C" {
     EMSCRIPTEN_KEEPALIVE
-    int lotio_init(const char* json_data, size_t json_len, const char* text_config_json, size_t text_config_len) {
+    int lotio_init(const char* json_data, size_t json_len, const char* text_config_json, size_t text_config_len, float textPadding, int textMeasurementModeInt) {
         try {
             // If context already exists (fonts were registered), reuse it
             // Otherwise create a new one
@@ -546,10 +546,20 @@ extern "C" {
             g_context->processed_json = std::string(json_data, json_len);
             normalizeLottieTextNewlines(g_context->processed_json);
             
+            // Convert int to enum (0=FAST, 1=ACCURATE, 2=PIXEL_PERFECT)
+            TextMeasurementMode textMeasurementMode = TextMeasurementMode::ACCURATE;  // Default
+            if (textMeasurementModeInt == 0) {
+                textMeasurementMode = TextMeasurementMode::FAST;
+            } else if (textMeasurementModeInt == 1) {
+                textMeasurementMode = TextMeasurementMode::ACCURATE;
+            } else if (textMeasurementModeInt == 2) {
+                textMeasurementMode = TextMeasurementMode::PIXEL_PERFECT;
+            }
+            
             if (text_config_json && text_config_len > 0) {
                 std::string text_config(text_config_json, text_config_len);
                 // Pass the font manager with registered fonts for proper text measurement
-                processTextConfigurationFromString(g_context->processed_json, text_config, g_context->fontMgr.get());
+                processTextConfigurationFromString(g_context->processed_json, text_config, g_context->fontMgr.get(), textPadding, textMeasurementMode);
             }
             
             // Register codecs needed by SkResources for image decoding

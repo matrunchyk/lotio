@@ -100,7 +100,7 @@ export async function initLotio(wasmPath = './lotio.wasm') {
     });
 }
 
-export function createAnimation(jsonData, textConfig = null) {
+export function createAnimation(jsonData, textConfig = null, textPadding = 0.97, textMeasurementMode = 'accurate') {
     if (!Module) {
         throw new Error('WASM module not initialized. Call initLotio() first.');
     }
@@ -161,6 +161,17 @@ export function createAnimation(jsonData, textConfig = null) {
     const jsonStr = typeof jsonData === 'string' ? jsonData : JSON.stringify(jsonData);
     const textConfigStr = textConfig ? (typeof textConfig === 'string' ? textConfig : JSON.stringify(textConfig)) : null;
     
+    // Convert textMeasurementMode string to integer (0=FAST, 1=ACCURATE, 2=PIXEL_PERFECT)
+    const modeStr = String(textMeasurementMode).toLowerCase();
+    let modeInt = 1; // Default to ACCURATE
+    if (modeStr === 'fast') {
+        modeInt = 0;
+    } else if (modeStr === 'accurate') {
+        modeInt = 1;
+    } else if (modeStr === 'pixel-perfect' || modeStr === 'pixelperfect') {
+        modeInt = 2;
+    }
+    
     // Allocate memory using exported _malloc
     const jsonPtr = Module._malloc(jsonStr.length + 1);
     if (!jsonPtr) {
@@ -180,7 +191,7 @@ export function createAnimation(jsonData, textConfig = null) {
         Module.stringToUTF8(textConfigStr, textConfigPtr, textConfigStr.length + 1);
     }
     
-    const result = Module._lotio_init(jsonPtr, jsonStr.length, textConfigPtr, textConfigLen);
+    const result = Module._lotio_init(jsonPtr, jsonStr.length, textConfigPtr, textConfigLen, textPadding, modeInt);
     
     Module._free(jsonPtr);
     if (textConfigPtr) {

@@ -40,7 +40,7 @@ make
 ### Command Line
 
 ```bash
-lotio [--png] [--webp] [--stream] [--debug] [--text-config <config.json>] <input.json> <output_dir> [fps]
+lotio [--png] [--webp] [--stream] [--debug] [--text-config <config.json>] [--text-padding <0.0-1.0>] [--text-measurement-mode <fast|accurate|pixel-perfect>] <input.json> <output_dir> [fps]
 ```
 
 **Options:**
@@ -49,6 +49,8 @@ lotio [--png] [--webp] [--stream] [--debug] [--text-config <config.json>] <input
 - `--stream` - Stream frames to stdout (for piping to ffmpeg)
 - `--debug` - Enable debug output
 - `--text-config` - Path to text configuration JSON (for auto-fit and dynamic text values)
+- `--text-padding` - Text padding factor (0.0-1.0, default: 0.97 = 3% padding)
+- `--text-measurement-mode` - Text measurement mode: `fast` | `accurate` | `pixel-perfect` (default: `accurate`)
 - `fps` - Frames per second for output (default: 25)
 
 **Examples:**
@@ -74,7 +76,7 @@ npm install @matrunchyk/lotio
 **Basic Usage:**
 
 ```javascript
-import Lotio, { FrameType, State } from '@matrunchyk/lotio';
+import Lotio, { FrameType, State, TextMeasurementMode } from '@matrunchyk/lotio';
 
 // Load fonts
 const fontResponse = await fetch('./fonts/OpenSans-Bold.ttf');
@@ -90,6 +92,8 @@ const animation = new Lotio({
   fps: 30,
   animation: animationData,
   textConfig: { /* optional text config */ },
+  textPadding: 0.97,  // Optional: text padding factor (default: 0.97)
+  textMeasurementMode: TextMeasurementMode.ACCURATE,  // Optional: TextMeasurementMode.FAST | TextMeasurementMode.ACCURATE | TextMeasurementMode.PIXEL_PERFECT
   type: FrameType.PNG,
   wasmPath: './lotio.wasm'
 });

@@ -15,7 +15,9 @@
 
 std::string processTextConfiguration(
     std::string& json_data,
-    const std::string& text_config_file
+    const std::string& text_config_file,
+    float textPadding,
+    TextMeasurementMode textMeasurementMode
 ) {
     if (text_config_file.empty()) {
         return json_data;  // No processing needed
@@ -95,7 +97,7 @@ std::string processTextConfiguration(
         
         // Debug: measure current text at original size
         float currentWidth = measureTextWidth(tempFontMgr.get(), fontInfo.family, fontInfo.style,
-                                             fontInfo.name, fontInfo.size, textToUse);
+                                             fontInfo.name, fontInfo.size, textToUse, textMeasurementMode);
         LOG_DEBUG("  Original text: \"" << textToUse << "\"");
         LOG_DEBUG("  Original size: " << fontInfo.size << ", measured width: " << currentWidth);
         if (config.textBoxWidth > 0) {
@@ -108,10 +110,10 @@ std::string processTextConfiguration(
         LOG_DEBUG("  Target width: " << targetWidth);
         LOG_DEBUG("  Min size: " << config.minSize << ", Max size: " << config.maxSize);
         
-        // Apply a small padding to target width to prevent text from touching edges
-        // Use 97% of target width to leave ~3% padding (1.5% per side)
-        float paddedTargetWidth = targetWidth * 0.97f;
-        LOG_DEBUG("  Padded target width: " << paddedTargetWidth << " (97% of " << targetWidth << ")");
+        // Apply padding to target width to prevent text from touching edges
+        // textPadding: 0.97 means 97% of target width (3% padding, 1.5% per side)
+        float paddedTargetWidth = targetWidth * textPadding;
+        LOG_DEBUG("  Padded target width: " << paddedTargetWidth << " (" << (textPadding * 100.0f) << "% of " << targetWidth << ")");
         
         // Calculate optimal font size
         float optimalSize = calculateOptimalFontSize(
@@ -119,20 +121,21 @@ std::string processTextConfiguration(
             fontInfo,
             config,
             textToUse,
-            paddedTargetWidth
+            paddedTargetWidth,
+            textMeasurementMode
         );
         
         float finalWidth = 0.0f;
         if (optimalSize >= 0) {
             finalWidth = measureTextWidth(tempFontMgr.get(), fontInfo.family, fontInfo.style,
-                                         fontInfo.name, optimalSize, textToUse);
+                                         fontInfo.name, optimalSize, textToUse, textMeasurementMode);
             LOG_DEBUG("  Optimal size: " << optimalSize << ", final width: " << finalWidth);
         }
         
         if (optimalSize < 0) {
             // Text doesn't fit even at min size, use fallback
             float minWidth = measureTextWidth(tempFontMgr.get(), fontInfo.family, fontInfo.style,
-                                             fontInfo.name, config.minSize, textToUse);
+                                             fontInfo.name, config.minSize, textToUse, textMeasurementMode);
             LOG_DEBUG("Text doesn't fit at min size for " << layerName << ":");
             LOG_DEBUG("  Text length: " << textToUse.length() << " characters");
             LOG_DEBUG("  Text content: \"" << textToUse << "\"");
@@ -147,7 +150,7 @@ std::string processTextConfiguration(
             // Measure fallback text at min size
             float fallbackMinWidth = measureTextWidth(tempFontMgr.get(), fallbackFontInfo.family, 
                                                      fallbackFontInfo.style, fallbackFontInfo.name, 
-                                                     config.minSize, textToUse);
+                                                     config.minSize, textToUse, textMeasurementMode);
             
             if (fallbackMinWidth > paddedTargetWidth) {
                 // Fallback doesn't fit even at min size, use min size anyway (will overflow)
@@ -155,7 +158,7 @@ std::string processTextConfiguration(
                 optimalSize = config.minSize;
                 finalWidth = measureTextWidth(tempFontMgr.get(), fallbackFontInfo.family,
                                              fallbackFontInfo.style, fallbackFontInfo.name,
-                                             config.minSize, textToUse);
+                                             config.minSize, textToUse, textMeasurementMode);
             } else {
                 // Fallback fits at min size, try to maximize up to maxSize
                 float min = config.minSize;
@@ -166,7 +169,7 @@ std::string processTextConfiguration(
                     float testSize = (min + max) / 2.0f;
                     float testWidth = measureTextWidth(tempFontMgr.get(), fallbackFontInfo.family,
                                                       fallbackFontInfo.style, fallbackFontInfo.name,
-                                                      testSize, textToUse);
+                                                      testSize, textToUse, textMeasurementMode);
                     
                     if (testWidth <= paddedTargetWidth) {
                         bestSize = testSize;
@@ -179,7 +182,7 @@ std::string processTextConfiguration(
                 optimalSize = std::min(bestSize, config.maxSize);
                 finalWidth = measureTextWidth(tempFontMgr.get(), fallbackFontInfo.family,
                                              fallbackFontInfo.style, fallbackFontInfo.name,
-                                             optimalSize, textToUse);
+                                             optimalSize, textToUse, textMeasurementMode);
                 LOG_DEBUG("  Fallback text optimal size: " << optimalSize << " (width: " << finalWidth << " / " << paddedTargetWidth << ")");
             }
         }

@@ -35,7 +35,27 @@ lotio [OPTIONS] <input.json> <output_dir> [fps]
 - `--stream` - Stream frames to stdout (for piping to ffmpeg)
 - `--debug` - Enable debug output
 - `--text-config <config.json>` - Path to text configuration JSON (for auto-fit and dynamic text values)
+- `--text-padding <0.0-1.0>` - Text padding factor (default: 0.97 = 3% padding)
+- `--text-measurement-mode <fast|accurate|pixel-perfect>` - Text measurement accuracy mode (default: accurate)
 - `--help` - Show help message
+
+#### Text Padding
+
+The `--text-padding` option controls how much of the target text box width is used for text sizing. A value of `0.97` means 97% of the target width is used, leaving 3% padding (1.5% per side). Lower values provide more padding, higher values allow text to use more of the available space.
+
+- Range: `0.0` to `1.0`
+- Default: `0.97` (3% padding)
+- Example: `--text-padding 0.95` uses 95% of width (5% padding)
+
+#### Text Measurement Mode
+
+The `--text-measurement-mode` option controls the accuracy vs performance trade-off for measuring text width:
+
+- **`fast`**: Fastest measurement using basic font metrics. Good for most cases but may underestimate width for some fonts.
+- **`accurate`** (default): Good balance of accuracy and performance. Uses SkTextBlob bounds which accounts for kerning and glyph metrics. Recommended for most use cases.
+- **`pixel-perfect`**: Most accurate measurement by rendering text and scanning actual pixels. Accounts for anti-aliasing and subpixel rendering. Slower but most precise.
+
+Example: `--text-measurement-mode pixel-perfect`
 
 ## Examples
 
@@ -82,6 +102,22 @@ The text configuration file allows you to:
 - Replace text layer values dynamically
 - Auto-fit font sizes to text boxes
 - Customize text appearance
+
+### With Custom Text Padding
+
+```bash
+lotio --png --text-padding 0.95 --text-config text_config.json animation.json frames/
+```
+
+Use 95% of text box width (5% padding) instead of the default 97% (3% padding).
+
+### With Pixel-Perfect Text Measurement
+
+```bash
+lotio --png --text-measurement-mode pixel-perfect --text-config text_config.json animation.json frames/
+```
+
+Use the most accurate text measurement mode for precise text sizing.
 
 Example `text_config.json`:
 ```json
