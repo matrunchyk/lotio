@@ -29,6 +29,8 @@
             height: 100vh;
             overflow-y: auto;
             flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
         }
         
         .sidebar h1 {
@@ -253,6 +255,9 @@
                 <li><a href="cpp-library.html" {{CPP_ACTIVE}}>C++ Library</a></li>
             </ul>
         </nav>
+        <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid #444; color: #888; font-size: 0.9em;">
+            Version: {{VERSION}}
+        </div>
     </div>
     <div class="content">
         {{CONTENT}}

@@ -19,6 +19,10 @@ int main(int argc, char* argv[]) {
         // Help was shown - exit successfully
         return 0;
     }
+    if (parse_result == 3) {
+        // Version was shown - exit successfully
+        return 0;
+    }
     if (parse_result != 0) {
         // Parse error - exit with error
         return 1;

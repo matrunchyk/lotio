@@ -291,6 +291,132 @@ The pkg-config file includes all necessary include paths:
 - `-I${includedir}/skia` - Skia core headers
 - `-I${includedir}/skia/gen` - Skia generated headers
 
+## CI/CD Pipeline
+
+The project uses GitHub Actions workflows for automated building, testing, and deployment:
+
+```mermaid
+graph TB
+    subgraph triggers["Event Triggers"]
+        mainPush["Push to main<br/>(creates semver tag)"]
+        tagPush["Tag push v*"]
+        skiaChanges["Changes to<br/>Dockerfile.skia"]
+        lotioChanges["Changes to<br/>src/** or Dockerfile.lotio"]
+        docsChanges["Changes to<br/>docs/** or examples/**"]
+        manual["Manual<br/>workflow_dispatch"]
+    end
+
+    subgraph skiaWorkflow["build-skia.yml<br/>Concurrency: build-skia<br/>Cancel in-progress: true"]
+        checkSkia["Check if<br/>image exists"]
+        buildSkiaImg["Build & push<br/>matrunchyk/skia"]
+        checkSkia -->|should_build=true| buildSkiaImg
+    end
+
+    subgraph lotioWorkflow["build-lotio.yml<br/>Concurrency: build-lotio<br/>Cancel in-progress: true"]
+        buildLotioImg["Build & push<br/>matrunchyk/lotio"]
+    end
+
+    subgraph releaseWorkflow["release.yml<br/>Concurrency: release<br/>Cancel in-progress: true"]
+        versionTag["Generate version<br/>& create tag"]
+        buildMac["Build macOS<br/>binary & dev package"]
+        buildLinux["Build Linux<br/>binary & .deb"]
+        buildWasm["Build WASM<br/>library"]
+        buildHomebrew["Build Homebrew<br/>bottle"]
+        buildDocs["Build<br/>documentation"]
+        publishRelease["Create GitHub<br/>release"]
+        
+        versionTag --> buildMac
+        versionTag --> buildLinux
+        versionTag --> buildWasm
+        versionTag --> buildHomebrew
+        buildWasm --> buildDocs
+        buildHomebrew --> buildDocs
+        buildDocs --> publishRelease
+    end
+
+    subgraph testWorkflow["test.yml<br/>Concurrency: test<br/>Cancel in-progress: true"]
+        testDocker["Test Docker<br/>image"]
+        testWasm["Test JS/WASM<br/>library"]
+        testHomebrew["Test Homebrew<br/>package"]
+    end
+
+    subgraph pagesWorkflow["pages.yml<br/>Concurrency: pages<br/>Cancel in-progress: false"]
+        buildPages["Build & deploy<br/>documentation"]
+    end
+
+    mainPush --> lotioWorkflow
+    mainPush --> releaseWorkflow
+    mainPush --> pagesWorkflow
+    
+    tagPush --> skiaWorkflow
+    tagPush --> lotioWorkflow
+    tagPush --> releaseWorkflow
+    
+    skiaChanges --> skiaWorkflow
+    lotioChanges --> lotioWorkflow
+    docsChanges --> pagesWorkflow
+    
+    manual --> skiaWorkflow
+    manual --> lotioWorkflow
+    manual --> releaseWorkflow
+    manual --> testWorkflow
+    manual --> pagesWorkflow
+
+    skiaWorkflow -->|workflow_run<br/>after completion| lotioWorkflow
+    lotioWorkflow -->|workflow_run<br/>after completion| skiaWorkflow
+    lotioWorkflow -->|Docker image ready| releaseWorkflow
+    releaseWorkflow -->|workflow_run<br/>after completion| testWorkflow
+
+    style skiaWorkflow fill:#e1f5ff
+    style lotioWorkflow fill:#e1f5ff
+    style releaseWorkflow fill:#fff4e1
+    style testWorkflow fill:#e8f5e9
+    style pagesWorkflow fill:#f3e5f5
+```
+
+### Workflow Descriptions
+
+**build-skia.yml** - Builds and publishes `matrunchyk/skia` Docker image
+- **Purpose**: Create reusable Skia base image to avoid rebuilding in every workflow
+- **Triggers**: Tag pushes, Dockerfile.skia changes, manual dispatch, or when lotio image is built
+- **Logic**: Only builds if image doesn't exist in Docker Hub (unless manually forced or on tag/release)
+- **Concurrency**: Single instance per workflow (cancels in-progress runs when new one starts)
+- **Output**: `matrunchyk/skia:latest` and `matrunchyk/skia:v1.2.3`
+
+**build-lotio.yml** - Builds and publishes `matrunchyk/lotio` Docker image
+- **Purpose**: Create lotio binary Docker image based on Skia image
+- **Triggers**: Main branch push, tag pushes, source code changes, Dockerfile.lotio changes, after Skia build, manual dispatch
+- **Logic**: Always depends on `matrunchyk/skia:latest` existing
+- **Concurrency**: Single instance per workflow (cancels in-progress runs when new one starts)
+- **Output**: `matrunchyk/lotio:latest` and `matrunchyk/lotio:v1.2.3`
+
+**release.yml** - Builds all release artifacts and creates GitHub release
+- **Purpose**: Build and package all distribution formats (binaries, WASM, Homebrew, docs)
+- **Triggers**: Push to main (creates semver tag automatically), tag pushes (v*), manual dispatch
+- **Logic**: 
+  - Generates semver version from tag or creates new tag on main push
+  - Uses `matrunchyk/lotio` Docker image for builds
+  - Builds in parallel: macOS, Linux, WASM, Homebrew
+  - Injects version into all artifacts
+- **Concurrency**: Single instance per workflow (cancels in-progress runs when new one starts)
+- **Output**: macOS dev package, Linux .deb, WASM package, Homebrew bottle, GitHub release
+
+**test.yml** - Integration tests for all built artifacts
+- **Purpose**: Validate that all release artifacts work correctly
+- **Triggers**: After `release.yml` completes successfully, manual dispatch
+- **Tests**:
+  - Docker image: `--help`, `--version`, library functionality, video generation with `--debug`
+  - JS/WASM library: Load, API functions, frame rendering
+  - Homebrew package: Installation, `--help`, `--version`, basic functionality
+- **Concurrency**: Single instance per workflow (cancels in-progress runs when new one starts)
+
+**pages.yml** - Builds and deploys documentation to GitHub Pages
+- **Purpose**: Generate and deploy documentation with version injection
+- **Triggers**: Changes to docs, examples, or build scripts; manual dispatch
+- **Logic**: Uses `matrunchyk/lotio` Docker image, injects version from git tag
+- **Concurrency**: Single instance per workflow (does not cancel in-progress runs)
+- **Output**: Deployed to GitHub Pages
+
 ## Project Structure
 
 ```

@@ -45,12 +45,16 @@ fi
 
 # Compiler settings
 CXX=clang++
+VERSION_DEFINE=""
+if [ -n "$VERSION" ]; then
+    VERSION_DEFINE="-DVERSION=\\\"${VERSION}\\\""
+fi
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS - clang supports -march=native
-    CXXFLAGS="-std=c++17 -O3 -march=native -DNDEBUG -Wall -Wextra"
+    CXXFLAGS="-std=c++17 -O3 -march=native -DNDEBUG -Wall -Wextra $VERSION_DEFINE"
 else
     # Linux - clang doesn't support -march=native, use -O3 only
-    CXXFLAGS="-std=c++17 -O3 -DNDEBUG -Wall -Wextra"
+    CXXFLAGS="-std=c++17 -O3 -DNDEBUG -Wall -Wextra $VERSION_DEFINE"
 fi
 
 # Add Homebrew include paths for macOS

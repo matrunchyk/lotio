@@ -18,10 +18,20 @@ void printUsage(const char* program_name) {
     LOG_CERR("                          fast: Fastest, basic accuracy") << std::endl;
     LOG_CERR("                          accurate: Good balance, accounts for kerning and glyph metrics") << std::endl;
     LOG_CERR("                          pixel-perfect: Most accurate, accounts for anti-aliasing") << std::endl;
+    LOG_CERR("  --version:              Print version information and exit") << std::endl;
+    LOG_CERR("  --help, -h:             Show this help message") << std::endl;
     LOG_CERR("  fps:                    Frames per second for output (default: 25)") << std::endl;
     LOG_CERR("") << std::endl;
     LOG_CERR("At least one of --png or --webp must be specified.") << std::endl;
     LOG_CERR("When --stream is used, output_dir can be '-' or any value (ignored).") << std::endl;
+}
+
+void printVersion() {
+    #ifdef VERSION
+    std::cout << "lotio version " << VERSION << std::endl;
+    #else
+    std::cout << "lotio version dev" << std::endl;
+    #endif
 }
 
 int parseArguments(int argc, char* argv[], Arguments& args) {
@@ -81,6 +91,10 @@ int parseArguments(int argc, char* argv[], Arguments& args) {
                 LOG_CERR("Error: --text-measurement-mode requires a value") << std::endl;
                 return 1;
             }
+        } else if (arg == "--version") {
+            args.show_version = true;
+            // Return a special value to indicate version was shown
+            return 3;  // Version shown - should exit successfully
         } else if (arg == "--help" || arg == "-h") {
             printUsage(argv[0]);
             // Return a special value to indicate help was shown
@@ -106,6 +120,12 @@ int parseArguments(int argc, char* argv[], Arguments& args) {
             LOG_CERR("Use --help for usage information.") << std::endl;
             return 1;
         }
+    }
+
+    // Handle version flag early (before validation)
+    if (args.show_version) {
+        printVersion();
+        return 3;  // Version shown - should exit successfully
     }
 
     // Validate arguments

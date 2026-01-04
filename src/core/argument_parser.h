@@ -10,6 +10,7 @@ struct Arguments {
     bool output_webp = false;
     bool stream_mode = false;
     bool debug_mode = false;
+    bool show_version = false;  // --version flag
     std::string input_file;
     std::string output_dir;
     std::string text_config_file;
@@ -24,6 +25,9 @@ int parseArguments(int argc, char* argv[], Arguments& args);
 
 // Print usage/help message
 void printUsage(const char* program_name);
+
+// Print version information
+void printVersion();
 
 #endif // ARGUMENT_PARSER_H
 

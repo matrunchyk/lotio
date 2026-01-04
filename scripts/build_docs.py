@@ -379,10 +379,28 @@ def build_docs():
         # Convert to HTML
         html_content = convert_markdown_to_html(md_content)
         
+        # Get version from environment or git tag
+        version = os.environ.get('VERSION', 'dev')
+        if version == 'dev':
+            # Try to get from git tag
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ['git', 'describe', '--tags', '--match', 'v*.*.*', '--abbrev=0'],
+                    capture_output=True,
+                    text=True,
+                    cwd=project_root
+                )
+                if result.returncode == 0:
+                    version = result.stdout.strip()
+            except:
+                pass
+        
         # Replace template placeholders
         html = template
         html = html.replace("{{TITLE}}", title)
         html = html.replace("{{CONTENT}}", html_content)
+        html = html.replace("{{VERSION}}", version)
         
         # Set active page
         active_classes = {

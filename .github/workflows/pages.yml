@@ -28,6 +28,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: false
+          fetch-depth: 0
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -43,9 +44,6 @@ jobs:
           sudo apt-get install -y \
             python3 \
             git
-
-      - name: Install markdown library
-        run: |
           pip install markdown
 
       - name: Setup Node.js
@@ -61,7 +59,17 @@ jobs:
         run: |
           npm install @matrunchyk/lotio
 
+      - name: Get version for docs
+        id: version
+        run: |
+          # Try to get version from latest tag
+          VERSION=$(git describe --tags --match 'v*.*.*' --abbrev=0 2>/dev/null || echo "dev")
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Using version: $VERSION"
+
       - name: Build documentation
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           chmod +x scripts/build_docs.py
           python3 scripts/build_docs.py

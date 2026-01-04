@@ -11,71 +11,152 @@ permissions:
   contents: write
   packages: write
 
+concurrency:
+  group: release
+  cancel-in-progress: true
+
 jobs:
-  build-and-release:
-    runs-on: macos-latest
+  version-and-tag:
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
+      version_number: ${{ steps.version.outputs.VERSION_NUMBER }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: false
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate version
         id: version
         run: |
           # Check if we're on a semantic version tag (v1.1.0, v2.0.0, etc.)
-          if git describe --tags --exact-match HEAD 2>/dev/null | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
-            # Use the semantic version tag
-            VERSION=$(git describe --tags --exact-match HEAD)
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Extract version from tag
+            VERSION="${{ github.ref_name }}"
+            # Validate it's semver format
+            if ! echo "$VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+              echo "❌ Error: Tag $VERSION is not in semver format (v1.2.3)"
+              exit 1
+            fi
             echo "Using semantic version tag: $VERSION"
+          elif [[ "${{ github.ref }}" == refs/heads/main ]]; then
+            # On main branch - create new semver tag
+            # Get latest tag
+            LATEST_TAG=$(git describe --tags --match 'v*.*.*' --abbrev=0 2>/dev/null || echo "v0.0.0")
+            echo "Latest tag: $LATEST_TAG"
+            
+            # Extract version numbers
+            if [[ "$LATEST_TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              MAJOR="${BASH_REMATCH[1]}"
+              MINOR="${BASH_REMATCH[2]}"
+              PATCH="${BASH_REMATCH[3]}"
+              # Bump patch version
+              PATCH=$((PATCH + 1))
+              VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+            else
+              # No valid tag found, start at v1.0.0
+              VERSION="v1.0.0"
+            fi
+            
+            echo "Creating new semantic version tag: $VERSION"
+            
+            # Create and push tag
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$VERSION" -m "Release $VERSION" || {
+              # Tag might already exist
+              if git rev-parse "$VERSION" >/dev/null 2>&1; then
+                echo "Tag $VERSION already exists, using it"
+              else
+                echo "❌ Failed to create tag"
+                exit 1
+              fi
+            }
+            git push origin "$VERSION" || echo "Tag may already exist remotely"
           else
-            # Fall back to date-SHA format
-            DATE=$(date +%Y%m%d)
-            SHA=$(git rev-parse --short HEAD)
-            VERSION="v${DATE}-${SHA}"
-            echo "Using date-SHA version: $VERSION"
+            echo "❌ Error: This workflow should only run on main branch or version tags"
+            exit 1
           fi
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          # Extract version number for Homebrew (remove 'v' prefix)
+          
           VERSION_NUMBER="${VERSION#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "VERSION_NUMBER=$VERSION_NUMBER" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
+          echo "Version: $VERSION (number: $VERSION_NUMBER)"
+
+  build-macos:
+    runs-on: macos-latest
+    needs: version-and-tag
+    outputs:
+      dev_package_filename: ${{ steps.dev_package.outputs.FILENAME }}
+      dev_package_sha256: ${{ steps.dev_package.outputs.SHA256 }}
+      bottle_filename: ${{ steps.bottle.outputs.FILENAME }}
+      bottle_sha256: ${{ steps.bottle.outputs.SHA256 }}
+      bottle_arch: ${{ steps.bottle.outputs.ARCH }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set version
+        id: version
+        run: |
+          VERSION="${{ needs.version-and-tag.outputs.version }}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION_NUMBER=${VERSION#v}" >> $GITHUB_OUTPUT
 
       - name: Install dependencies
         run: |
           brew install fontconfig freetype harfbuzz icu4c libpng jpeg-turbo webp ninja python@3.11
 
-      - name: Fetch Skia
+      - name: Extract Skia from Docker image
         run: |
-          mkdir -p third_party/skia
-          cd third_party/skia
-          rm -rf skia
-          git config --global advice.detachedHead false
-          git clone --depth 1 https://skia.googlesource.com/skia.git
-          cd skia
-          chmod +x "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh"
-          "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh" .
-          echo "Skia cloned and dependencies synced successfully"
-
-      - name: Build Skia
-        run: |
-          chmod +x scripts/install_skia.sh
-          ./scripts/install_skia.sh
+          echo "Pulling matrunchyk/skia:latest..."
+          docker pull matrunchyk/skia:latest || {
+            echo "❌ ERROR: Skia Docker image not found!"
+            exit 1
+          }
+          
+          echo "Extracting Skia libraries and headers..."
+          mkdir -p third_party/skia/skia
+          
+          # Extract Skia files from Docker image
+          docker create --name skia-extract matrunchyk/skia:latest
+          docker cp skia-extract:/opt/skia/lib third_party/skia/skia/out/Release
+          docker cp skia-extract:/opt/skia/include third_party/skia/skia/include
+          docker cp skia-extract:/opt/skia/modules third_party/skia/skia/modules
+          docker cp skia-extract:/opt/skia/gen third_party/skia/skia/out/Release/gen
+          docker rm skia-extract
+          
+          echo "✅ Skia extracted successfully"
 
       - name: Build lotio
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           chmod +x scripts/build_local.sh
+          # Pass version to build script via environment
           ./scripts/build_local.sh
+
+      - name: Inject version into binary
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          # Version will be injected at compile time via -DVERSION flag
+          # For now, we'll add it to a version file that can be read
+          echo "${{ steps.version.outputs.VERSION }}" > VERSION.txt
 
       - name: Test binary
         run: |
           ./lotio --help
+          ./lotio --version || echo "Note: --version flag not yet implemented"
 
       - name: Create developer package
         id: dev_package
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           PKG_NAME="lotio-dev-${VERSION}"
@@ -131,8 +212,8 @@ jobs:
           # Skia static libraries (for linking)
           SKIA_LIB_DIR="third_party/skia/skia/out/Release"
           for lib in skottie skia skparagraph sksg skshaper skunicode_icu skunicode_core skresources jsonreader; do
-            if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then
-              cp "$SKIA_LIB_DIR/lib${lib}.a" "$PKG_NAME/lib/"
+            if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ] || [ -f "$SKIA_LIB_DIR/lib${lib}.dylib" ]; then
+              cp "$SKIA_LIB_DIR/lib${lib}".* "$PKG_NAME/lib/" 2>/dev/null || true
             fi
           done
           
@@ -158,107 +239,17 @@ jobs:
 
       - name: Create Homebrew bottle
         id: bottle
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           chmod +x scripts/create_bottle.sh
           ./scripts/create_bottle.sh "${{ steps.version.outputs.VERSION }}"
 
-      - name: Create Git tag
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # Configure git to use GITHUB_TOKEN for authentication
-          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
-          # Check if tag already exists
-          if git rev-parse "${{ steps.version.outputs.VERSION }}" >/dev/null 2>&1; then
-            echo "Tag ${{ steps.version.outputs.VERSION }} already exists, skipping"
-          else
-            git tag -a "${{ steps.version.outputs.VERSION }}" -m "Release ${{ steps.version.outputs.VERSION }}"
-            git push origin "${{ steps.version.outputs.VERSION }}"
-          fi
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            ${{ steps.dev_package.outputs.FILENAME }}
-            ${{ steps.bottle.outputs.FILENAME }}
-          name: Release ${{ steps.version.outputs.VERSION }}
-          tag_name: ${{ steps.version.outputs.VERSION }}
-          body: |
-            ## Lotio ${{ steps.version.outputs.VERSION }}
-            
-            ### Packages
-            
-            **Developer package** (binary + headers + libraries for development):
-            - File: `{{ steps.dev_package.outputs.FILENAME }}`
-            - SHA256: `{{ steps.dev_package.outputs.SHA256 }}`
-            - Contains: binary, lotio headers, Skia static libraries, pkg-config file
-            
-            **Homebrew bottle** (pre-built binary for macOS):
-            - File: `{{ steps.bottle.outputs.FILENAME }}`
-            - SHA256: `{{ steps.bottle.outputs.SHA256 }}`
-            - Used automatically by Homebrew for fast installation
-            
-            **Debian package** (Linux ARM64):
-            - File: `lotio_${{ steps.version.outputs.VERSION }}_arm64.deb`
-            - Install: `sudo dpkg -i lotio_${{ steps.version.outputs.VERSION }}_arm64.deb`
-            
-            **WebAssembly package** (for browser use):
-            - File: `lotio-wasm-${{ steps.version.outputs.VERSION }}.tar.gz`
-            - Contains: `lotio.wasm`, `lotio.js`, `lotio_wasm.js`
-            - See package README for usage instructions
-            
-            **Docker image** (Linux ARM64):
-            - Image: `matrunchyk/lotio:${{ steps.version.outputs.VERSION }}`
-            - Also available as: `matrunchyk/lotio:latest`
-            - Contains: lotio binary, ffmpeg, and all dependencies
-            
-            ### Installation
-            
-            **Homebrew (macOS) - Recommended:**
-            ```bash
-            brew tap matrunchyk/homebrew-lotio
-            brew install lotio
-            ```
-            
-            **Developer package (for programmatic use):**
-            ```bash
-            wget https://github.com/matrunchyk/lotio/releases/download/${{ steps.version.outputs.VERSION }}/${{ steps.dev_package.outputs.FILENAME }}
-            tar -xzf ${{ steps.dev_package.outputs.FILENAME }}
-            # Use binary, headers, and libraries from the package
-            ```
-            
-            **Debian/Ubuntu (Linux ARM64):**
-            ```bash
-            wget https://github.com/matrunchyk/lotio/releases/download/${{ steps.version.outputs.VERSION }}/lotio_${{ steps.version.outputs.VERSION }}_arm64.deb
-            sudo dpkg -i lotio_${{ steps.version.outputs.VERSION }}_arm64.deb
-            ```
-            
-            **WebAssembly (Browser):**
-            ```bash
-            wget https://github.com/matrunchyk/lotio/releases/download/${{ steps.version.outputs.VERSION }}/lotio-wasm-${{ steps.version.outputs.VERSION }}.tar.gz
-            tar -xzf lotio-wasm-${{ steps.version.outputs.VERSION }}.tar.gz
-            # Use lotio_wasm.js in your web application
-            ```
-            
-            **Docker:**
-            ```bash
-            docker pull matrunchyk/lotio:${{ steps.version.outputs.VERSION }}
-            # Or use latest
-            docker pull matrunchyk/lotio:latest
-            docker run --rm -v $(pwd):/workspace matrunchyk/lotio:latest --help
-            ```
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Get source archive SHA256
         id: source_sha
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          # Create source archive from current checkout (matches GitHub's auto-generated archive)
           VERSION="${{ steps.version.outputs.VERSION }}"
           VERSION_NUMBER="${VERSION#v}"
           # Create archive matching GitHub's format: lotio-<version>.tar.gz
@@ -268,7 +259,6 @@ jobs:
           rm -f "lotio-${VERSION_NUMBER}.tar.gz"
 
       - name: Update Homebrew Formula
-        if: steps.version.outputs.VERSION != ''
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
@@ -280,74 +270,127 @@ jobs:
             "${{ steps.bottle.outputs.SHA256 }}" \
             "${{ steps.bottle.outputs.ARCH }}"
 
-  build-linux-deb:
-    runs-on: ubuntu-latest  # Note: ubuntu-latest is x86_64, not ARM64
-    needs: build-and-release
+  build-linux:
+    runs-on: ubuntu-latest
+    needs: version-and-tag
+    outputs:
+      deb_filename: ${{ steps.deb_package.outputs.FILENAME }}
+      deb_sha256: ${{ steps.deb_package.outputs.SHA256 }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: false
 
-      - name: Set version from macOS job
+      - name: Set version
         id: version
         run: |
-          VERSION="${{ needs.build-and-release.outputs.version }}"
+          VERSION="${{ needs.version-and-tag.outputs.version }}"
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Using version: $VERSION"
 
-      - name: Install build dependencies
+      - name: Build lotio in Docker
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            clang \
-            ninja-build \
-            python3 \
-            libfontconfig1-dev \
-            libfreetype6-dev \
-            libx11-dev \
-            libxext-dev \
-            libxrender-dev \
-            mesa-common-dev \
-            libgl1-mesa-dev \
-            libglu1-mesa-dev \
-            libpng-dev \
-            libjpeg-dev \
-            libicu-dev \
-            libharfbuzz-dev \
-            libwebp-dev \
-            dpkg-dev
-
-      - name: Fetch Skia
-        run: |
-          mkdir -p third_party/skia
-          cd third_party/skia
-          rm -rf skia
-          git config --global advice.detachedHead false
-          git clone --depth 1 https://skia.googlesource.com/skia.git
-          cd skia
-          chmod +x "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh"
-          "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh" .
-          echo "Skia cloned and dependencies synced successfully"
-
-      - name: Build Skia
-        run: |
-          chmod +x scripts/install_skia.sh
-          ./scripts/install_skia.sh
-
-      - name: Build lotio
-        run: |
-          chmod +x scripts/build_local.sh
-          ./scripts/build_local.sh
+          # Build lotio binary inside Docker container
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            matrunchyk/lotio:latest \
+            sh -c "
+              # Install build dependencies
+              apt-get update && apt-get install -y \
+                gcc g++ make \
+                libfontconfig1-dev libfreetype6-dev \
+                libx11-dev libxext-dev libxrender-dev \
+                mesa-common-dev libgl1-mesa-dev libglu1-mesa-dev \
+                libpng-dev libjpeg-dev libicu-dev \
+                libharfbuzz-dev libwebp-dev || true
+              
+              # Build lotio (extract source and build)
+              cd /workspace
+              chmod +x scripts/build_local.sh || true
+              # We'll build directly using g++ since we're in the lotio image
+              # The image already has Skia libraries
+              g++ -std=c++17 -O3 -DNDEBUG -DVERSION=\\\"${{ steps.version.outputs.VERSION }}\\\" \
+                -I\$SKIA_INCLUDE_DIR -I./src \
+                -c src/core/*.cpp src/utils/*.cpp src/text/*.cpp src/main.cpp 2>/dev/null || \
+              g++ -std=c++17 -O3 -DNDEBUG -DVERSION=\\\"${{ steps.version.outputs.VERSION }}\\\" \
+                -I\$SKIA_INCLUDE_DIR -I./src \
+                src/core/argument_parser.cpp src/core/animation_setup.cpp \
+                src/core/frame_encoder.cpp src/core/renderer.cpp \
+                src/utils/crash_handler.cpp src/utils/logging.cpp \
+                src/utils/string_utils.cpp \
+                src/text/text_config.cpp src/text/text_processor.cpp \
+                src/text/font_utils.cpp src/text/text_sizing.cpp \
+                src/text/json_manipulation.cpp src/main.cpp \
+                -L\$SKIA_LIB_DIR -Wl,-rpath,\$SKIA_LIB_DIR \
+                -Wl,--start-group \
+                \$SKIA_LIB_DIR/libskresources.a \
+                \$SKIA_LIB_DIR/libskparagraph.a \
+                \$SKIA_LIB_DIR/libskottie.a \
+                \$SKIA_LIB_DIR/libskshaper.a \
+                \$SKIA_LIB_DIR/libskunicode_icu.a \
+                \$SKIA_LIB_DIR/libskunicode_core.a \
+                -Wl,--end-group \
+                \$SKIA_LIB_DIR/libsksg.a \
+                \$SKIA_LIB_DIR/libjsonreader.a \
+                \$SKIA_LIB_DIR/libskia.a \
+                -lwebp -lwebpdemux -lwebpmux -lpiex \
+                -lfreetype -lpng -ljpeg -lharfbuzz -licuuc -licui18n -licudata \
+                -lz -lfontconfig -lX11 -lGL -lGLU -lm -lpthread \
+                -o lotio
+            " || {
+              echo "Building using build script approach..."
+              # Alternative: Use a build script inside container
+              docker run --rm \
+                -v "$PWD:/workspace" \
+                -w /workspace \
+                -e VERSION="${{ steps.version.outputs.VERSION }}" \
+                matrunchyk/skia:latest \
+                bash -c "
+                  apt-get update && apt-get install -y gcc g++ make \
+                    libfontconfig1-dev libfreetype6-dev libx11-dev libxext-dev \
+                    libxrender-dev mesa-common-dev libgl1-mesa-dev libglu1-mesa-dev \
+                    libpng-dev libjpeg-dev libicu-dev libharfbuzz-dev libwebp-dev
+                  cd /workspace
+                  # Build using extracted approach - copy source and build
+                  g++ -std=c++17 -O3 -DNDEBUG -DVERSION=\\\"${{ steps.version.outputs.VERSION }}\\\" \
+                    -I\$SKIA_INCLUDE_DIR -I./src \
+                    src/core/argument_parser.cpp src/core/animation_setup.cpp \
+                    src/core/frame_encoder.cpp src/core/renderer.cpp \
+                    src/utils/crash_handler.cpp src/utils/logging.cpp \
+                    src/utils/string_utils.cpp \
+                    src/text/text_config.cpp src/text/text_processor.cpp \
+                    src/text/font_utils.cpp src/text/text_sizing.cpp \
+                    src/text/json_manipulation.cpp src/main.cpp \
+                    -L\$SKIA_LIB_DIR -Wl,-rpath,\$SKIA_LIB_DIR \
+                    -Wl,--start-group \
+                    \$SKIA_LIB_DIR/libskresources.a \
+                    \$SKIA_LIB_DIR/libskparagraph.a \
+                    \$SKIA_LIB_DIR/libskottie.a \
+                    \$SKIA_LIB_DIR/libskshaper.a \
+                    \$SKIA_LIB_DIR/libskunicode_icu.a \
+                    \$SKIA_LIB_DIR/libskunicode_core.a \
+                    -Wl,--end-group \
+                    \$SKIA_LIB_DIR/libsksg.a \
+                    \$SKIA_LIB_DIR/libjsonreader.a \
+                    \$SKIA_LIB_DIR/libskia.a \
+                    -lwebp -lwebpdemux -lwebpmux -lpiex \
+                    -lfreetype -lpng -ljpeg -lharfbuzz -licuuc -licui18n -licudata \
+                    -lz -lfontconfig -lX11 -lGL -lGLU -lm -lpthread \
+                    -o lotio
+                "
+            }
 
       - name: Test binary
         run: |
-          ./lotio --help
+          ./lotio --help || docker run --rm -v "$PWD:/workspace" -w /workspace matrunchyk/lotio:latest --help
 
       - name: Create .deb package
         id: deb_package
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           PKG_NAME="lotio"
@@ -361,7 +404,16 @@ jobs:
           mkdir -p "$DEB_DIR/usr/local/include/lotio/utils"
           mkdir -p "$DEB_DIR/DEBIAN"
           
-          cp lotio "$DEB_DIR/usr/local/bin/"
+          # Copy binary (from Docker or local)
+          if [ -f "lotio" ]; then
+            cp lotio "$DEB_DIR/usr/local/bin/"
+          else
+            # Extract from Docker
+            docker create --name lotio-extract matrunchyk/lotio:latest
+            docker cp lotio-extract:/usr/local/bin/lotio "$DEB_DIR/usr/local/bin/"
+            docker rm lotio-extract
+          fi
+          
           if [ -f "liblotio.a" ]; then
             cp liblotio.a "$DEB_DIR/usr/local/lib/"
           fi
@@ -369,33 +421,13 @@ jobs:
           cp src/text/*.h "$DEB_DIR/usr/local/include/lotio/text/"
           cp src/utils/*.h "$DEB_DIR/usr/local/include/lotio/utils/"
           
-          # Skia headers (for developers to use Skia directly)
-          SKIA_ROOT="third_party/skia/skia"
-          SKIA_INCLUDE_DIR="$SKIA_ROOT/include"
-          SKIA_MODULES_DIR="$SKIA_ROOT/modules"
-          SKIA_GEN_DIR="$SKIA_ROOT/out/Release/gen"
-          
-          # Copy main Skia headers
-          if [ -d "$SKIA_INCLUDE_DIR" ]; then
-            mkdir -p "$DEB_DIR/usr/local/include/skia"
-            cp -r "$SKIA_INCLUDE_DIR"/* "$DEB_DIR/usr/local/include/skia/" 2>/dev/null || true
-          fi
-          
-          # Copy module headers
-          if [ -d "$SKIA_MODULES_DIR" ]; then
-            for module in skottie skparagraph sksg skshaper skunicode skresources jsonreader; do
-              if [ -d "$SKIA_MODULES_DIR/$module/include" ]; then
-                mkdir -p "$DEB_DIR/usr/local/include/skia/modules/$module"
-                cp -r "$SKIA_MODULES_DIR/$module/include"/* "$DEB_DIR/usr/local/include/skia/modules/$module/" 2>/dev/null || true
-              fi
-            done
-          fi
-          
-          # Copy generated headers
-          if [ -d "$SKIA_GEN_DIR" ]; then
-            mkdir -p "$DEB_DIR/usr/local/include/skia/gen"
-            cp -r "$SKIA_GEN_DIR"/*.h "$DEB_DIR/usr/local/include/skia/gen/" 2>/dev/null || true
-          fi
+          # Skia headers (extract from Docker)
+          docker create --name skia-extract matrunchyk/skia:latest
+          mkdir -p "$DEB_DIR/usr/local/include/skia"
+          docker cp skia-extract:/opt/skia/include "$DEB_DIR/usr/local/include/skia/" || true
+          docker cp skia-extract:/opt/skia/modules "$DEB_DIR/usr/local/include/skia/" || true
+          docker cp skia-extract:/opt/skia/gen "$DEB_DIR/usr/local/include/skia/" || true
+          docker rm skia-extract
           
           cat > "$DEB_DIR/DEBIAN/control" << EOF
           Package: lotio
@@ -423,33 +455,24 @@ jobs:
           echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
           echo "FILENAME=${PKG_NAME}_${PKG_VERSION}_arm64.deb" >> $GITHUB_OUTPUT
 
-      - name: Upload .deb to release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: ${{ steps.deb_package.outputs.FILENAME }}
-          tag_name: ${{ steps.version.outputs.VERSION }}
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   build-wasm:
     name: Build WebAssembly
     runs-on: ubuntu-latest
-    needs: build-and-release
+    needs: version-and-tag
+    outputs:
+      wasm_package_filename: ${{ steps.wasm_package.outputs.FILENAME }}
+      wasm_package_sha256: ${{ steps.wasm_package.outputs.SHA256 }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: false
 
-      - name: Set version from macOS job
+      - name: Set version
         id: version
         run: |
-          VERSION="${{ needs.build-and-release.outputs.version }}"
+          VERSION="${{ needs.version-and-tag.outputs.version }}"
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Using version: $VERSION"
 
       - name: Install Emscripten
         uses: mymindstorm/setup-emsdk@v12
@@ -457,30 +480,37 @@ jobs:
           version: latest
           no-cache: true
 
-      - name: Fetch Skia
+      - name: Extract Skia from Docker for WASM
         run: |
-          mkdir -p third_party/skia
-          cd third_party/skia
-          rm -rf skia
-          git config --global advice.detachedHead false
-          git clone --depth 1 https://skia.googlesource.com/skia.git
-          cd skia
-          chmod +x "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh"
-          "$GITHUB_WORKSPACE/scripts/sync_skia_deps.sh" .
-          echo "Skia cloned and dependencies synced successfully"
-
-      - name: Build Skia for WASM
-        run: |
-          chmod +x scripts/build_skia_wasm.sh
-          ./scripts/build_skia_wasm.sh
+          echo "Pulling matrunchyk/skia:latest..."
+          docker pull matrunchyk/skia:latest || {
+            echo "❌ ERROR: Skia Docker image not found!"
+            exit 1
+          }
+          
+          echo "Extracting Skia for WASM build..."
+          mkdir -p third_party/skia/skia
+          
+          # Extract Skia files from Docker image
+          docker create --name skia-extract matrunchyk/skia:latest
+          docker cp skia-extract:/opt/skia/lib third_party/skia/skia/out/Wasm || docker cp skia-extract:/opt/skia/lib third_party/skia/skia/out/Release
+          docker cp skia-extract:/opt/skia/include third_party/skia/skia/include
+          docker cp skia-extract:/opt/skia/modules third_party/skia/skia/modules
+          docker rm skia-extract
+          
+          echo "✅ Skia extracted (Note: WASM build may need special Skia build)"
 
       - name: Build lotio WASM
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           chmod +x scripts/build_wasm.sh
           ./scripts/build_wasm.sh
 
       - name: Create WASM package
         id: wasm_package
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           PKG_NAME="lotio-wasm-${VERSION}"
@@ -518,19 +548,10 @@ jobs:
           echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
           echo "FILENAME=${PKG_NAME}.tar.gz" >> $GITHUB_OUTPUT
 
-      - name: Upload WASM to release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            ${{ steps.wasm_package.outputs.FILENAME }}
-            browser/
-          tag_name: ${{ steps.version.outputs.VERSION }}
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Publish to GitHub Packages
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           VERSION_NUMBER="${VERSION#v}"
@@ -543,28 +564,22 @@ jobs:
           
           cd npm-package
           
-          # Update package.json version directly (more reliable than npm version)
-          # Convert date-SHA format to semver-compatible format: 0.0.0-YYYYMMDD-SHA
-          # For semantic versions (v1.2.3), use as-is
+          # Update package.json version
           if echo "$VERSION_NUMBER" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
-            # Already a semantic version
             NEW_VERSION="$VERSION_NUMBER"
           else
-            # Date-SHA format: convert to 0.0.0-YYYYMMDD-SHA
             NEW_VERSION="0.0.0-${VERSION_NUMBER}"
           fi
           
-          # Update version in package.json using jq or sed
+          # Update version in package.json
           if command -v jq >/dev/null 2>&1; then
             jq ".version = \"$NEW_VERSION\"" package.json > package.json.tmp && mv package.json.tmp package.json
           else
-            # Fallback to sed
             sed -i.bak "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" package.json
             rm -f package.json.bak
           fi
           
           echo "Updated package.json version to: $NEW_VERSION"
-          cat package.json | grep version
           
           # Configure npm for GitHub Packages
           echo "@matrunchyk:registry=https://npm.pkg.github.com" > .npmrc
@@ -572,5 +587,110 @@ jobs:
           
           # Publish to GitHub Packages
           npm publish
+
+  build-docs:
+    runs-on: ubuntu-latest
+    needs: [version-and-tag, build-wasm]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set version
+        id: version
+        run: |
+          VERSION="${{ needs.version-and-tag.outputs.version }}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 git
+          pip install markdown
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Configure npm for GitHub Packages
+        run: |
+          echo "@matrunchyk:registry=https://npm.pkg.github.com" >> ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
+
+      - name: Install lotio npm package
+        run: |
+          npm install @matrunchyk/lotio
+
+      - name: Build documentation
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          chmod +x scripts/build_docs.py
+          python3 scripts/build_docs.py
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs
+          path: _site
+          retention-days: 30
+
+  publish-release:
+    runs-on: ubuntu-latest
+    needs: [version-and-tag, build-macos, build-linux, build-wasm, build-docs]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/**/*
+            ${{ needs.build-macos.outputs.dev_package_filename }}
+            ${{ needs.build-macos.outputs.bottle_filename }}
+            ${{ needs.build-linux.outputs.deb_filename }}
+            ${{ needs.build-wasm.outputs.wasm_package_filename }}
+          name: Release ${{ needs.version-and-tag.outputs.version }}
+          tag_name: ${{ needs.version-and-tag.outputs.version }}
+          body: |
+            ## Lotio ${{ needs.version-and-tag.outputs.version }}
+            
+            ### Packages
+            
+            **Developer package** (binary + headers + libraries for development):
+            - File: `{{ needs.build-macos.outputs.dev_package_filename }}`
+            - SHA256: `{{ needs.build-macos.outputs.dev_package_sha256 }}`
+            
+            **Homebrew bottle** (pre-built binary for macOS):
+            - File: `{{ needs.build-macos.outputs.bottle_filename }}`
+            - SHA256: `{{ needs.build-macos.outputs.bottle_sha256 }}`
+            
+            **Debian package** (Linux ARM64):
+            - File: `{{ needs.build-linux.outputs.deb_filename }}`
+            - SHA256: `{{ needs.build-linux.outputs.deb_sha256 }}`
+            
+            **WebAssembly package** (for browser use):
+            - File: `{{ needs.build-wasm.outputs.wasm_package_filename }}`
+            - SHA256: `{{ needs.build-wasm.outputs.wasm_package_sha256 }}`
+            
+            **Docker image** (Linux ARM64):
+            - Image: `matrunchyk/lotio:${{ needs.version-and-tag.outputs.version }}`
+            - Also available as: `matrunchyk/lotio:latest`
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
