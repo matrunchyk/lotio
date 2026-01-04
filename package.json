@@ -31,7 +31,8 @@
   "author": "matrunchyk",
   "license": "MIT",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://npm.pkg.github.com",
+    "access": "public"
   },
   "scripts": {
     "docs:build": "python3 scripts/build_docs.py",
