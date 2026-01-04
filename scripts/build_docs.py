@@ -408,11 +408,32 @@ def build_docs():
     
     # Copy assets
     print("Copying assets...")
-    for asset_dir in ["browser", "examples/samples", "examples/fonts"]:
+    import shutil
+    
+    # Copy browser files from npm package
+    npm_browser = project_root / "node_modules" / "@matrunchyk" / "lotio" / "browser"
+    local_browser = build_dir / "browser"
+    if npm_browser.exists():
+        if local_browser.exists():
+            shutil.rmtree(local_browser)
+        shutil.copytree(npm_browser, local_browser)
+        print(f"Copied: browser (from npm package)")
+    else:
+        # Fallback to local browser directory if npm package not found
+        local_browser_src = project_root / "browser"
+        if local_browser_src.exists():
+            if local_browser.exists():
+                shutil.rmtree(local_browser)
+            shutil.copytree(local_browser_src, local_browser)
+            print(f"Copied: browser (from local directory)")
+        else:
+            print(f"Warning: browser directory not found in npm package or locally")
+    
+    # Copy examples
+    for asset_dir in ["examples/samples", "examples/fonts"]:
         src = project_root / asset_dir
         dst = build_dir / Path(asset_dir).name
         if src.exists():
-            import shutil
             if dst.exists():
                 shutil.rmtree(dst)
             shutil.copytree(src, dst)
