@@ -1,0 +1,76 @@
+# Multi-stage Dockerfile for Skia library
+# Target: Linux ARM64
+# This image contains the built Skia library and development files
+
+########################################################################################
+# Stage 1: Builder - Compile Skia with all dependencies
+FROM ubuntu:22.04 AS skia-builder
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TARGET_ARCH=arm64
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3 \
+    python3-pip \
+    ninja-build \
+    git \
+    curl \
+    clang \
+    lld \
+    pkg-config \
+    libfontconfig1-dev \
+    libfreetype6-dev \
+    libx11-dev \
+    libxext-dev \
+    libxrender-dev \
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libharfbuzz-dev \
+    libwebp-dev \
+    fontconfig \
+    && rm -rf /var/lib/apt/lists/*
+
+# Disable Git detached HEAD advice to suppress warnings during build
+RUN git config --global advice.detachedHead false
+
+# Set up Skia build directory
+WORKDIR /skia-build
+
+# Fetch Skia deps (clones Skia to /skia-build/skia)
+COPY scripts/fetch_skia_deps.sh /tmp/fetch_skia_deps.sh
+RUN chmod +x /tmp/fetch_skia_deps.sh && /tmp/fetch_skia_deps.sh
+
+# Build Skia directly
+RUN echo "[BUILD] Building Skia..." && \
+    cd /skia-build/skia && \
+    python3 bin/fetch-gn && \
+    ./bin/gn gen out/Release --args='target_cpu="arm64" is_official_build=true is_debug=false skia_enable_skottie=true skia_enable_fontmgr_fontconfig=true skia_enable_fontmgr_custom_directory=true skia_use_freetype=true skia_use_libpng_encode=true skia_use_libpng_decode=true skia_use_libwebp_decode=true skia_use_wuffs=true skia_enable_pdf=false' && \
+    ninja -C out/Release && \
+    echo "[BUILD] Skia built successfully"
+
+########################################################################################
+# Stage 2: Runtime - Minimal image with only necessary files
+FROM ubuntu:22.04
+
+# Copy only necessary files from builder
+COPY --from=skia-builder /skia-build/skia/out/Release /opt/skia/lib
+COPY --from=skia-builder /skia-build/skia/include /opt/skia/include
+COPY --from=skia-builder /skia-build/skia/modules /opt/skia/modules
+COPY --from=skia-builder /skia-build/skia/src /opt/skia/src
+COPY --from=skia-builder /skia-build/skia/out/Release/gen /opt/skia/gen
+
+# Set environment variables for consumers
+ENV SKIA_LIB_DIR=/opt/skia/lib
+ENV SKIA_INCLUDE_DIR=/opt/skia/include
+ENV SKIA_MODULES_DIR=/opt/skia/modules
+ENV SKIA_SRC_DIR=/opt/skia/src
+ENV SKIA_GEN_DIR=/opt/skia/gen
+ENV LD_LIBRARY_PATH=/opt/skia/lib:${LD_LIBRARY_PATH}
+
+WORKDIR /workspace
+

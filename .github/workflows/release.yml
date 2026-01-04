@@ -604,18 +604,29 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
+      - name: Pull base images
+        run: |
+          echo "Pulling base images from Docker Hub..."
+          docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/skia:latest || {
+            echo "⚠️ Warning: Skia base image not found, will build from scratch"
+          }
+          docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/lotio:latest || {
+            echo "⚠️ Warning: Lotio base image not found, will build from scratch"
+          }
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
+          file: ./Dockerfile.lotio-ffmpeg
           platforms: linux/arm64
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/lotio:${{ steps.version.outputs.VERSION_NUMBER }}
             ${{ secrets.DOCKER_HUB_USERNAME }}/lotio:${{ steps.version.outputs.VERSION }}
             ${{ secrets.DOCKER_HUB_USERNAME }}/lotio:latest
-          # Try to use cache from previous builds (if available)
-          # Note: cache-to removed to avoid disk space issues on GitHub runners
-          # The build cache is very large (Skia + FFmpeg) and exceeds runner disk space
-          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/lotio:latest
+          # Use cache from all base images for faster builds
+          cache-from: |
+            type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/skia:latest
+            type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/lotio:latest
+            type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/lotio-ffmpeg:latest

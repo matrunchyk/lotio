@@ -1,0 +1,115 @@
+# Multi-stage Dockerfile for lotio with ffmpeg
+# Target: Linux ARM64
+# This image contains lotio binary + ffmpeg built on top of the lotio image
+
+########################################################################################
+# Stage 1: FFmpeg Builder - Build ffmpeg from source
+FROM ubuntu:22.04 AS ffmpeg-builder
+
+RUN echo "[BUILD] Building ffmpeg from source on Ubuntu..." && \
+    apt-get update && \
+    apt-get install -y \
+    gcc \
+    g++ \
+    make \
+    nasm \
+    yasm \
+    git \
+    curl \
+    tar \
+    cmake \
+    pkg-config \
+    libpng-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build x264
+WORKDIR /build
+RUN echo "[BUILD] Building x264..." && \
+    git clone --depth 1 https://code.videolan.org/videolan/x264.git && \
+    cd x264 && \
+    ./configure --prefix=/opt/ffmpeg --enable-shared --enable-pic && \
+    make -j$(nproc) && \
+    make install && \
+    echo "[BUILD] x264 built"
+
+# Build x265 (disable unsupported ARM optimizations)
+RUN echo "[BUILD] Building x265..." && \
+    git clone --depth 1 https://bitbucket.org/multicoreware/x265_git.git && \
+    cd x265_git && \
+    mkdir -p build/linux && \
+    cd build/linux && \
+    cmake -G "Unix Makefiles" \
+    -DCMAKE_INSTALL_PREFIX=/opt/ffmpeg \
+    -DENABLE_SHARED=ON \
+    -DENABLE_SVE2=OFF \
+    -DENABLE_SVE2_BITPERM=OFF \
+    ../../source && \
+    make -j$(nproc) && \
+    make install && \
+    echo "[BUILD] x265 built" && \
+    echo "[BUILD] Creating x265 pkg-config file..." && \
+    mkdir -p /opt/ffmpeg/lib/pkgconfig && \
+    echo 'prefix=/opt/ffmpeg' > /opt/ffmpeg/lib/pkgconfig/x265.pc && \
+    echo 'exec_prefix=${prefix}' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
+    echo 'libdir=${exec_prefix}/lib' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
+    echo 'includedir=${prefix}/include' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
+    echo '' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
+    echo 'Name: x265' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
+    echo 'Description: H.265/HEVC video encoder' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
+    echo 'Version: 3.5' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
+    echo 'Libs: -L${libdir} -lx265' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
+    echo 'Libs.private: -lstdc++ -lm -ldl' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
+    echo 'Cflags: -I${includedir}' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
+    echo "[BUILD] x265 pkg-config file created"
+
+# Build ffmpeg with ProRes support
+WORKDIR /ffmpeg-build
+RUN echo "[BUILD] Downloading ffmpeg source..." && \
+    curl -L https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n7.1.2.tar.gz | tar -xz && \
+    cd FFmpeg-* && \
+    echo "[BUILD] Configuring ffmpeg for Ubuntu (ProRes support built-in)..." && \
+    PKG_CONFIG_PATH=/opt/ffmpeg/lib/pkgconfig ./configure \
+    --prefix=/opt/ffmpeg \
+    --enable-gpl \
+    --enable-version3 \
+    --enable-libx264 \
+    --enable-decoder=png \
+    --enable-encoder=png \
+    --enable-demuxer=image2 \
+    --extra-cflags="-I/opt/ffmpeg/include -O3 -march=native" \
+    --extra-ldflags="-L/opt/ffmpeg/lib -Wl,-rpath,/opt/ffmpeg/lib" \
+    --enable-shared \
+    --disable-static \
+    --disable-debug \
+    --enable-optimizations \
+    && echo "[BUILD] Building ffmpeg (this may take a while)..." && \
+    make -j$(nproc) && \
+    make install && \
+    echo "[BUILD] ffmpeg built successfully" && \
+    echo "[BUILD] Verifying ProRes codec support..." && \
+    /opt/ffmpeg/bin/ffmpeg -codecs | grep -i prores && \
+    echo "[BUILD] ProRes codec verified"
+
+########################################################################################
+# Stage 2: Runtime - Final image with lotio + ffmpeg
+FROM matrunchyk/lotio:latest
+
+# Copy ffmpeg and all its libraries from builder
+COPY --from=ffmpeg-builder /opt/ffmpeg /opt/ffmpeg
+
+ENV PATH="/opt/ffmpeg/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/ffmpeg/lib:${LD_LIBRARY_PATH}"
+
+RUN echo "[BUILD] Verifying ffmpeg..." && \
+    /opt/ffmpeg/bin/ffmpeg -version && \
+    echo "[BUILD] ffmpeg verified"
+
+# Copy entrypoint script
+COPY scripts/render_entrypoint.sh /usr/local/bin/render_entrypoint.sh
+RUN chmod +x /usr/local/bin/render_entrypoint.sh
+
+WORKDIR /workspace
+
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/render_entrypoint.sh"]
+
