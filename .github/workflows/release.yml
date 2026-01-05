@@ -76,7 +76,7 @@ jobs:
                 exit 1
               fi
             }
-            git push origin "$VERSION" || echo "Tag may already exist remotely"
+            git push origin "$VERSION"
           else
             echo "❌ Error: This workflow should only run on main branch or version tags"
             exit 1
@@ -124,7 +124,7 @@ jobs:
       - name: Test binary
         run: |
           ./lotio --help
-          ./lotio --version || echo "Note: --version flag not yet implemented"
+          ./lotio --version
 
       - name: Create developer package
         id: dev_package
@@ -272,6 +272,7 @@ jobs:
 
       - name: Build and push lotio image (multi-platform)
         uses: docker/build-push-action@v5
+        id: build-lotio
         with:
           context: .
           file: ./Dockerfile.lotio
@@ -291,6 +292,7 @@ jobs:
 
       - name: Build and push lotio-ffmpeg image (multi-platform)
         uses: docker/build-push-action@v5
+        id: build-lotio-ffmpeg
         with:
           context: .
           file: ./Dockerfile.lotio-ffmpeg
@@ -310,6 +312,7 @@ jobs:
             BUILDKIT_INLINE_CACHE=1
 
       - name: Verify multi-platform manifests
+        if: steps.build-lotio.outcome == 'success' && steps.build-lotio-ffmpeg.outcome == 'success'
         run: |
           echo "Verifying multi-platform manifests..."
           docker buildx imagetools inspect matrunchyk/lotio:latest
@@ -365,13 +368,13 @@ jobs:
           echo "Extracting binary from Docker image matrunchyk/lotio:${VERSION} (platform: linux/${ARCH})..."
           docker create --name lotio-extract --platform linux/${ARCH} "matrunchyk/lotio:${VERSION}"
           docker cp lotio-extract:/usr/local/bin/lotio "$DEB_DIR/usr/local/bin/"
-          docker cp lotio-extract:/usr/local/lib/liblotio.a "$DEB_DIR/usr/local/lib/" 2>/dev/null || echo "liblotio.a not found in image (optional)"
+          docker cp lotio-extract:/usr/local/lib/liblotio.a "$DEB_DIR/usr/local/lib/" 2>/dev/null
           
           # Extract Skia headers from Docker image
           echo "Extracting Skia headers from Docker image..."
-          docker cp lotio-extract:/opt/skia/include "$DEB_DIR/usr/local/include/skia" 2>/dev/null || echo "Skia headers not found (optional)"
-          docker cp lotio-extract:/opt/skia/modules "$DEB_DIR/usr/local/include/skia/" 2>/dev/null || true
-          docker cp lotio-extract:/opt/skia/gen "$DEB_DIR/usr/local/include/skia/" 2>/dev/null || true
+          docker cp lotio-extract:/opt/skia/include "$DEB_DIR/usr/local/include/skia" 2>/dev/null
+          docker cp lotio-extract:/opt/skia/modules "$DEB_DIR/usr/local/include/skia/" 2>/dev/null
+          docker cp lotio-extract:/opt/skia/gen "$DEB_DIR/usr/local/include/skia/" 2>/dev/null
           
           docker rm lotio-extract
           
@@ -651,7 +654,7 @@ jobs:
         run: |
           docker pull matrunchyk/lotio:${{ steps.version.outputs.VERSION }}
           docker run --rm matrunchyk/lotio:${{ steps.version.outputs.VERSION }} --help
-          docker run --rm matrunchyk/lotio:${{ steps.version.outputs.VERSION }} --version || echo "Note: --version may not be implemented"
+          docker run --rm matrunchyk/lotio:${{ steps.version.outputs.VERSION }} --version
           
           # Test basic functionality
           echo '{"v":"5.5.2","fr":30,"w":100,"h":100,"ip":0,"op":30,"layers":[]}' > /tmp/test.json
@@ -688,9 +691,35 @@ jobs:
       - name: Tap and install
         run: |
           brew tap matrunchyk/lotio
+          
+          # Wait a bit for the formula to be available (Homebrew tap updates can take a moment)
+          echo "Waiting for formula to be available..."
+          for i in {1..10}; do
+            if brew info lotio >/dev/null 2>&1; then
+              echo "Formula found!"
+              break
+            fi
+            echo "Attempt $i/10: Formula not yet available, waiting 5 seconds..."
+            sleep 5
+          done
+          
+          # Verify formula exists before installing
+          if ! brew info lotio >/dev/null 2>&1; then
+            echo "❌ Error: Formula 'lotio' not found in tap after waiting"
+            echo "Available formulas in tap:"
+            brew tap-info matrunchyk/lotio
+            exit 1
+          fi
+          
           brew install lotio
           lotio --help
-          lotio --version || echo "Note: --version may not be implemented"
+          lotio --version
+          
+          # Test basic functionality
+          echo '{"v":"5.5.2","fr":30,"w":100,"h":100,"ip":0,"op":30,"layers":[]}' > /tmp/test.json
+          mkdir -p /tmp/output
+          lotio /tmp/test.json /tmp/output 30
+          echo "✅ Homebrew package tests passed"
 
   publish-release:
     runs-on: ubuntu-latest
