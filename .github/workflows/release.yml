@@ -371,10 +371,7 @@ jobs:
           
           # Extract binary and library from Docker image (specify platform for extraction)
           echo "Extracting binary from Docker image matrunchyk/lotio:${VERSION} (platform: linux/${ARCH})..."
-          docker create --name lotio-extract --platform linux/${ARCH} "matrunchyk/lotio:${VERSION}" || {
-            echo "❌ Failed to create container"
-            exit 1
-          }
+          docker create --name lotio-extract --platform linux/${ARCH} "matrunchyk/lotio:${VERSION}"
           
           # Verify files exist in container before extraction
           echo "Verifying files exist in Docker image..."
@@ -382,51 +379,32 @@ jobs:
             echo '=== /usr/local/bin ==='
             ls -la /usr/local/bin/
             echo '=== /usr/local/lib ==='
-            ls -la /usr/local/lib/ || exit 1
+            ls -la /usr/local/lib/
             echo '=== /opt/skia ==='
-            ls -la /opt/skia/ || exit 1
-            test -f /usr/local/bin/lotio || exit 1
-            test -f /usr/local/lib/liblotio.a || exit 1
-            test -d /opt/skia/include || exit 1
-            test -d /opt/skia/modules || exit 1
-          " || {
-            echo "❌ Required files missing in Docker image"
-            docker rm lotio-extract
-            exit 1
-          }
+            ls -la /opt/skia/
+            test -f /usr/local/bin/lotio
+            test -f /usr/local/lib/liblotio.a
+            test -d /opt/skia/include
+            test -d /opt/skia/modules
+          "
           
           # Copy binary
-          docker cp lotio-extract:/usr/local/bin/lotio "$DEB_DIR/usr/local/bin/" || {
-            echo "❌ Failed to copy binary from container"
-            docker rm lotio-extract
-            exit 1
-          }
+          docker cp lotio-extract:/usr/local/bin/lotio "$DEB_DIR/usr/local/bin/"
           
           # Copy library
-          docker cp lotio-extract:/usr/local/lib/liblotio.a "$DEB_DIR/usr/local/lib/" || {
-            echo "❌ Failed to copy liblotio.a from container"
-            docker rm lotio-extract
-            exit 1
-          }
+          docker cp lotio-extract:/usr/local/lib/liblotio.a "$DEB_DIR/usr/local/lib/"
           
           # Extract Skia headers
           echo "Extracting Skia headers from Docker image..."
-          docker cp lotio-extract:/opt/skia/include "$DEB_DIR/usr/local/include/skia" || {
-            echo "❌ Failed to copy Skia include directory"
-            docker rm lotio-extract
-            exit 1
-          }
-          
-          docker cp lotio-extract:/opt/skia/modules "$DEB_DIR/usr/local/include/skia/" || {
-            echo "❌ Failed to copy Skia modules directory"
-            docker rm lotio-extract
-            exit 1
-          }
+          docker cp lotio-extract:/opt/skia/include "$DEB_DIR/usr/local/include/skia"
+          docker cp lotio-extract:/opt/skia/modules "$DEB_DIR/usr/local/include/skia/"
           
           # Skia gen directory - check if it exists before copying
-          docker run --rm --platform linux/${ARCH} "matrunchyk/lotio:${VERSION}" test -d /opt/skia/gen && \
-            docker cp lotio-extract:/opt/skia/gen "$DEB_DIR/usr/local/include/skia/" || \
+          if docker run --rm --platform linux/${ARCH} --entrypoint sh "matrunchyk/lotio:${VERSION}" -c "test -d /opt/skia/gen"; then
+            docker cp lotio-extract:/opt/skia/gen "$DEB_DIR/usr/local/include/skia/"
+          else
             echo "Note: Skia gen directory not present (this is normal for some build configurations)"
+          fi
           
           docker rm lotio-extract
           
