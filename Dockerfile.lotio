@@ -42,7 +42,7 @@ RUN mkdir -p /tmp/skia_include/skia && \
 # Use -I/opt/skia (not /opt/skia/include) to support #include "include/core/..."
 # Use -I/tmp/skia_include to support #include <skia/core/...>
 RUN ACTUAL_VERSION=$(cat /tmp/version.txt) && \
-    VERSION_DEFINE=$(printf '-DVERSION="%s"' "${ACTUAL_VERSION}") && \
+    VERSION_DEFINE="-DVERSION=\"${ACTUAL_VERSION}\"" && \
     CXXFLAGS="-std=c++17 -O3 -DNDEBUG $VERSION_DEFINE" && \
     INCLUDES="-I/opt/skia -I/opt/skia/include -I/opt/skia/modules -I/opt/skia/gen -I/tmp/skia_include -I./src" && \
     echo "[BUILD] Compiling library source files with VERSION: ${ACTUAL_VERSION}..." && \
@@ -85,7 +85,7 @@ RUN echo "[BUILD] Creating liblotio.a..." && \
 
 # Compile main.cpp
 RUN ACTUAL_VERSION=$(cat /tmp/version.txt) && \
-    VERSION_DEFINE=$(printf '-DVERSION="%s"' "${ACTUAL_VERSION}") && \
+    VERSION_DEFINE="-DVERSION=\"${ACTUAL_VERSION}\"" && \
     CXXFLAGS="-std=c++17 -O3 -DNDEBUG $VERSION_DEFINE" && \
     INCLUDES="-I/opt/skia -I/opt/skia/include -I/opt/skia/modules -I/opt/skia/gen -I/tmp/skia_include -I./src" && \
     echo "[BUILD] Compiling main entry point with VERSION: ${ACTUAL_VERSION}..." && \
