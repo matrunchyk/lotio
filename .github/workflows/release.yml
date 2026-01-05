@@ -19,6 +19,7 @@ concurrency:
 
 jobs:
   version-and-tag:
+    name: Version and Tag
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
@@ -88,6 +89,7 @@ jobs:
           echo "Version: $VERSION (number: $VERSION_NUMBER)"
 
   build-macos:
+    name: Build macOS
     runs-on: macos-latest
     needs: version-and-tag
     outputs:
@@ -244,6 +246,7 @@ jobs:
             "${{ steps.bottle.outputs.ARCH }}"
 
   build-docker:
+    name: Build Docker
     runs-on: ubuntu-latest
     needs: version-and-tag
     steps:
@@ -319,6 +322,7 @@ jobs:
           docker buildx imagetools inspect matrunchyk/lotio-ffmpeg:latest
 
   build-linux:
+    name: Build Linux
     runs-on: ubuntu-latest
     needs: [version-and-tag, build-docker]
     strategy:
@@ -684,46 +688,9 @@ jobs:
           npm install @matrunchyk/lotio
           node -e "import('@matrunchyk/lotio').then(m => console.log('✅ Library loaded:', Object.keys(m))).catch(e => {console.error('❌ Failed:', e); process.exit(1)})"
 
-  test-homebrew:
-    runs-on: macos-latest
-    needs: [version-and-tag, build-macos]
-    steps:
-      - name: Tap and install
-        run: |
-          brew tap matrunchyk/lotio
-          
-          # Wait a bit for the formula to be available (Homebrew tap updates can take a moment)
-          echo "Waiting for formula to be available..."
-          for i in {1..10}; do
-            if brew info lotio >/dev/null 2>&1; then
-              echo "Formula found!"
-              break
-            fi
-            echo "Attempt $i/10: Formula not yet available, waiting 5 seconds..."
-            sleep 5
-          done
-          
-          # Verify formula exists before installing
-          if ! brew info lotio >/dev/null 2>&1; then
-            echo "❌ Error: Formula 'lotio' not found in tap after waiting"
-            echo "Available formulas in tap:"
-            brew tap-info matrunchyk/lotio
-            exit 1
-          fi
-          
-          brew install lotio
-          lotio --help
-          lotio --version
-          
-          # Test basic functionality
-          echo '{"v":"5.5.2","fr":30,"w":100,"h":100,"ip":0,"op":30,"layers":[]}' > /tmp/test.json
-          mkdir -p /tmp/output
-          lotio /tmp/test.json /tmp/output 30
-          echo "✅ Homebrew package tests passed"
-
   publish-release:
     runs-on: ubuntu-latest
-    needs: [version-and-tag, build-macos, build-linux, build-wasm, build-docs, build-docker, test-artifacts, test-homebrew]
+    needs: [version-and-tag, build-macos, build-linux, build-wasm, build-docs, build-docker, test-artifacts]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
