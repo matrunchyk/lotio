@@ -21,7 +21,7 @@ The package is public and does not require authentication.
 ## Quick Start
 
 ```javascript
-import Lotio, { FrameType, State, TextMeasurementMode } from '@matrunchyk/lotio';
+import Lotio, { State, TextMeasurementMode } from '@matrunchyk/lotio';
 
 // Load font
 const fontResponse = await fetch('./fonts/OpenSans-Bold.ttf');
@@ -36,7 +36,6 @@ const animation = new Lotio({
   fonts: [{ name: 'OpenSans-Bold', data: fontData }],
   fps: 30,
   animation: animationData,
-  type: FrameType.PNG,
   wasmPath: './lotio.wasm'
 });
 
@@ -105,7 +104,7 @@ animation
 
   <script type="module">
   (async () => {
-    let Lotio, FrameType, State, TextMeasurementMode;
+    let Lotio, State, TextMeasurementMode;
     
     const statusDiv = document.getElementById('status');
     
@@ -121,11 +120,10 @@ animation
       }
       
       Lotio = module.default;
-      FrameType = module.FrameType;
       State = module.State;
       TextMeasurementMode = module.TextMeasurementMode;
       
-      console.log('Lotio module loaded successfully', { Lotio, FrameType, State });
+      console.log('Lotio module loaded successfully', { Lotio, State });
       statusDiv.className = 'status loading';
       statusDiv.textContent = 'Lotio module loaded. Initializing demo...';
     } catch (error) {
@@ -243,7 +241,6 @@ animation
         textConfig: textConfig,
         textPadding: textPadding,
         textMeasurementMode: textMeasurementMode,
-        type: FrameType.PNG,
         wasmPath: './browser/lotio.wasm'
       });
       
@@ -415,7 +412,6 @@ new Lotio(options)
 - `textConfig` (Object|string, optional): Text configuration JSON
 - `textPadding` (number, optional): Text padding factor (0.0-1.0, default: 0.97 = 3% padding)
 - `textMeasurementMode` (string, optional): Text measurement mode: `'fast'` | `'accurate'` | `'pixel-perfect'` (default: `'accurate'`)
-- `type` (string): Output type: `'png'` or `'webp'` (default: `'png'`)
 - `wasmPath` (string): Path to `lotio.wasm` file (default: `'./lotio.wasm'`)
 
 #### Text Padding
@@ -445,7 +441,6 @@ The `textMeasurementMode` option controls the accuracy vs performance trade-off 
 - `setFps(fps)` - Set frames per second
 - `setAnimation(animation)` - Set animation data
 - `setTextConfig(textConfig)` - Set text configuration
-- `setType(type)` - Set output type (`FrameType.PNG` or `FrameType.WEBP`)
 - `setFonts(fonts)` - Set fonts array
 
 #### Getters
@@ -456,7 +451,6 @@ The `textMeasurementMode` option controls the accuracy vs performance trade-off 
 - `getFps()` - Get current FPS
 - `getAnimation()` - Get animation data
 - `getTextConfig()` - Get text configuration
-- `getType()` - Get output type
 - `getState()` - Get current state (`'stopped'`, `'paused'`, `'loaded'`, `'error'`, `'playing'`)
 - `getCurrentFrame()` - Get current frame data
 - `getAnimationInfo()` - Get animation metadata (width, height, duration, fps)
@@ -496,8 +490,6 @@ animation
 
 ### Constants
 
-- `FrameType.PNG` - PNG output type
-- `FrameType.WEBP` - WebP output type
 - `State.STOPPED` - Animation is stopped
 - `State.PAUSED` - Animation is paused
 - `State.LOADED` - Animation is loaded

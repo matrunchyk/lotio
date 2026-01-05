@@ -13,7 +13,7 @@ set -e
 # - libpng
 # - brotli
 #
-# All other dependencies are disabled (JPEG, WebP, Wuffs, ICU, HarfBuzz, etc.)
+# All other dependencies are disabled (JPEG, Wuffs, ICU, HarfBuzz, etc.)
 ################################################################################
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

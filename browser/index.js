@@ -3,20 +3,7 @@
  * @module @matrunchyk/lotio
  */
 
-/**
- * Lotio - High-performance Lottie animation renderer for the browser
- * @module @matrunchyk/lotio
- */
-
 import { initLotio, createAnimation, renderFrameToCanvas, renderFrameRGBA, cleanup, registerFont, getVersion } from './wasm.js';
-
-/**
- * Frame output types
- */
-export const FrameType = {
-    PNG: 'png',
-    WEBP: 'webp'
-};
 
 /**
  * Animation states
@@ -87,7 +74,6 @@ export class Lotio extends EventEmitter {
      * @param {Object|string} options.textConfig - Text configuration JSON (object or string)
      * @param {number} options.textPadding - Text padding factor (0.0-1.0, default: 0.97)
      * @param {string} options.textMeasurementMode - Text measurement mode: 'fast'|'accurate'|'pixel-perfect' (default: 'accurate')
-     * @param {string} options.type - Output type: 'png' or 'webp' (default: 'png')
      * @param {string} options.wasmPath - Path to lotio.wasm file (default: './lotio.wasm')
      */
     constructor(options = {}) {
@@ -100,7 +86,6 @@ export class Lotio extends EventEmitter {
         this._textConfig = options.textConfig || null;
         this._textPadding = options.textPadding !== undefined ? options.textPadding : 0.97;
         this._textMeasurementMode = options.textMeasurementMode || 'accurate';
-        this._type = options.type || FrameType.PNG;
         this._state = State.STOPPED;
         this._wasmInitialized = false;
         this._animationInfo = null;
@@ -270,10 +255,6 @@ export class Lotio extends EventEmitter {
         return this._textMeasurementMode;
     }
 
-    getType() {
-        return this._type;
-    }
-
     getState() {
         return this._state;
     }
@@ -336,14 +317,6 @@ export class Lotio extends EventEmitter {
             await this._loadAnimation();
         }
         
-        return this;
-    }
-
-    setType(type) {
-        if (type !== FrameType.PNG && type !== FrameType.WEBP) {
-            throw new Error(`Type must be ${FrameType.PNG} or ${FrameType.WEBP}`);
-        }
-        this._type = type;
         return this;
     }
 

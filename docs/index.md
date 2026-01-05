@@ -21,7 +21,7 @@ The package is public and does not require authentication.
 ## Quick Start
 
 ```javascript
-import Lotio, { FrameType, State } from '@matrunchyk/lotio';
+import Lotio, { State } from '@matrunchyk/lotio';
 
 // Load font
 const fontResponse = await fetch('./fonts/OpenSans-Bold.ttf');
@@ -36,7 +36,6 @@ const animation = new Lotio({
   fonts: [{ name: 'OpenSans-Bold', data: fontData }],
   fps: 30,
   animation: animationData,
-  type: FrameType.PNG,
   wasmPath: './lotio.wasm'
 });
 
@@ -61,7 +60,6 @@ new Lotio(options)
 - `fps` (number): Frames per second (default: 30)
 - `animation` (Object|string): Lottie animation JSON (object or stringified)
 - `textConfig` (Object|string, optional): Text configuration JSON
-- `type` (string): Output type: `'png'` or `'webp'` (default: `'png'`)
 - `wasmPath` (string): Path to `lotio.wasm` file (default: `'./lotio.wasm'`)
 
 ### Methods
@@ -79,7 +77,6 @@ new Lotio(options)
 - `setFps(fps)` - Set frames per second
 - `setAnimation(animation)` - Set animation data
 - `setTextConfig(textConfig)` - Set text configuration
-- `setType(type)` - Set output type (`FrameType.PNG` or `FrameType.WEBP`)
 - `setFonts(fonts)` - Set fonts array
 
 #### Getters
@@ -87,7 +84,6 @@ new Lotio(options)
 - `getFps()` - Get current FPS
 - `getAnimation()` - Get animation data
 - `getTextConfig()` - Get text configuration
-- `getType()` - Get output type
 - `getState()` - Get current state (`'stopped'`, `'paused'`, `'loaded'`, `'error'`, `'playing'`)
 - `getCurrentFrame()` - Get current frame data
 - `getAnimationInfo()` - Get animation metadata (width, height, duration, fps)
@@ -127,8 +123,6 @@ animation
 
 ### Constants
 
-- `FrameType.PNG` - PNG output type
-- `FrameType.WEBP` - WebP output type
 - `State.STOPPED` - Animation is stopped
 - `State.PAUSED` - Animation is paused
 - `State.LOADED` - Animation is loaded

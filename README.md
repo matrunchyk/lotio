@@ -87,7 +87,7 @@ npm install @matrunchyk/lotio
 **Basic Usage:**
 
 ```javascript
-import Lotio, { FrameType, State, TextMeasurementMode } from '@matrunchyk/lotio';
+import Lotio, { State, TextMeasurementMode } from '@matrunchyk/lotio';
 
 // Load fonts
 const fontResponse = await fetch('./fonts/OpenSans-Bold.ttf');
@@ -105,7 +105,6 @@ const animation = new Lotio({
   textConfig: { /* optional text config */ },
   textPadding: 0.97,  // Optional: text padding factor (default: 0.97)
   textMeasurementMode: TextMeasurementMode.ACCURATE,  // Optional: TextMeasurementMode.FAST | TextMeasurementMode.ACCURATE | TextMeasurementMode.PIXEL_PERFECT
-  type: FrameType.PNG,
   wasmPath: './lotio.wasm'
 });
 

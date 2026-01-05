@@ -113,7 +113,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install fontconfig freetype harfbuzz icu4c libpng jpeg-turbo webp ninja python@3.11
+          brew install fontconfig freetype harfbuzz icu4c libpng ninja python@3.11
 
       - name: Build lotio
         env:
@@ -371,15 +371,62 @@ jobs:
           
           # Extract binary and library from Docker image (specify platform for extraction)
           echo "Extracting binary from Docker image matrunchyk/lotio:${VERSION} (platform: linux/${ARCH})..."
-          docker create --name lotio-extract --platform linux/${ARCH} "matrunchyk/lotio:${VERSION}"
-          docker cp lotio-extract:/usr/local/bin/lotio "$DEB_DIR/usr/local/bin/"
-          docker cp lotio-extract:/usr/local/lib/liblotio.a "$DEB_DIR/usr/local/lib/" 2>/dev/null
+          docker create --name lotio-extract --platform linux/${ARCH} "matrunchyk/lotio:${VERSION}" || {
+            echo "❌ Failed to create container"
+            exit 1
+          }
           
-          # Extract Skia headers from Docker image
+          # Verify files exist in container before extraction
+          echo "Verifying files exist in Docker image..."
+          docker run --rm --platform linux/${ARCH} "matrunchyk/lotio:${VERSION}" sh -c "
+            echo '=== /usr/local/bin ==='
+            ls -la /usr/local/bin/
+            echo '=== /usr/local/lib ==='
+            ls -la /usr/local/lib/ || exit 1
+            echo '=== /opt/skia ==='
+            ls -la /opt/skia/ || exit 1
+            test -f /usr/local/bin/lotio || exit 1
+            test -f /usr/local/lib/liblotio.a || exit 1
+            test -d /opt/skia/include || exit 1
+            test -d /opt/skia/modules || exit 1
+          " || {
+            echo "❌ Required files missing in Docker image"
+            docker rm lotio-extract
+            exit 1
+          }
+          
+          # Copy binary
+          docker cp lotio-extract:/usr/local/bin/lotio "$DEB_DIR/usr/local/bin/" || {
+            echo "❌ Failed to copy binary from container"
+            docker rm lotio-extract
+            exit 1
+          }
+          
+          # Copy library
+          docker cp lotio-extract:/usr/local/lib/liblotio.a "$DEB_DIR/usr/local/lib/" || {
+            echo "❌ Failed to copy liblotio.a from container"
+            docker rm lotio-extract
+            exit 1
+          }
+          
+          # Extract Skia headers
           echo "Extracting Skia headers from Docker image..."
-          docker cp lotio-extract:/opt/skia/include "$DEB_DIR/usr/local/include/skia" 2>/dev/null
-          docker cp lotio-extract:/opt/skia/modules "$DEB_DIR/usr/local/include/skia/" 2>/dev/null
-          docker cp lotio-extract:/opt/skia/gen "$DEB_DIR/usr/local/include/skia/" 2>/dev/null
+          docker cp lotio-extract:/opt/skia/include "$DEB_DIR/usr/local/include/skia" || {
+            echo "❌ Failed to copy Skia include directory"
+            docker rm lotio-extract
+            exit 1
+          }
+          
+          docker cp lotio-extract:/opt/skia/modules "$DEB_DIR/usr/local/include/skia/" || {
+            echo "❌ Failed to copy Skia modules directory"
+            docker rm lotio-extract
+            exit 1
+          }
+          
+          # Skia gen directory - check if it exists before copying
+          docker run --rm --platform linux/${ARCH} "matrunchyk/lotio:${VERSION}" test -d /opt/skia/gen && \
+            docker cp lotio-extract:/opt/skia/gen "$DEB_DIR/usr/local/include/skia/" || \
+            echo "Note: Skia gen directory not present (this is normal for some build configurations)"
           
           docker rm lotio-extract
           
@@ -395,8 +442,8 @@ jobs:
           Architecture: ${ARCH}
           Maintainer: matrunchyk
           Description: High-performance Lottie animation frame renderer using Skia
-           Render Lottie animations frame-by-frame to PNG and/or WebP files for video encoding.
-          Depends: libfontconfig1, libfreetype6, libx11-6, libxext6, libxrender1, libpng16-16, libjpeg-turbo8, libicu70, libharfbuzz0b, libwebp7
+           Render Lottie animations frame-by-frame to PNG files for video encoding.
+          Depends: libfontconfig1, libfreetype6, libpng16-16, libicu70, libharfbuzz0b, zlib1g, libexpat1
           EOF
           
           # Create postinst script

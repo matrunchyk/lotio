@@ -150,9 +150,13 @@ COPY --from=lotio-builder /opt/skia/lib /opt/skia/lib
 # Copy lotio binary
 COPY --from=lotio-builder /build/lotio /usr/local/bin/lotio
 
+# Copy lotio library for development packages
+COPY --from=lotio-builder /build/liblotio.a /usr/local/lib/liblotio.a
+
 # Verify lotio binary
 RUN echo "[BUILD] Verifying lotio binary..." && \
-    ldd /usr/local/bin/lotio | head -10 && \
+    echo "=== Full runtime dependencies ===" && \
+    ldd /usr/local/bin/lotio && \
     echo "[BUILD] All dependencies resolved"
 
 WORKDIR /workspace

@@ -20,7 +20,7 @@ This directory contains build, test, and utility scripts for the `lotio` project
 
 **Key Features:**
 - Zero bundled dependencies (all use system/Homebrew libraries)
-- Faster builds (no WebP/JPEG codecs, no GPU backends)
+- Faster builds (no JPEG codecs, no GPU backends)
 - Auto-detects ICU version (supports ICU 44-100)
 - Uses ccache if available for faster rebuilds
 - Handles everything: Skia setup, build, and lotio compilation

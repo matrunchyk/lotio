@@ -189,15 +189,9 @@ bool encodeFrameToPNG(
     int height,
     const std::string& outputPath
 );
-
-bool encodeFrameToWebP(
-    const std::vector<uint8_t>& rgbaData,
-    int width,
-    int height,
-    const std::string& outputPath,
-    int quality = 80
-);
 ```
+
+Encodes RGBA pixel data to PNG format. The C++ library outputs PNG frames by default.
 
 ### Text Processing
 
