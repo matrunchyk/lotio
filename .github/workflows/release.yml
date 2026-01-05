@@ -378,7 +378,7 @@ jobs:
           
           # Verify files exist in container before extraction
           echo "Verifying files exist in Docker image..."
-          docker run --rm --platform linux/${ARCH} "matrunchyk/lotio:${VERSION}" sh -c "
+          docker run --rm --platform linux/${ARCH} --entrypoint sh "matrunchyk/lotio:${VERSION}" -c "
             echo '=== /usr/local/bin ==='
             ls -la /usr/local/bin/
             echo '=== /usr/local/lib ==='
