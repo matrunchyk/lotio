@@ -859,7 +859,6 @@ jobs:
           files: |
             artifacts/**/*.deb
             artifacts/**/*.tar.gz
-            artifacts/**/*.bottle.tar.gz
             artifacts/**/*.tgz
           name: Release ${{ needs.version-and-tag.outputs.version }}
           tag_name: ${{ needs.version-and-tag.outputs.version }}
