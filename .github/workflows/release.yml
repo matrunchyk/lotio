@@ -116,7 +116,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           chmod +x scripts/build_binary.sh
-          # Pass version to build script via environment (if needed)
+          # Pass version to build script via environment
           ./scripts/build_binary.sh
 
       - name: Inject version into binary
@@ -249,9 +249,81 @@ jobs:
             "${{ steps.bottle.outputs.SHA256 }}" \
             "${{ steps.bottle.outputs.ARCH }}"
 
-  build-linux:
+  build-docker:
     runs-on: ubuntu-latest
     needs: version-and-tag
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set version
+        id: version
+        run: |
+          VERSION="${{ needs.version-and-tag.outputs.version }}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build and push lotio image (multi-platform)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.lotio
+          platforms: linux/arm64,linux/amd64
+          push: true
+          tags: |
+            matrunchyk/lotio:${{ steps.version.outputs.VERSION }}
+            matrunchyk/lotio:latest
+          cache-from: |
+            type=registry,ref=matrunchyk/lotio:latest
+            type=gha
+          cache-to: |
+            type=registry,ref=matrunchyk/lotio:latest,mode=max
+            type=gha,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+      - name: Build and push lotio-ffmpeg image (multi-platform)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.lotio-ffmpeg
+          platforms: linux/arm64,linux/amd64
+          push: true
+          tags: |
+            matrunchyk/lotio-ffmpeg:${{ steps.version.outputs.VERSION }}
+            matrunchyk/lotio-ffmpeg:latest
+          cache-from: |
+            type=registry,ref=matrunchyk/lotio-ffmpeg:latest
+            type=gha
+          cache-to: |
+            type=registry,ref=matrunchyk/lotio-ffmpeg:latest,mode=max
+            type=gha,mode=max
+          build-args: |
+            LOTIO_IMAGE=matrunchyk/lotio:latest
+            BUILDKIT_INLINE_CACHE=1
+
+      - name: Verify multi-platform manifests
+        run: |
+          echo "Verifying multi-platform manifests..."
+          docker buildx imagetools inspect matrunchyk/lotio:latest
+          docker buildx imagetools inspect matrunchyk/lotio-ffmpeg:latest
+
+  build-linux:
+    runs-on: ubuntu-latest
+    needs: [version-and-tag, build-docker]
     strategy:
       matrix:
         arch: [arm64, amd64]
@@ -276,26 +348,6 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - name: Wait for Docker images to be available
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          ARCH="${{ matrix.arch }}"
-          echo "Waiting for Docker image matrunchyk/lotio:${VERSION}-${ARCH} to be available..."
-          
-          # Wait up to 10 minutes for the image to be available
-          for i in {1..60}; do
-            if docker buildx imagetools inspect "matrunchyk/lotio:${VERSION}-${ARCH}" >/dev/null 2>&1; then
-              echo "✅ Docker image is available"
-              break
-            fi
-            if [ $i -eq 60 ]; then
-              echo "❌ Timeout waiting for Docker image"
-              exit 1
-            fi
-            echo "Waiting... ($i/60)"
-            sleep 10
-          done
-
       - name: Create .deb package
         id: deb_package
         env:
@@ -315,9 +367,9 @@ jobs:
           mkdir -p "$DEB_DIR/usr/local/include/lotio/utils"
           mkdir -p "$DEB_DIR/DEBIAN"
           
-          # Extract binary and library from Docker image
-          echo "Extracting binary from Docker image matrunchyk/lotio:${VERSION}-${ARCH}..."
-          docker create --name lotio-extract --platform linux/${ARCH} "matrunchyk/lotio:${VERSION}-${ARCH}"
+          # Extract binary and library from Docker image (specify platform for extraction)
+          echo "Extracting binary from Docker image matrunchyk/lotio:${VERSION} (platform: linux/${ARCH})..."
+          docker create --name lotio-extract --platform linux/${ARCH} "matrunchyk/lotio:${VERSION}"
           docker cp lotio-extract:/usr/local/bin/lotio "$DEB_DIR/usr/local/bin/"
           docker cp lotio-extract:/usr/local/lib/liblotio.a "$DEB_DIR/usr/local/lib/" 2>/dev/null || echo "liblotio.a not found in image (optional)"
           
@@ -579,7 +631,7 @@ jobs:
 
   publish-release:
     runs-on: ubuntu-latest
-    needs: [version-and-tag, build-macos, build-linux, build-wasm, build-docs]
+    needs: [version-and-tag, build-macos, build-linux, build-wasm, build-docs, build-docker]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -636,13 +688,9 @@ jobs:
             - File: `{{ needs.build-wasm.outputs.wasm_package_filename }}`
             - SHA256: `{{ needs.build-wasm.outputs.wasm_package_sha256 }}`
             
-            **Docker images** (Linux ARM64 & AMD64):
-            - `matrunchyk/lotio:${{ needs.version-and-tag.outputs.version }}` (multi-platform)
-            - `matrunchyk/lotio:${{ needs.version-and-tag.outputs.version }}-arm64` (ARM64 only)
-            - `matrunchyk/lotio:${{ needs.version-and-tag.outputs.version }}-amd64` (AMD64 only)
-            - `matrunchyk/lotio-ffmpeg:${{ needs.version-and-tag.outputs.version }}` (multi-platform, with FFmpeg)
-            - `matrunchyk/lotio-ffmpeg:${{ needs.version-and-tag.outputs.version }}-arm64` (ARM64 only)
-            - `matrunchyk/lotio-ffmpeg:${{ needs.version-and-tag.outputs.version }}-amd64` (AMD64 only)
+            **Docker images** (Linux ARM64 & AMD64, multi-platform):
+            - `matrunchyk/lotio:${{ needs.version-and-tag.outputs.version }}` - Automatically selects correct architecture
+            - `matrunchyk/lotio-ffmpeg:${{ needs.version-and-tag.outputs.version }}` - With FFmpeg, automatically selects correct architecture
             - Also available as: `matrunchyk/lotio:latest` and `matrunchyk/lotio-ffmpeg:latest` (multi-platform)
           draft: false
           prerelease: false
