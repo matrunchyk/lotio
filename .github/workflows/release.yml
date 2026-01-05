@@ -245,6 +245,15 @@ jobs:
             "${{ steps.bottle.outputs.SHA256 }}" \
             "${{ steps.bottle.outputs.ARCH }}"
 
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifacts
+          path: |
+            ${{ steps.dev_package.outputs.FILENAME }}
+            ${{ steps.bottle.outputs.FILENAME }}
+          retention-days: 30
+
   build-docker:
     name: Build Docker
     runs-on: ubuntu-latest
@@ -531,6 +540,13 @@ jobs:
           echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
           echo "FILENAME=${PKG_NAME}.tar.gz" >> $GITHUB_OUTPUT
 
+      - name: Upload WASM package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-package
+          path: ${{ steps.wasm_package.outputs.FILENAME }}
+          retention-days: 30
+
       - name: Publish to GitHub Packages
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
@@ -723,27 +739,119 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Read .deb package metadata
-        id: deb_metadata
+      - name: Read package metadata and generate release body
+        id: release_metadata
         run: |
-          # Read metadata from both architecture builds
+          VERSION="${{ needs.version-and-tag.outputs.version }}"
+          
+          # Get commit messages since the previous tag
+          # First, get all tags sorted by version
+          ALL_TAGS=$(git tag --list 'v*.*.*' --sort=-version:refname)
+          
+          # Find the current tag in the list
+          CURRENT_TAG="$VERSION"
+          PREVIOUS_TAG=""
+          
+          # Find the tag that comes before the current one
+          FOUND_CURRENT=false
+          for tag in $ALL_TAGS; do
+            if [ "$FOUND_CURRENT" = true ]; then
+              PREVIOUS_TAG="$tag"
+              break
+            fi
+            if [ "$tag" = "$CURRENT_TAG" ]; then
+              FOUND_CURRENT=true
+            fi
+          done
+          
+          # Extract commits
+          if [ -n "$PREVIOUS_TAG" ]; then
+            # Get commits between previous tag and current tag
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges ${PREVIOUS_TAG}..${CURRENT_TAG} 2>/dev/null || echo "")
+          else
+            # No previous tag found, get all commits up to current tag
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges ${CURRENT_TAG} 2>/dev/null || echo "")
+          fi
+          
+          # If no commits found, use a default message
+          if [ -z "$COMMITS" ]; then
+            COMMITS="- Release ${VERSION}"
+          fi
+          
+          # Read .deb package metadata
+          DEB_FILENAME_ARM64=""
+          DEB_SHA256_ARM64=""
+          DEB_FILENAME_AMD64=""
+          DEB_SHA256_AMD64=""
+          
           if [ -f "artifacts/deb-packages-arm64/metadata/arm64.txt" ]; then
             source "artifacts/deb-packages-arm64/metadata/arm64.txt"
+            DEB_FILENAME_ARM64="${FILENAME}"
+            DEB_SHA256_ARM64="${SHA256}"
             echo "deb_filename_arm64=${FILENAME}" >> $GITHUB_OUTPUT
             echo "deb_sha256_arm64=${SHA256}" >> $GITHUB_OUTPUT
           fi
           
           if [ -f "artifacts/deb-packages-amd64/metadata/amd64.txt" ]; then
             source "artifacts/deb-packages-amd64/metadata/amd64.txt"
+            DEB_FILENAME_AMD64="${FILENAME}"
+            DEB_SHA256_AMD64="${SHA256}"
             echo "deb_filename_amd64=${FILENAME}" >> $GITHUB_OUTPUT
             echo "deb_sha256_amd64=${SHA256}" >> $GITHUB_OUTPUT
           fi
+          
+          # Get macOS and WASM metadata from job outputs
+          DEV_PKG_FILENAME="${{ needs.build-macos.outputs.dev_package_filename }}"
+          DEV_PKG_SHA256="${{ needs.build-macos.outputs.dev_package_sha256 }}"
+          BOTTLE_FILENAME="${{ needs.build-macos.outputs.bottle_filename }}"
+          BOTTLE_SHA256="${{ needs.build-macos.outputs.bottle_sha256 }}"
+          WASM_PKG_FILENAME="${{ needs.build-wasm.outputs.wasm_package_filename }}"
+          WASM_PKG_SHA256="${{ needs.build-wasm.outputs.wasm_package_sha256 }}"
+          
+          # Generate release body with resolved values
+          {
+            echo "## Lotio ${VERSION}"
+            echo ""
+            echo "### Changes"
+            echo ""
+            echo "$COMMITS"
+            echo ""
+            echo "### Packages"
+            echo ""
+            echo "**Developer package** (binary + headers + libraries for development):"
+            echo "- File: \`${DEV_PKG_FILENAME}\`"
+            echo "- SHA256: \`${DEV_PKG_SHA256}\`"
+            echo ""
+            echo "**Homebrew bottle** (pre-built binary for macOS):"
+            echo "- File: \`${BOTTLE_FILENAME}\`"
+            echo "- SHA256: \`${BOTTLE_SHA256}\`"
+            echo ""
+            echo "**Debian packages** (Linux):"
+            echo "- ARM64: \`${DEB_FILENAME_ARM64}\` (SHA256: \`${DEB_SHA256_ARM64}\`)"
+            echo "- AMD64: \`${DEB_FILENAME_AMD64}\` (SHA256: \`${DEB_SHA256_AMD64}\`)"
+            echo ""
+            echo "**WebAssembly package** (for browser use):"
+            echo "- File: \`${WASM_PKG_FILENAME}\`"
+            echo "- SHA256: \`${WASM_PKG_SHA256}\`"
+            echo ""
+            echo "**Docker images** (Linux ARM64 & AMD64, multi-platform):"
+            echo "- \`matrunchyk/lotio:${VERSION}\` - Automatically selects correct architecture"
+            echo "- \`matrunchyk/lotio-ffmpeg:${VERSION}\` - With FFmpeg, automatically selects correct architecture"
+            echo "- Also available as: \`matrunchyk/lotio:latest\` and \`matrunchyk/lotio-ffmpeg:latest\` (multi-platform)"
+          } > release_body.md
+          
+          # Output release body for use in next step
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          cat release_body.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -755,31 +863,7 @@ jobs:
             artifacts/**/*.tgz
           name: Release ${{ needs.version-and-tag.outputs.version }}
           tag_name: ${{ needs.version-and-tag.outputs.version }}
-          body: |
-            ## Lotio ${{ needs.version-and-tag.outputs.version }}
-            
-            ### Packages
-            
-            **Developer package** (binary + headers + libraries for development):
-            - File: `{{ needs.build-macos.outputs.dev_package_filename }}`
-            - SHA256: `{{ needs.build-macos.outputs.dev_package_sha256 }}`
-            
-            **Homebrew bottle** (pre-built binary for macOS):
-            - File: `{{ needs.build-macos.outputs.bottle_filename }}`
-            - SHA256: `{{ needs.build-macos.outputs.bottle_sha256 }}`
-            
-            **Debian packages** (Linux):
-            - ARM64: `${{ steps.deb_metadata.outputs.deb_filename_arm64 }}` (SHA256: `${{ steps.deb_metadata.outputs.deb_sha256_arm64 }}`)
-            - AMD64: `${{ steps.deb_metadata.outputs.deb_filename_amd64 }}` (SHA256: `${{ steps.deb_metadata.outputs.deb_sha256_amd64 }}`)
-            
-            **WebAssembly package** (for browser use):
-            - File: `{{ needs.build-wasm.outputs.wasm_package_filename }}`
-            - SHA256: `{{ needs.build-wasm.outputs.wasm_package_sha256 }}`
-            
-            **Docker images** (Linux ARM64 & AMD64, multi-platform):
-            - `matrunchyk/lotio:${{ needs.version-and-tag.outputs.version }}` - Automatically selects correct architecture
-            - `matrunchyk/lotio-ffmpeg:${{ needs.version-and-tag.outputs.version }}` - With FFmpeg, automatically selects correct architecture
-            - Also available as: `matrunchyk/lotio:latest` and `matrunchyk/lotio-ffmpeg:latest` (multi-platform)
+          body: ${{ steps.release_metadata.outputs.body }}
           draft: false
           prerelease: false
         env:
