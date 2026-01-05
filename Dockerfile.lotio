@@ -144,8 +144,10 @@ RUN echo "[BUILD] Setting up runtime environment..." && \
     && rm -rf /var/lib/apt/lists/* && \
     echo "[BUILD] Runtime libraries installed"
 
-# Copy Skia libraries from builder (which is based on the Skia image)
+# Copy Skia libraries and headers from builder (which is based on the Skia image)
 COPY --from=lotio-builder /opt/skia/lib /opt/skia/lib
+COPY --from=lotio-builder /opt/skia/include /opt/skia/include
+COPY --from=lotio-builder /opt/skia/modules /opt/skia/modules
 
 # Copy lotio binary
 COPY --from=lotio-builder /build/lotio /usr/local/bin/lotio
