@@ -4,77 +4,59 @@ This directory contains build, test, and utility scripts for the `lotio` project
 
 ## Core Build Scripts
 
-### `install_skia.sh`
-**Purpose:** Builds Skia library from source (first-time setup)
+### `build_minimal.sh` ⭐ **RECOMMENDED**
+**Purpose:** Builds lotio with minimal Skia dependencies (zero bundled dependencies)
 
 **Usage:**
 ```bash
-./scripts/install_skia.sh
+./scripts/build_minimal.sh
 ```
 
 **When to use:**
-- First time building the project
-- After updating Skia dependencies
-- When Skia build is missing or corrupted
+- **Primary build method** - recommended for all local development
+- Building with minimal dependencies for faster builds
+- Reducing build size and complexity
+- CI/CD optimization
 
-**Dependencies:** Requires `ninja`, `python3`, and system libraries (fontconfig, freetype, harfbuzz, icu4c, libpng, jpeg-turbo, libwebp)
+**Key Features:**
+- Zero bundled dependencies (all use system/Homebrew libraries)
+- Faster builds (no WebP/JPEG codecs, no GPU backends)
+- Auto-detects ICU version (supports ICU 44-100)
+- Uses ccache if available for faster rebuilds
+- Handles everything: Skia setup, build, and lotio compilation
 
-**Used by:**
-- `build_local.sh` (automatically calls if Skia not built)
-- `Makefile` (automatically calls if Skia not built)
-- CI/CD workflows
-- Docker builds
+**Prerequisites:** 
+- System libraries: fontconfig, freetype, harfbuzz, icu4c, libpng, ninja, python3
+- No bundled dependencies needed!
 
----
-
-### `build_local.sh`
-**Purpose:** Builds the native `lotio` binary for your platform
-
-**Usage:**
-```bash
-./scripts/build_local.sh
-```
-
-**When to use:**
-- Building the project locally
-- After modifying source code
-- Before running tests
-
-**Prerequisites:** Skia must be built (runs `install_skia.sh` automatically if needed)
-
-**Output:** Creates `lotio` binary in project root
+**Output:** 
+- Creates `lotio` binary in project root
+- Creates `liblotio.a` static library (for development and Homebrew packaging)
 
 **Used by:**
-- `Makefile` (alternative to `make`)
-- CI/CD workflows
+- Primary build method
 - Test scripts
+- CI/CD workflows (recommended)
 
 ---
-
-### `build_skia_wasm.sh`
-**Purpose:** Builds Skia library for WebAssembly target
+**Purpose:** Builds lotio with minimal Skia dependencies (10 essential deps instead of 40+)
 
 **Usage:**
 ```bash
-./scripts/build_skia_wasm.sh
+./scripts/build_minimal.sh
 ```
 
 **When to use:**
-- Before building WASM version of lotio
-- First time setting up WASM build
-- After updating Skia dependencies for WASM
+- Building with minimal dependencies for faster builds
+- Reducing build size and complexity
+- Understanding which dependencies are actually required
+- CI/CD optimization
 
-**Dependencies:** Requires Emscripten (`emcc`)
-
-**Output:** Skia libraries in `third_party/skia/skia/out/Wasm/`
-
-**Used by:**
-- `build_wasm.sh` (automatically calls if Skia WASM not built)
 
 ---
 
 ### `build_wasm.sh`
-**Purpose:** Builds the WebAssembly version of lotio for browser use
+**Purpose:** Builds the WebAssembly version of lotio for browser use (unified script)
 
 **Usage:**
 ```bash
@@ -87,8 +69,8 @@ This directory contains build, test, and utility scripts for the `lotio` project
 - Testing browser functionality
 
 **Prerequisites:** 
-- Skia WASM must be built (runs `build_skia_wasm.sh` automatically if needed)
-- Emscripten must be installed
+- Skia structure (run `build_minimal.sh` first to set up Skia)
+- Emscripten must be installed (`brew install emscripten` or EMSDK)
 
 **Output:** 
 - `browser/lotio.wasm`
@@ -97,113 +79,11 @@ This directory contains build, test, and utility scripts for the `lotio` project
 
 **Used by:**
 - CI/CD workflows (for npm package publishing)
-- `test_wasm_local.sh`
-
----
-
-## Dependency Management Scripts
-
-### `sync_skia_deps.sh`
-**Purpose:** Syncs Skia's third-party dependencies using `python3 tools/git-sync-deps`
-
-**Usage:**
-```bash
-./scripts/sync_skia_deps.sh [skia_directory]
-```
-
-**When to use:**
-- After cloning Skia repository
-- When Skia dependencies are out of sync
-- Before building Skia
-
-**Used by:**
-- CI/CD workflows
-- `install_skia.sh` (indirectly)
-
----
-
-### `fetch_skia_deps.sh`
-**Purpose:** Fetches Skia's external dependencies (used in Docker builds)
-
-**Usage:**
-```bash
-./scripts/fetch_skia_deps.sh
-```
-
-**When to use:**
-- Docker container builds
-- Manual dependency fetching
-
-**Used by:**
-- Dockerfile
+- `test.sh` (unified test script)
 
 ---
 
 ## Testing Scripts
-
-### `test_local.sh`
-**Purpose:** Quick local test script for macOS builds
-
-**Usage:**
-```bash
-./scripts/test_local.sh
-```
-
-**When to use:**
-- Testing macOS build before pushing
-- Verifying dependencies are installed
-- Quick build validation
-
-**What it does:**
-- Checks dependencies
-- Builds Skia if needed
-- Builds lotio
-- Tests binary
-
----
-
-### `test_wasm_local.sh`
-**Purpose:** Tests WASM build locally
-
-**Usage:**
-```bash
-./scripts/test_wasm_local.sh
-```
-
-**When to use:**
-- Testing WASM build before pushing
-- Verifying Emscripten setup
-- Validating browser library build
-
-**What it does:**
-- Checks Emscripten installation
-- Builds Skia for WASM if needed
-- Builds lotio WASM
-- Lists generated files
-
----
-
-### `test_linux_build.sh`
-**Purpose:** Tests Linux build in a Docker container
-
-**Usage:**
-```bash
-./scripts/test_linux_build.sh
-```
-
-**When to use:**
-- Testing Linux compatibility
-- Validating cross-platform builds
-- Before releasing Linux packages
-
-**What it does:**
-- Runs Docker container
-- Installs dependencies
-- Builds Skia
-- Builds lotio
-- Tests binary
-
----
 
 ### `test_bottle.sh`
 **Purpose:** Tests Homebrew bottle creation locally before CI
@@ -220,8 +100,7 @@ This directory contains build, test, and utility scripts for the `lotio` project
 - Debugging bottle creation issues
 
 **Prerequisites:**
-- Binary must be built: `./scripts/build_local.sh`
-- Skia must be built: `./scripts/install_skia.sh`
+- Binary and library must be built: `./scripts/build_minimal.sh`
 
 **What it does:**
 - Creates bottle directory structure (matches CI exactly)
@@ -249,7 +128,7 @@ This directory contains build, test, and utility scripts for the `lotio` project
 🧪 Testing Homebrew Bottle Creation
 ===================================
 📋 Test Configuration:
-   Version: v20251230-test
+   Version: v1.2.3-test
    Architecture: arm64
    Bottle Arch: arm64_big_sur
    Homebrew Prefix: /opt/homebrew
@@ -271,29 +150,6 @@ This directory contains build, test, and utility scripts for the `lotio` project
 ---
 
 ## Utility Scripts
-
-### `check_build.sh`
-**Purpose:** Monitors Skia build progress and status
-
-**Usage:**
-```bash
-./scripts/check_build.sh
-```
-
-**When to use:**
-- While Skia is building (takes 10-20 minutes)
-- Checking if build is still running
-- Monitoring build progress
-
-**What it shows:**
-- Build status (running/complete)
-- Progress percentage
-- Last build activity
-- Library files status
-
-**Tip:** Use `watch -n 2 './scripts/check_build.sh'` for real-time monitoring
-
----
 
 ### `debug_skia_gn.sh`
 **Purpose:** Debug script to see GN configuration warnings
@@ -333,23 +189,17 @@ This directory contains build, test, and utility scripts for the `lotio` project
 
 ### First-time Setup
 ```bash
-# 1. Install dependencies
-brew install fontconfig freetype harfbuzz icu4c libpng jpeg-turbo libwebp ninja python@3.11
+# 1. Install dependencies (minimal build needs fewer deps)
+brew install fontconfig freetype harfbuzz icu4c libpng ninja python@3.11
 
-# 2. Build Skia (takes 10-20 minutes)
-./scripts/install_skia.sh
-
-# 3. Build lotio
-./scripts/build_local.sh
+# 2. Build lotio (build_minimal.sh handles Skia setup automatically)
+./scripts/build_minimal.sh
 ```
 
 ### Development Workflow
 ```bash
 # Make code changes, then:
-./scripts/build_local.sh
-
-# Or use Makefile:
-make
+./scripts/build_minimal.sh  # Builds lotio binary + liblotio.a library
 ```
 
 ### WASM Development
@@ -357,20 +207,23 @@ make
 # 1. Install Emscripten
 brew install emscripten
 
-# 2. Build Skia for WASM
-./scripts/build_skia_wasm.sh
-
-# 3. Build lotio WASM
+# 2. Build lotio for WASM (unified script handles Skia build automatically)
 ./scripts/build_wasm.sh
 ```
 
 ### Testing Before Push
 ```bash
-# Test native build
-./scripts/test_local.sh
+# Test native build (default)
+./scripts/test.sh
+
+# Test Linux build
+./scripts/test.sh linux
 
 # Test WASM build
-./scripts/test_wasm_local.sh
+./scripts/test.sh wasm
+
+# Test bottle creation
+./scripts/test.sh bottle
 ```
 
 ---
@@ -378,25 +231,20 @@ brew install emscripten
 ## Script Dependencies
 
 ```
-install_skia.sh
-  └─> sync_skia_deps.sh (via python3 tools/git-sync-deps)
-
-build_local.sh
-  └─> install_skia.sh (if Skia not built)
-
-build_skia_wasm.sh
-  └─> (requires Emscripten)
+build_minimal.sh ⭐ (RECOMMENDED)
+  └─> Handles everything: Skia setup + build + lotio compilation + liblotio.a
 
 build_wasm.sh
-  └─> build_skia_wasm.sh (if Skia WASM not built)
+  └─> Handles everything: Skia WASM build + lotio WASM compilation (requires Emscripten)
 
-test_local.sh
-  ├─> install_skia.sh (if needed)
-  └─> build_local.sh
+test.sh
+  ├─> native: build_minimal.sh
+  ├─> linux: build_minimal.sh (in Docker)
+  ├─> wasm: build_wasm.sh (unified script)
+  └─> bottle: test_bottle.sh
 
-test_wasm_local.sh
-  ├─> build_skia_wasm.sh (if needed)
-  └─> build_wasm.sh
+test_bottle.sh
+  └─> create_bottle.sh
 ```
 
 ---

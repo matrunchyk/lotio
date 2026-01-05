@@ -12,8 +12,8 @@ brew install lotio
 
 ### From Source
 ```bash
-./scripts/install_skia.sh  # First time only
-./scripts/build_local.sh
+# Build lotio (minimal build with zero bundled dependencies)
+./scripts/build_minimal.sh
 ```
 
 ## Basic Usage

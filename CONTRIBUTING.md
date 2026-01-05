@@ -10,13 +10,13 @@
 
 2. **Install dependencies:**
    ```bash
-   brew install fontconfig freetype harfbuzz icu4c libpng jpeg-turbo libwebp ninja python@3.11
+   brew install fontconfig freetype harfbuzz icu4c libpng ninja python@3.11
    ```
 
 3. **Build:**
    ```bash
-   ./scripts/install_skia.sh  # First time only
-   ./scripts/build_local.sh
+   # Build lotio (minimal build with zero bundled dependencies)
+   ./scripts/build_minimal.sh
    ```
 
 ## Code Organization
@@ -42,7 +42,7 @@
 ## Adding New Features
 
 1. Add source files to the appropriate module directory
-2. Update `scripts/build_local.sh` and `Makefile` if adding new source files
+2. Update `scripts/build_minimal.sh` if adding new source files
 3. Follow existing code structure and patterns
 4. Update headers in the same directory as implementation files
 
@@ -58,8 +58,8 @@
 Test your changes locally:
 
 ```bash
-# Build
-./scripts/build_local.sh
+# Build (recommended: minimal build)
+./scripts/build_minimal.sh
 
 # Test binary
 ./lotio --help
@@ -78,7 +78,8 @@ Test your changes locally:
 ## Release Process
 
 Releases are automatically created on push to `main`:
-- Version format: `vYYYYMMDD-SHA` (e.g., `v20241228-a1b2c3d`)
+- Version format: Semantic versioning `v1.2.3` (e.g., `v1.0.0`, `v1.2.3`, `v2.0.0`)
+- Automatically bumps patch version on each push to `main`
 - Creates headers-only and full packages
 - Updates Homebrew tap automatically
 

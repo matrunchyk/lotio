@@ -20,19 +20,14 @@ This installs:
 
 **Prerequisites (macOS):**
 ```bash
-brew install fontconfig freetype harfbuzz icu4c libpng jpeg-turbo libwebp ninja python@3.11
+brew install fontconfig freetype harfbuzz icu4c libpng ninja python@3.11
 xcode-select --install
 ```
 
 **Build:**
 ```bash
-# Build Skia (first time only, takes a while)
-./scripts/install_skia.sh
-
-# Build lotio
-./scripts/build_local.sh
-# or
-make
+# Build lotio (minimal build with zero bundled dependencies)
+./scripts/build_minimal.sh
 ```
 
 ## Usage
@@ -300,20 +295,13 @@ graph TB
     subgraph triggers["Event Triggers"]
         mainPush["Push to main<br/>(creates semver tag)"]
         tagPush["Tag push v*"]
-        skiaChanges["Changes to<br/>Dockerfile.skia"]
-        lotioChanges["Changes to<br/>src/** or Dockerfile.lotio"]
+        lotioChanges["Changes to<br/>src/** or Dockerfile.lotio<br/>or build_minimal.sh"]
         docsChanges["Changes to<br/>docs/** or examples/**"]
         manual["Manual<br/>workflow_dispatch"]
     end
 
-    subgraph skiaWorkflow["build-skia.yml<br/>Concurrency: build-skia<br/>Cancel in-progress: true"]
-        checkSkia["Check if<br/>image exists"]
-        buildSkiaImg["Build & push<br/>matrunchyk/skia"]
-        checkSkia -->|should_build=true| buildSkiaImg
-    end
-
     subgraph lotioWorkflow["build-lotio.yml<br/>Concurrency: build-lotio<br/>Cancel in-progress: true"]
-        buildLotioImg["Build & push<br/>matrunchyk/lotio"]
+        buildLotioImg["Build Skia & lotio<br/>push matrunchyk/lotio"]
     end
 
     subgraph releaseWorkflow["release.yml<br/>Concurrency: release<br/>Cancel in-progress: true"]
@@ -348,26 +336,20 @@ graph TB
     mainPush --> releaseWorkflow
     mainPush --> pagesWorkflow
     
-    tagPush --> skiaWorkflow
     tagPush --> lotioWorkflow
     tagPush --> releaseWorkflow
     
-    skiaChanges --> skiaWorkflow
     lotioChanges --> lotioWorkflow
     docsChanges --> pagesWorkflow
     
-    manual --> skiaWorkflow
     manual --> lotioWorkflow
     manual --> releaseWorkflow
     manual --> testWorkflow
     manual --> pagesWorkflow
 
-    skiaWorkflow -->|workflow_run<br/>after completion| lotioWorkflow
-    lotioWorkflow -->|workflow_run<br/>after completion| skiaWorkflow
     lotioWorkflow -->|Docker image ready| releaseWorkflow
     releaseWorkflow -->|workflow_run<br/>after completion| testWorkflow
 
-    style skiaWorkflow fill:#e1f5ff
     style lotioWorkflow fill:#e1f5ff
     style releaseWorkflow fill:#fff4e1
     style testWorkflow fill:#e8f5e9
@@ -376,17 +358,10 @@ graph TB
 
 ### Workflow Descriptions
 
-**build-skia.yml** - Builds and publishes `matrunchyk/skia` Docker image
-- **Purpose**: Create reusable Skia base image to avoid rebuilding in every workflow
-- **Triggers**: Tag pushes, Dockerfile.skia changes, manual dispatch, or when lotio image is built
-- **Logic**: Only builds if image doesn't exist in Docker Hub (unless manually forced or on tag/release)
-- **Concurrency**: Single instance per workflow (cancels in-progress runs when new one starts)
-- **Output**: `matrunchyk/skia:latest` and `matrunchyk/skia:v1.2.3`
-
 **build-lotio.yml** - Builds and publishes `matrunchyk/lotio` Docker image
-- **Purpose**: Create lotio binary Docker image based on Skia image
-- **Triggers**: Main branch push, tag pushes, source code changes, Dockerfile.lotio changes, after Skia build, manual dispatch
-- **Logic**: Always depends on `matrunchyk/skia:latest` existing
+- **Purpose**: Create lotio binary Docker image (builds Skia from scratch using build_minimal.sh)
+- **Triggers**: Main branch push, tag pushes, source code changes, Dockerfile.lotio changes, build_minimal.sh changes, manual dispatch
+- **Logic**: Builds Skia from scratch using minimal build script (zero bundled dependencies, fast build)
 - **Concurrency**: Single instance per workflow (cancels in-progress runs when new one starts)
 - **Output**: `matrunchyk/lotio:latest` and `matrunchyk/lotio:v1.2.3`
 
@@ -395,7 +370,7 @@ graph TB
 - **Triggers**: Push to main (creates semver tag automatically), tag pushes (v*), manual dispatch
 - **Logic**: 
   - Generates semver version from tag or creates new tag on main push
-  - Uses `matrunchyk/lotio` Docker image for builds
+  - Builds Skia from scratch using `build_minimal.sh` (zero bundled dependencies, fast build)
   - Builds in parallel: macOS, Linux, WASM, Homebrew
   - Injects version into all artifacts
 - **Concurrency**: Single instance per workflow (cancels in-progress runs when new one starts)
@@ -413,7 +388,7 @@ graph TB
 **pages.yml** - Builds and deploys documentation to GitHub Pages
 - **Purpose**: Generate and deploy documentation with version injection
 - **Triggers**: Changes to docs, examples, or build scripts; manual dispatch
-- **Logic**: Uses `matrunchyk/lotio` Docker image, injects version from git tag
+- **Logic**: Installs lotio npm package, injects version from git tag
 - **Concurrency**: Single instance per workflow (does not cancel in-progress runs)
 - **Output**: Deployed to GitHub Pages
 
@@ -439,7 +414,7 @@ Reload Cursor/VS Code after cloning: `Cmd+Shift+P` → "Reload Window"
 **Skia build fails:**
 - Ensure all dependencies are installed
 - Check sufficient disk space (Skia build is large)
-- Review error messages in `scripts/install_skia.sh` output
+- Review error messages in `scripts/build_minimal.sh` output
 
 **Linker errors:**
 - Verify Skia libraries exist in `third_party/skia/skia/out/Release/`

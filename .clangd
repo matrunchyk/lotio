@@ -1,5 +1,5 @@
 CompileFlags:
   Add: 
     - -I.vscode_skia_include
-    - -Ithird_party/skia/skia/include
-    - -Ithird_party/skia/skia/modules
+    - -Ithird_party/skia/include
+    - -Ithird_party/skia/modules

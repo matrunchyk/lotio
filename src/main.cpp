@@ -1,6 +1,6 @@
-// Render all frames of a Lottie animation to PNG and/or WebP files (frame-by-frame)
+// Render all frames of a Lottie animation to PNG files (frame-by-frame)
 // This is used as input for video encoding with ffmpeg
-// Usage: lotio [--png] [--webp] <input.json> <output_dir> [fps]
+// Usage: lotio [--stream] <input.json> <output_dir> [fps]
 
 #include "utils/logging.h"
 #include "utils/crash_handler.h"
@@ -45,8 +45,6 @@ int main(int argc, char* argv[]) {
 
     // Configure rendering
     RenderConfig render_config;
-    render_config.output_png = args.output_png;
-    render_config.output_webp = args.output_webp;
     render_config.stream_mode = args.stream_mode;
     render_config.output_dir = args.output_dir;
     render_config.fps = args.fps;

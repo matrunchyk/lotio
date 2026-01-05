@@ -4,7 +4,7 @@ set -e
 # Create Homebrew bottle
 # This script creates a Homebrew bottle with the correct directory structure
 # Usage: ./scripts/create_bottle.sh <VERSION> [BOTTLE_ARCH] [HOMEBREW_PREFIX]
-#   VERSION: Version string (e.g., "v20251230-abc123" or "20251230-abc123")
+#   VERSION: Version string in semver format (e.g., "v1.2.3" or "1.2.3")
 #   BOTTLE_ARCH: Architecture (e.g., "arm64_big_sur", "x86_64_big_sur") - auto-detected if not provided
 #   HOMEBREW_PREFIX: Homebrew prefix (e.g., "/opt/homebrew", "/usr/local") - auto-detected if not provided
 #

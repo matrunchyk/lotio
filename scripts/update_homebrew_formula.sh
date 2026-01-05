@@ -12,7 +12,7 @@ BOTTLE_ARCH="${4:-arm64_big_sur}"
 
 if [ -z "$VERSION" ] || [ -z "$SOURCE_SHA256" ] || [ -z "$BOTTLE_SHA256" ]; then
   echo "Usage: $0 <VERSION> <SOURCE_SHA256> <BOTTLE_SHA256> [BOTTLE_ARCH]"
-  echo "Example: $0 v20251230-942682b abc123... def456... arm64_big_sur"
+  echo "Example: $0 v1.2.3 abc123... def456... arm64_big_sur"
   exit 1
 fi
 

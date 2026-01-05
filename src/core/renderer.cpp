@@ -21,7 +21,6 @@
 struct BufferedFrame {
     int frame_idx;
     sk_sp<SkData> png_data;
-    sk_sp<SkData> webp_data;
     bool ready;
     
     BufferedFrame() : frame_idx(-1), ready(false) {}
@@ -201,28 +200,16 @@ int renderFrames(
                 }
             }
 
-            // Encode frame to PNG and/or WebP
-            EncodedFrame encoded = encodeFrame(image, config.output_png, config.output_webp);
+            // Encode frame to PNG
+            EncodedFrame encoded = encodeFrame(image);
             
             // Check encoding results
-            if (config.output_png && !encoded.has_png) {
+            if (!encoded.has_png) {
                 LOG_CERR("[ERROR] Failed to encode PNG for frame " << frame_idx) << std::endl;
-                if (!config.output_webp) {
-                    failed_frames++;
-                    continue;
-                }
-            } else if (frame_idx == 0 && thread_id == 0 && encoded.has_png) {
+                failed_frames++;
+                continue;
+            } else if (frame_idx == 0 && thread_id == 0) {
                 LOG_DEBUG("PNG encoded: " << encoded.png_data->size() << " bytes");
-            }
-            
-            if (config.output_webp && !encoded.has_webp) {
-                LOG_CERR("[ERROR] Failed to encode WebP for frame " << frame_idx) << std::endl;
-                if (!config.output_png || !encoded.has_png) {
-                    failed_frames++;
-                    continue;
-                }
-            } else if (frame_idx == 0 && thread_id == 0 && encoded.has_webp) {
-                LOG_DEBUG("WebP encoded: " << encoded.webp_data->size() << " bytes");
             }
 
             // Write files or buffer for streaming
@@ -231,26 +218,16 @@ int renderFrames(
                 {
                     std::lock_guard<std::mutex> lock(buffer_mutex);
                     frame_buffer[frame_idx].frame_idx = frame_idx;
-                    if (encoded.has_png) {
-                        frame_buffer[frame_idx].png_data = encoded.png_data;
-                    }
-                    if (encoded.has_webp) {
-                        frame_buffer[frame_idx].webp_data = encoded.webp_data;
-                    }
+                    frame_buffer[frame_idx].png_data = encoded.png_data;
                     frame_buffer[frame_idx].ready = true;
                 }
                 buffer_cv.notify_all();
             } else {
                 // Write files using frame encoder
-                int write_errors = writeFrameToFile(encoded, frame_idx, filename_base, 
-                                                    config.output_png, config.output_webp);
+                int write_errors = writeFrameToFile(encoded, frame_idx, filename_base);
                 if (write_errors > 0) {
-                    if ((config.output_png && !encoded.has_png) || 
-                        (config.output_webp && !encoded.has_webp) ||
-                        (config.output_png && config.output_webp && !encoded.has_png && !encoded.has_webp)) {
-                        failed_frames++;
-                        continue;
-                    }
+                    failed_frames++;
+                    continue;
                 }
             }
 
@@ -280,11 +257,7 @@ int renderFrames(
     std::thread writer_thread;
     if (config.stream_mode) {
         writer_thread = std::thread([&]() {
-            // Only support PNG streaming for now (ffmpeg image2pipe expects PNG)
-            if (!config.output_png) {
-                LOG_CERR("[ERROR] Streaming mode requires --png (WebP streaming not supported)") << std::endl;
-                return;
-            }
+            // Streaming mode outputs PNG (ffmpeg image2pipe expects PNG)
             
             for (int i = 0; i < num_frames; i++) {
                 std::unique_lock<std::mutex> lock(buffer_mutex);
@@ -345,14 +318,7 @@ int renderFrames(
 
     if (!config.stream_mode) {
         std::ostringstream success_msg;
-        success_msg << "[INFO] Successfully rendered " << num_frames << " frames to " << config.output_dir;
-        if (config.output_png && config.output_webp) {
-            success_msg << " (PNG and WebP formats)";
-        } else if (config.output_png) {
-            success_msg << " (PNG format)";
-        } else {
-            success_msg << " (WebP format)";
-        }
+        success_msg << "[INFO] Successfully rendered " << num_frames << " frames to " << config.output_dir << " (PNG format)";
         LOG_COUT(success_msg.str()) << std::endl;
     } else {
         // In stream mode, log to stderr to avoid interfering with stdout PNG data

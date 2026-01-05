@@ -6,8 +6,6 @@
 
 // Command-line arguments structure
 struct Arguments {
-    bool output_png = false;
-    bool output_webp = false;
     bool stream_mode = false;
     bool debug_mode = false;
     bool show_version = false;  // --version flag

@@ -8,12 +8,7 @@ on:
     paths:
       - 'src/**'
       - 'Dockerfile.lotio'
-  workflow_run:
-    workflows: ["Build Skia Docker Image"]
-    types:
-      - completed
-    branches:
-      - main
+      - 'scripts/build_minimal.sh'
   workflow_dispatch:
 
 permissions:
@@ -57,16 +52,6 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - name: Pull Skia base image
-        run: |
-          echo "Pulling matrunchyk/skia:latest..."
-          docker pull matrunchyk/skia:latest || {
-            echo "❌ ERROR: Skia base image not found!"
-            echo "Please build skia image first or ensure it exists in Docker Hub"
-            exit 1
-          }
-          echo "✅ Skia base image pulled successfully"
-
       - name: Build and push Lotio image
         uses: docker/build-push-action@v5
         with:
@@ -77,8 +62,6 @@ jobs:
           tags: |
             matrunchyk/lotio:latest
             matrunchyk/lotio:${{ steps.version.outputs.VERSION }}
-          cache-from: |
-            type=registry,ref=matrunchyk/skia:latest
-            type=registry,ref=matrunchyk/lotio:latest
+          cache-from: type=registry,ref=matrunchyk/lotio:latest
           cache-to: type=registry,ref=matrunchyk/lotio:latest,mode=max
 

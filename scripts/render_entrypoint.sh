@@ -3,7 +3,7 @@ set -e
 
 # Entrypoint script for Docker container
 # Renders Lottie animation frames and encodes to video using ffmpeg
-# Passes through lotio arguments and adds --png --stream for video encoding
+# Passes through lotio arguments and adds --stream for video encoding
 
 # Extract output video file from arguments (entrypoint-specific)
 OUTPUT_VIDEO="output.mov"
@@ -27,6 +27,10 @@ while [[ $# -gt 0 ]]; do
             TEXT_MEASUREMENT_MODE="$2"
             shift 2
             ;;
+        --version)
+            lotio --version
+            exit 0
+            ;;
         --help|-h)
             echo "Usage: $0 [LOTIO_OPTIONS] [--output OUTPUT.mov]"
             echo ""
@@ -39,13 +43,13 @@ while [[ $# -gt 0 ]]; do
             echo "  --text-measurement-mode, -m MODE  Text measurement mode: fast|accurate|pixel-perfect (default: accurate)"
             echo ""
             echo "lotio usage:"
-            lotio --help 2>&1 || echo "  lotio [--png] [--webp] [--stream] [--debug] [--text-config <config.json>] [--text-padding <0.0-1.0>] [--text-measurement-mode <fast|accurate|pixel-perfect>] <input.json> <output_dir> [fps]"
+            lotio --help 2>&1 || echo "  lotio [--stream] [--debug] [--text-config <config.json>] [--text-padding <0.0-1.0>] [--text-measurement-mode <fast|accurate|pixel-perfect>] <input.json> <output_dir> [fps]"
             echo ""
-            echo "Note: --png and --stream are automatically added if not present (required for video encoding)"
+            echo "Note: --stream is automatically added if not present (required for video encoding)"
             echo ""
             echo "Example:"
             echo "  $0 --text-config config.json input.json - 30 --output output.mov"
-            echo "  $0 --png --stream --debug input.json - 25 --output output.mov"
+            echo "  $0 --stream --debug input.json - 25 --output output.mov"
             exit 0
             ;;
         *)
@@ -88,22 +92,15 @@ if [ -z "$FPS" ]; then
     FPS=25
 fi
 
-# Ensure --png and --stream are present for video encoding (required for ffmpeg pipe)
-HAS_PNG=false
+# Ensure --stream is present for video encoding (required for ffmpeg pipe)
 HAS_STREAM=false
 
 for arg in "${LOTIO_ARGS[@]}"; do
-    if [ "$arg" == "--png" ]; then
-        HAS_PNG=true
-    elif [ "$arg" == "--stream" ]; then
+    if [ "$arg" == "--stream" ]; then
         HAS_STREAM=true
+        break
     fi
 done
-
-# Add --png if not present (required for streaming to ffmpeg)
-if [ "$HAS_PNG" = false ]; then
-    LOTIO_ARGS=("--png" "${LOTIO_ARGS[@]}")
-fi
 
 # Add --stream if not present (required for piping to ffmpeg)
 if [ "$HAS_STREAM" = false ]; then

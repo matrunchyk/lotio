@@ -8,26 +8,18 @@
 // Frame encoding result
 struct EncodedFrame {
     sk_sp<SkData> png_data;
-    sk_sp<SkData> webp_data;
     bool has_png = false;
-    bool has_webp = false;
 };
 
-// Encode frame image to PNG and/or WebP
-EncodedFrame encodeFrame(
-    sk_sp<SkImage> image,
-    bool output_png,
-    bool output_webp
-);
+// Encode frame image to PNG
+EncodedFrame encodeFrame(sk_sp<SkImage> image);
 
 // Write encoded frame to file
 // Returns 0 on success, 1 on failure
 int writeFrameToFile(
     const EncodedFrame& frame,
     int frame_idx,
-    const std::string& filename_base,
-    bool output_png,
-    bool output_webp
+    const std::string& filename_base
 );
 
 #endif // FRAME_ENCODER_H

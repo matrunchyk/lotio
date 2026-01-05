@@ -2,6 +2,9 @@
 # Target: Linux ARM64
 # This image contains lotio binary + ffmpeg built on top of the lotio image
 
+# Allow overriding the base lotio image for local testing
+ARG LOTIO_IMAGE=matrunchyk/lotio:latest
+
 ########################################################################################
 # Stage 1: FFmpeg Builder - Build ffmpeg from source
 FROM ubuntu:22.04 AS ffmpeg-builder
@@ -92,7 +95,7 @@ RUN echo "[BUILD] Downloading ffmpeg source..." && \
 
 ########################################################################################
 # Stage 2: Runtime - Final image with lotio + ffmpeg
-FROM matrunchyk/lotio:latest
+FROM ${LOTIO_IMAGE}
 
 # Copy ffmpeg and all its libraries from builder
 COPY --from=ffmpeg-builder /opt/ffmpeg /opt/ffmpeg

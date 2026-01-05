@@ -8,8 +8,6 @@
 
 // Render configuration
 struct RenderConfig {
-    bool output_png = false;
-    bool output_webp = false;
     bool stream_mode = false;
     std::string output_dir;
     float fps = 25.0f;

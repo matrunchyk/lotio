@@ -15,11 +15,11 @@ echo ""
 # Check if binary exists
 if [ ! -f "lotio" ]; then
     echo "❌ Error: lotio binary not found!"
-    echo "💡 Run './scripts/build_local.sh' first to build the binary"
+    echo "💡 Run './scripts/build_minimal.sh' first to build the binary"
     exit 1
 fi
 
-# Generate test version (date-SHA format like CI)
+# Generate test version (date format for testing - production uses semver v1.2.3)
 TEST_VERSION="v$(date +%Y%m%d)-test"
 TEST_VERSION_NUMBER="${TEST_VERSION#v}"
 

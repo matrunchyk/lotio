@@ -7,7 +7,6 @@ on:
     paths:
       - 'docs/**'
       - 'scripts/build_docs.py'
-      - 'scripts/build_docs.sh'
       - 'examples/**'
   workflow_dispatch:
 
