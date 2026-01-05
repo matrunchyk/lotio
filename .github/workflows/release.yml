@@ -291,6 +291,7 @@ jobs:
             type=registry,ref=matrunchyk/lotio:latest,mode=max
             type=gha,mode=max
           build-args: |
+            VERSION=${{ steps.version.outputs.VERSION }}
             BUILDKIT_INLINE_CACHE=1
 
       - name: Build and push lotio-ffmpeg image (multi-platform)
