@@ -1,62 +1,126 @@
 # Multi-stage Dockerfile for lotio binary
-# Target: Linux ARM64
-# This image builds Skia from scratch using build_minimal.sh and then builds lotio
+# Supports multi-arch builds (arm64, x86_64) with BuildKit
+# This image builds lotio using pre-built Skia from matrunchyk/skia:latest
 
 ########################################################################################
-# Stage 1: Builder - Build Skia and compile lotio binary
-FROM ubuntu:22.04 AS lotio-builder
-
-# Avoid interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install build dependencies
-RUN echo "[BUILD] Installing build dependencies..." && \
-    apt-get update && \
-    apt-get install -y \
-    build-essential \
-    python3 \
-    python3-pip \
-    ninja-build \
-    git \
-    curl \
-    clang \
-    lld \
-    pkg-config \
-    gcc \
-    g++ \
-    make \
-    libfontconfig1-dev \
-    libfreetype6-dev \
-    libx11-dev \
-    libxext-dev \
-    libxrender-dev \
-    mesa-common-dev \
-    libgl1-mesa-dev \
-    libglu1-mesa-dev \
-    libpng-dev \
-    libicu-dev \
-    libharfbuzz-dev \
-    && rm -rf /var/lib/apt/lists/* && \
-    echo "[BUILD] Build dependencies installed"
+# Stage 1: Build lotio using Skia base image
+# This stage uses the pre-built Skia image as a base (from Dockerfile.skia)
+ARG SKIA_IMAGE=matrunchyk/skia:latest
+FROM ${SKIA_IMAGE} AS lotio-builder
 
 WORKDIR /build
 
-# Copy entire project (needed for build_minimal.sh)
-COPY . .
+# Copy only lotio source files (not entire project)
+COPY src/ ./src/
 
-# Build Skia and lotio using minimal build script
-# Pass version from build arg or use "dev" as default
+# Build arguments
 ARG VERSION=dev
-RUN echo "[BUILD] Building Skia and lotio using build_minimal.sh..." && \
-    chmod +x scripts/build_minimal.sh && \
-    VERSION="${VERSION}" ./scripts/build_minimal.sh && \
-    echo "[BUILD] Build complete" && \
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+
+# Generate dev version with build datetime if VERSION is "dev" (build-time, not runtime)
+# Calculate once and store in a file for reuse across all RUN commands
+RUN if [ "$VERSION" = "dev" ]; then \
+        BUILD_DATETIME=$(date +"%Y%m%d-%H%M%S") && \
+        echo "dev-${BUILD_DATETIME}" > /tmp/version.txt; \
+    else \
+        echo "$VERSION" > /tmp/version.txt; \
+    fi && \
+    ACTUAL_VERSION=$(cat /tmp/version.txt) && \
+    echo "[BUILD] Using VERSION: ${ACTUAL_VERSION}"
+
+# Create temp include structure for <skia/...> includes (like build_binary.sh does)
+# This allows both #include "include/core/..." and #include <skia/core/...> to work
+RUN mkdir -p /tmp/skia_include/skia && \
+    ln -sf /opt/skia/include/core /tmp/skia_include/skia/core && \
+    ln -sf /opt/skia/include /tmp/skia_include/skia/include && \
+    ln -sf /opt/skia/modules /tmp/skia_include/skia/modules && \
+    echo "[BUILD] Temp include structure created"
+
+# Source files for library (excluding main.cpp)
+# Compile library source files
+# Use -I/opt/skia (not /opt/skia/include) to support #include "include/core/..."
+# Use -I/tmp/skia_include to support #include <skia/core/...>
+RUN ACTUAL_VERSION=$(cat /tmp/version.txt) && \
+    VERSION_DEFINE="-DVERSION=\\\"${ACTUAL_VERSION}\\\"" && \
+    CXXFLAGS="-std=c++17 -O3 -DNDEBUG $VERSION_DEFINE" && \
+    INCLUDES="-I/opt/skia -I/opt/skia/include -I/opt/skia/modules -I/opt/skia/gen -I/tmp/skia_include -I./src" && \
+    echo "[BUILD] Compiling library source files with VERSION: ${ACTUAL_VERSION}..." && \
+    for src in src/core/argument_parser.cpp \
+               src/core/animation_setup.cpp \
+               src/core/frame_encoder.cpp \
+               src/core/renderer.cpp \
+               src/utils/crash_handler.cpp \
+               src/utils/logging.cpp \
+               src/utils/string_utils.cpp \
+               src/utils/version.cpp \
+               src/text/text_config.cpp \
+               src/text/text_processor.cpp \
+               src/text/font_utils.cpp \
+               src/text/text_sizing.cpp \
+               src/text/json_manipulation.cpp; do \
+        obj="${src%.cpp}.o" && \
+        echo "      Compiling: $(basename $src)" && \
+        g++ $CXXFLAGS $INCLUDES -c "$src" -o "$obj" || exit 1; \
+    done && \
+    echo "[BUILD] Library source files compiled"
+
+# Create static library
+RUN echo "[BUILD] Creating liblotio.a..." && \
+    ar rcs liblotio.a \
+        src/core/argument_parser.o \
+        src/core/animation_setup.o \
+        src/core/frame_encoder.o \
+        src/core/renderer.o \
+        src/utils/crash_handler.o \
+        src/utils/logging.o \
+        src/utils/string_utils.o \
+        src/utils/version.o \
+        src/text/text_config.o \
+        src/text/text_processor.o \
+        src/text/font_utils.o \
+        src/text/text_sizing.o \
+        src/text/json_manipulation.o && \
+    echo "[BUILD] liblotio.a created"
+
+# Compile main.cpp
+RUN ACTUAL_VERSION=$(cat /tmp/version.txt) && \
+    VERSION_DEFINE="-DVERSION=\\\"${ACTUAL_VERSION}\\\"" && \
+    CXXFLAGS="-std=c++17 -O3 -DNDEBUG $VERSION_DEFINE" && \
+    INCLUDES="-I/opt/skia -I/opt/skia/include -I/opt/skia/modules -I/opt/skia/gen -I/tmp/skia_include -I./src" && \
+    echo "[BUILD] Compiling main entry point with VERSION: ${ACTUAL_VERSION}..." && \
+    g++ $CXXFLAGS $INCLUDES -c src/main.cpp -o src/main.o && \
+    echo "[BUILD] Main entry point compiled"
+
+# Link the binary
+RUN echo "[BUILD] Linking binary..." && \
+    g++ -std=c++17 -O3 -DNDEBUG \
+        src/main.o liblotio.a \
+        -L/opt/skia/lib \
+        /opt/skia/lib/libskresources.a \
+        /opt/skia/lib/libskparagraph.a \
+        /opt/skia/lib/libskottie.a \
+        /opt/skia/lib/libskshaper.a \
+        /opt/skia/lib/libskunicode_icu.a \
+        /opt/skia/lib/libskunicode_core.a \
+        /opt/skia/lib/libsksg.a \
+        /opt/skia/lib/libjsonreader.a \
+        /opt/skia/lib/libskia.a \
+        -lfreetype -lpng -lharfbuzz -licuuc -licui18n -licudata \
+        -lz -lfontconfig -lexpat -lm -lpthread \
+        -lX11 -lGL -lGLU \
+        -o lotio && \
+    echo "[BUILD] Binary linked successfully" && \
     ls -lh /build/lotio && \
     ls -lh /build/liblotio.a
 
 ########################################################################################
 # Stage 2: Runtime - Minimal runtime image
 FROM ubuntu:22.04
+
+# Set environment variables (works for both arm64 and x86_64)
+ENV LD_LIBRARY_PATH=/opt/skia/lib:/usr/lib/aarch64-linux-gnu:/usr/lib/x86_64-linux-gnu
+ENV PATH=/usr/local/bin:${PATH}
 
 # Install runtime libraries
 RUN echo "[BUILD] Setting up runtime environment..." && \
@@ -76,15 +140,11 @@ RUN echo "[BUILD] Setting up runtime environment..." && \
     && rm -rf /var/lib/apt/lists/* && \
     echo "[BUILD] Runtime libraries installed"
 
-# Copy Skia libraries from builder
-COPY --from=lotio-builder /build/third_party/skia/out/Release /opt/skia/lib
+# Copy Skia libraries from builder (which is based on the Skia image)
+COPY --from=lotio-builder /opt/skia/lib /opt/skia/lib
 
 # Copy lotio binary
 COPY --from=lotio-builder /build/lotio /usr/local/bin/lotio
-
-# Set environment variables
-ENV LD_LIBRARY_PATH=/opt/skia/lib:/usr/lib/aarch64-linux-gnu:/usr/lib/x86_64-linux-gnu
-ENV PATH=/usr/local/bin:${PATH}
 
 # Verify lotio binary
 RUN echo "[BUILD] Verifying lotio binary..." && \
@@ -94,4 +154,3 @@ RUN echo "[BUILD] Verifying lotio binary..." && \
 WORKDIR /workspace
 
 ENTRYPOINT ["/usr/local/bin/lotio"]
-

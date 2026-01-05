@@ -293,6 +293,13 @@ export function renderFrameRGBA(time) {
     return { rgba, width, height };
 }
 
+export function getVersion() {
+    if (!Module) {
+        throw new Error('WASM module not initialized. Call initLotio() first.');
+    }
+    return Module.UTF8ToString(Module._lotio_get_version());
+}
+
 export function registerFont(fontName, fontData) {
     if (!Module) {
         throw new Error('WASM module not initialized. Call initLotio() first.');

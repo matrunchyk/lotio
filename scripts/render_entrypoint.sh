@@ -4,7 +4,17 @@ set -e
 # Entrypoint script for Docker container
 # Renders Lottie animation frames and encodes to video using ffmpeg
 # Passes through lotio arguments and adds --stream for video encoding
+#
+# Usage:
+#   - Direct command execution: docker run image ffmpeg -version
+#   - lotio rendering: docker run image input.json - 30 --output video.mov
 
+# If first argument is a command (exists in PATH), execute it directly
+if [ $# -gt 0 ] && command -v "$1" >/dev/null 2>&1; then
+    exec "$@"
+fi
+
+# Otherwise, treat arguments as lotio commands and wrap with ffmpeg
 # Extract output video file from arguments (entrypoint-specific)
 OUTPUT_VIDEO="output.mov"
 LOTIO_ARGS=()
@@ -124,7 +134,7 @@ echo "[RENDER] Text measurement mode: $TEXT_MEASUREMENT_MODE"
 # Render frames and pipe to ffmpeg
 # Use ProRes 4444 codec for transparent MOV with alpha channel support
 echo "[RENDER] Rendering frames and encoding to transparent MOV (ProRes 4444)..."
-"${LOTIO_CMD[@]}" | ffmpeg -y \
+"${LOTIO_CMD[@]}" | /opt/ffmpeg/bin/ffmpeg -y \
     -f image2pipe \
     -vcodec png \
     -r $FPS \

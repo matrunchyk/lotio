@@ -15,8 +15,8 @@
 
 3. **Build:**
    ```bash
-   # Build lotio (minimal build with zero bundled dependencies)
-   ./scripts/build_minimal.sh
+   # Build lotio (binary build with zero bundled dependencies)
+   ./scripts/build_binary.sh
    ```
 
 ## Code Organization
@@ -24,7 +24,7 @@
 - **`src/core/`** - Core application logic
   - `argument_parser.cpp` - Command-line argument parsing
   - `animation_setup.cpp` - Skottie animation initialization
-  - `frame_encoder.cpp` - Frame encoding (PNG/WebP)
+  - `frame_encoder.cpp` - Frame encoding (PNG)
   - `renderer.cpp` - Multi-threaded frame rendering
 
 - **`src/text/`** - Text processing
@@ -42,7 +42,7 @@
 ## Adding New Features
 
 1. Add source files to the appropriate module directory
-2. Update `scripts/build_minimal.sh` if adding new source files
+2. Update `scripts/build_binary.sh` if adding new source files
 3. Follow existing code structure and patterns
 4. Update headers in the same directory as implementation files
 
@@ -58,14 +58,14 @@
 Test your changes locally:
 
 ```bash
-# Build (recommended: minimal build)
-./scripts/build_minimal.sh
+# Build (recommended: binary build)
+./scripts/build_binary.sh
 
 # Test binary
 ./lotio --help
 
 # Test with sample animation
-./lotio --png sample.json output/ 30
+./lotio sample.json output/ 30
 ```
 
 ## Submitting Changes

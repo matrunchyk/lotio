@@ -31,6 +31,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <ctime>
+#include <iomanip>
 
 // Helper to parse text config from string (for WASM)
 static std::map<std::string, TextLayerConfig> parseTextConfigFromString(const std::string& json) {
@@ -792,6 +794,20 @@ extern "C" {
     EMSCRIPTEN_KEEPALIVE
     void lotio_cleanup() {
         g_context.reset();
+    }
+    
+    // Version function - returns version string
+    EMSCRIPTEN_KEEPALIVE
+    const char* lotio_get_version() {
+        #ifdef VERSION
+        return VERSION;
+        #else
+        // Fallback: use build-time date/time macros (compile-time constants)
+        // Note: This fallback should rarely be used as build scripts always define VERSION
+        // Format: "dev-MMM DD YYYY-HH:MM:SS" (e.g., "dev-Jan 01 2024-12:00:00")
+        // Build scripts generate "dev-YYYYMMDD-HHMMSS" format when VERSION is not set
+        return "dev-" __DATE__ "-" __TIME__;
+        #endif
     }
 }
 

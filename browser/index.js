@@ -8,7 +8,7 @@
  * @module @matrunchyk/lotio
  */
 
-import { initLotio, createAnimation, renderFrameToCanvas, renderFrameRGBA, cleanup, registerFont } from './wasm.js';
+import { initLotio, createAnimation, renderFrameToCanvas, renderFrameRGBA, cleanup, registerFont, getVersion } from './wasm.js';
 
 /**
  * Frame output types
@@ -473,3 +473,6 @@ export class Lotio extends EventEmitter {
 
 // Export default
 export default Lotio;
+
+// Export version getter
+export { getVersion };

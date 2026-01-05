@@ -1,13 +1,22 @@
 # Multi-stage Dockerfile for lotio with ffmpeg
-# Target: Linux ARM64
-# This image contains lotio binary + ffmpeg built on top of the lotio image
+# Supports multi-arch builds (arm64, x86_64) with BuildKit
+# This image builds ffmpeg and adds it to the lotio image from Dockerfile.lotio
+#
+# Build chain:
+#   Dockerfile.skia → matrunchyk/skia:latest
+#   Dockerfile.lotio → matrunchyk/lotio:latest (uses matrunchyk/skia:latest)
+#   Dockerfile.lotio-ffmpeg → matrunchyk/lotio-ffmpeg:latest (uses matrunchyk/lotio:latest)
 
 # Allow overriding the base lotio image for local testing
 ARG LOTIO_IMAGE=matrunchyk/lotio:latest
 
 ########################################################################################
-# Stage 1: FFmpeg Builder - Build ffmpeg from source
+# Stage 1: FFmpeg Builder - Build ffmpeg from source (multi-arch)
 FROM ubuntu:22.04 AS ffmpeg-builder
+
+# BuildKit automatically sets TARGETPLATFORM for multi-arch builds
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
 
 RUN echo "[BUILD] Building ffmpeg from source on Ubuntu..." && \
     apt-get update && \
@@ -16,71 +25,35 @@ RUN echo "[BUILD] Building ffmpeg from source on Ubuntu..." && \
     g++ \
     make \
     nasm \
-    yasm \
-    git \
     curl \
     tar \
-    cmake \
     pkg-config \
     libpng-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Build x264
-WORKDIR /build
-RUN echo "[BUILD] Building x264..." && \
-    git clone --depth 1 https://code.videolan.org/videolan/x264.git && \
-    cd x264 && \
-    ./configure --prefix=/opt/ffmpeg --enable-shared --enable-pic && \
-    make -j$(nproc) && \
-    make install && \
-    echo "[BUILD] x264 built"
-
-# Build x265 (disable unsupported ARM optimizations)
-RUN echo "[BUILD] Building x265..." && \
-    git clone --depth 1 https://bitbucket.org/multicoreware/x265_git.git && \
-    cd x265_git && \
-    mkdir -p build/linux && \
-    cd build/linux && \
-    cmake -G "Unix Makefiles" \
-    -DCMAKE_INSTALL_PREFIX=/opt/ffmpeg \
-    -DENABLE_SHARED=ON \
-    -DENABLE_SVE2=OFF \
-    -DENABLE_SVE2_BITPERM=OFF \
-    ../../source && \
-    make -j$(nproc) && \
-    make install && \
-    echo "[BUILD] x265 built" && \
-    echo "[BUILD] Creating x265 pkg-config file..." && \
-    mkdir -p /opt/ffmpeg/lib/pkgconfig && \
-    echo 'prefix=/opt/ffmpeg' > /opt/ffmpeg/lib/pkgconfig/x265.pc && \
-    echo 'exec_prefix=${prefix}' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
-    echo 'libdir=${exec_prefix}/lib' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
-    echo 'includedir=${prefix}/include' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
-    echo '' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
-    echo 'Name: x265' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
-    echo 'Description: H.265/HEVC video encoder' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
-    echo 'Version: 3.5' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
-    echo 'Libs: -L${libdir} -lx265' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
-    echo 'Libs.private: -lstdc++ -lm -ldl' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
-    echo 'Cflags: -I${includedir}' >> /opt/ffmpeg/lib/pkgconfig/x265.pc && \
-    echo "[BUILD] x265 pkg-config file created"
-
-# Build ffmpeg with ProRes support
+# Build ffmpeg with ProRes support (minimal build for lotio's use case)
+# Supports both pipe input (image2pipe) and disk-based input (image2 with file patterns)
 WORKDIR /ffmpeg-build
 RUN echo "[BUILD] Downloading ffmpeg source..." && \
-    curl -L https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n7.1.2.tar.gz | tar -xz && \
-    cd FFmpeg-* && \
-    echo "[BUILD] Configuring ffmpeg for Ubuntu (ProRes support built-in)..." && \
-    PKG_CONFIG_PATH=/opt/ffmpeg/lib/pkgconfig ./configure \
+    curl -L -f https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n8.0.tar.gz -o /tmp/ffmpeg.tar.gz && \
+    tar -xz -C /tmp -f /tmp/ffmpeg.tar.gz && \
+    cd /tmp/FFmpeg-* && \
+    echo "[BUILD] Configuring ffmpeg (minimal build for ProRes + PNG input)..." && \
+    ./configure \
     --prefix=/opt/ffmpeg \
-    --enable-gpl \
-    --enable-version3 \
-    --enable-libx264 \
     --enable-decoder=png \
-    --enable-encoder=png \
     --enable-demuxer=image2 \
-    --extra-cflags="-I/opt/ffmpeg/include -O3 -march=native" \
-    --extra-ldflags="-L/opt/ffmpeg/lib -Wl,-rpath,/opt/ffmpeg/lib" \
+    --enable-muxer=mov \
+    --enable-encoder=prores_ks \
+    --enable-filter=format \
+    --enable-protocol=pipe \
+    --disable-network \
+    --disable-doc \
+    --disable-avdevice \
+    --disable-ffplay \
+    --disable-ffprobe \
+    --extra-cflags="-O3" \
+    --extra-ldflags="-Wl,-rpath,/opt/ffmpeg/lib" \
     --enable-shared \
     --disable-static \
     --disable-debug \
@@ -95,6 +68,7 @@ RUN echo "[BUILD] Downloading ffmpeg source..." && \
 
 ########################################################################################
 # Stage 2: Runtime - Final image with lotio + ffmpeg
+# Uses matrunchyk/lotio:latest (built from Dockerfile.lotio) as base
 FROM ${LOTIO_IMAGE}
 
 # Copy ffmpeg and all its libraries from builder

@@ -1,6 +1,6 @@
 # Lotio
 
-High-performance Lottie animation frame renderer using Skia. Renders animations to PNG/WebP frames for video encoding.
+High-performance Lottie animation frame renderer using Skia. Renders animations to PNG frames for video encoding.
 
 ## Installation
 
@@ -26,8 +26,8 @@ xcode-select --install
 
 **Build:**
 ```bash
-# Build lotio (minimal build with zero bundled dependencies)
-./scripts/build_minimal.sh
+# Build lotio (binary build with zero bundled dependencies)
+./scripts/build_binary.sh
 ```
 
 ## Usage
@@ -35,30 +35,46 @@ xcode-select --install
 ### Command Line
 
 ```bash
-lotio [--png] [--webp] [--stream] [--debug] [--text-config <config.json>] [--text-padding <0.0-1.0>] [--text-measurement-mode <fast|accurate|pixel-perfect>] <input.json> <output_dir> [fps]
+lotio [--stream] [--debug] [--text-config <config.json>] [--text-padding <0.0-1.0>] [--text-measurement-mode <fast|accurate|pixel-perfect>] <input.json> <output_dir> [fps]
 ```
 
 **Options:**
-- `--png` - Output frames as PNG files
-- `--webp` - Output frames as WebP files
-- `--stream` - Stream frames to stdout (for piping to ffmpeg)
+- `--stream` - Stream frames to stdout as PNG (for piping to ffmpeg)
 - `--debug` - Enable debug output
 - `--text-config` - Path to text configuration JSON (for auto-fit and dynamic text values)
 - `--text-padding` - Text padding factor (0.0-1.0, default: 0.97 = 3% padding)
 - `--text-measurement-mode` - Text measurement mode: `fast` | `accurate` | `pixel-perfect` (default: `accurate`)
+- `--version` - Print version information and exit
+- `--help, -h` - Show help message
 - `fps` - Frames per second for output (default: 25)
 
 **Examples:**
 ```bash
-# Render to PNG and WebP
-lotio --png --webp animation.json frames/ 30
+# Render to PNG frames
+lotio animation.json frames/ 30
 
 # Stream to ffmpeg
-lotio --png --stream animation.json - | ffmpeg -f image2pipe -i - output.mp4
+lotio --stream animation.json - | ffmpeg -f image2pipe -i - output.mp4
 
 # With text configuration
-lotio --png --text-config text_config.json animation.json frames/
+lotio --text-config text_config.json animation.json frames/
 ```
+
+### Docker (Recommended for Video Output)
+
+**Quick start with automatic video encoding:**
+```bash
+docker run --rm -v $(pwd):/workspace matrunchyk/lotio-ffmpeg:latest \
+  data.json - 30 --text-config text-config.json --output video.mov
+```
+
+**Available images:**
+- `matrunchyk/lotio-ffmpeg:latest` - lotio + FFmpeg with automatic video encoding (recommended)
+- `matrunchyk/lotio:latest` - lotio binary only (for programmatic use)
+
+**Multi-platform support:** Both images support `linux/arm64` and `linux/amd64`.
+
+See [Docker Documentation](docs/docker.html) for detailed usage.
 
 ### Browser (WebAssembly)
 
@@ -215,11 +231,11 @@ The `samples/` directory contains example Lottie animations and configurations:
 ```bash
 # Sample 1: Basic animation with text customization
 cd samples/sample1
-lotio --png --webp --text-config text-config.json data.json output/ 30
+lotio --text-config text-config.json data.json output/ 30
 
 # Sample 2: Animation with external images
 cd samples/sample2
-lotio --png --webp data.json output/ 30
+lotio data.json output/ 30
 ```
 
 ## Using as a Library
@@ -295,7 +311,7 @@ graph TB
     subgraph triggers["Event Triggers"]
         mainPush["Push to main<br/>(creates semver tag)"]
         tagPush["Tag push v*"]
-        lotioChanges["Changes to<br/>src/** or Dockerfile.lotio<br/>or build_minimal.sh"]
+        lotioChanges["Changes to<br/>src/** or Dockerfile.lotio<br/>or build_binary.sh"]
         docsChanges["Changes to<br/>docs/** or examples/**"]
         manual["Manual<br/>workflow_dispatch"]
     end
@@ -359,18 +375,20 @@ graph TB
 ### Workflow Descriptions
 
 **build-lotio.yml** - Builds and publishes `matrunchyk/lotio` Docker image
-- **Purpose**: Create lotio binary Docker image (builds Skia from scratch using build_minimal.sh)
-- **Triggers**: Main branch push, tag pushes, source code changes, Dockerfile.lotio changes, build_minimal.sh changes, manual dispatch
-- **Logic**: Builds Skia from scratch using minimal build script (zero bundled dependencies, fast build)
+- **Purpose**: Create lotio binary Docker image using pre-built Skia base image
+- **Triggers**: Main branch push, tag pushes, source code changes, Dockerfile.lotio changes, build_binary.sh changes, manual dispatch
+- **Logic**: Uses `matrunchyk/skia:latest` as base image (Skia pre-built), only compiles lotio source
+- **Build chain**: `Dockerfile.skia` → `Dockerfile.lotio` (uses pre-built Skia)
 - **Concurrency**: Single instance per workflow (cancels in-progress runs when new one starts)
-- **Output**: `matrunchyk/lotio:latest` and `matrunchyk/lotio:v1.2.3`
+- **Output**: `matrunchyk/lotio:latest` and `matrunchyk/lotio:v1.2.3` (multi-platform: arm64, amd64)
+- **Architecture tags**: Also creates `-arm64` and `-amd64` tags for clarity
 
 **release.yml** - Builds all release artifacts and creates GitHub release
 - **Purpose**: Build and package all distribution formats (binaries, WASM, Homebrew, docs)
 - **Triggers**: Push to main (creates semver tag automatically), tag pushes (v*), manual dispatch
 - **Logic**: 
   - Generates semver version from tag or creates new tag on main push
-  - Builds Skia from scratch using `build_minimal.sh` (zero bundled dependencies, fast build)
+  - Builds Skia from scratch using `build_binary.sh` (zero bundled dependencies, fast build)
   - Builds in parallel: macOS, Linux, WASM, Homebrew
   - Injects version into all artifacts
 - **Concurrency**: Single instance per workflow (cancels in-progress runs when new one starts)
@@ -414,7 +432,7 @@ Reload Cursor/VS Code after cloning: `Cmd+Shift+P` → "Reload Window"
 **Skia build fails:**
 - Ensure all dependencies are installed
 - Check sufficient disk space (Skia build is large)
-- Review error messages in `scripts/build_minimal.sh` output
+- Review error messages in `scripts/build_binary.sh` output
 
 **Linker errors:**
 - Verify Skia libraries exist in `third_party/skia/skia/out/Release/`

@@ -1,0 +1,130 @@
+# Multi-stage Dockerfile for building Skia
+# Supports multi-arch builds (arm64, x86_64) with BuildKit
+# This image builds Skia from scratch using build_binary.sh
+
+########################################################################################
+# Stage 1: Builder - Build Skia using build_binary.sh
+FROM ubuntu:22.04 AS skia-builder
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN echo "[BUILD] Installing build dependencies..." && \
+    apt-get update && \
+    apt-get install -y \
+    build-essential \
+    python3 \
+    python3-pip \
+    ninja-build \
+    git \
+    curl \
+    clang \
+    lld \
+    pkg-config \
+    gcc \
+    g++ \
+    make \
+    ccache \
+    libfontconfig1-dev \
+    libfreetype6-dev \
+    libx11-dev \
+    libxext-dev \
+    libxrender-dev \
+    mesa-common-dev \
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \
+    libpng-dev \
+    libicu-dev \
+    libharfbuzz-dev \
+    && rm -rf /var/lib/apt/lists/* && \
+    echo "[BUILD] Build dependencies installed"
+
+# Configure ccache
+ENV CCACHE_DIR=/root/.ccache
+ENV CCACHE_MAXSIZE=10G
+ENV CCACHE_COMPRESS=1
+ENV PATH="/usr/lib/ccache:${PATH}"
+
+WORKDIR /build
+
+# Copy entire project (needed for build scripts)
+COPY . .
+
+# Build Skia using binary build script
+# Pass target CPU from build args
+# Use BuildKit cache mounts for ccache and Skia build output
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+
+# Determine TARGET_CPU from TARGETPLATFORM (set by BuildKit)
+# TARGETPLATFORM format: linux/arm64, linux/amd64, etc.
+RUN TARGET_CPU=$(echo "$TARGETPLATFORM" | sed 's/linux\///' | sed 's/amd64/x64/' | sed 's/arm64/arm64/') && \
+    echo "[BUILD] Building Skia for platform: $TARGETPLATFORM (CPU: $TARGET_CPU)" && \
+    echo "[BUILD] ccache stats before build:" && \
+    ccache -s || true && \
+    chmod +x scripts/_build_skia.sh scripts/build_binary.sh && \
+    TARGET_CPU="$TARGET_CPU" ./scripts/build_binary.sh --target-cpu="$TARGET_CPU" && \
+    echo "[BUILD] ccache stats after build:" && \
+    ccache -s || true && \
+    echo "[BUILD] Skia build complete" && \
+    ls -lh /build/third_party/skia/out/Release/*.a | head -10
+
+########################################################################################
+# Stage 2: Base Image - Skia libraries + build tools for compiling against Skia
+# This image can be used as a base image to compile code against Skia
+# without needing to rebuild Skia itself
+FROM ubuntu:22.04
+
+# Avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build tools and development packages needed to compile against Skia
+# These are the same dependencies Skia was built against
+RUN echo "[BUILD] Installing build tools and Skia dependencies..." && \
+    apt-get update && \
+    apt-get install -y \
+    build-essential \
+    g++ \
+    gcc \
+    make \
+    pkg-config \
+    libfontconfig1-dev \
+    libfreetype6-dev \
+    libx11-dev \
+    libxext-dev \
+    libxrender-dev \
+    mesa-common-dev \
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \
+    libpng-dev \
+    libicu-dev \
+    libharfbuzz-dev \
+    libexpat1-dev \
+    && rm -rf /var/lib/apt/lists/* && \
+    echo "[BUILD] Build tools and dependencies installed"
+
+# Set environment variables (works for both arm64 and x86_64)
+ENV LD_LIBRARY_PATH=/opt/skia/lib:/usr/lib/aarch64-linux-gnu:/usr/lib/x86_64-linux-gnu
+
+# Copy Skia libraries from builder
+COPY --from=skia-builder /build/third_party/skia/out/Release /opt/skia/lib
+
+# Copy Skia headers (required for programmatic use)
+COPY --from=skia-builder /build/third_party/skia/include /opt/skia/include
+
+# Copy Skia modules headers (required for programmatic use)
+COPY --from=skia-builder /build/third_party/skia/modules /opt/skia/modules
+
+# Copy generated headers (gen/skia.h and other generated files - REQUIRED for compilation)
+COPY --from=skia-builder /build/third_party/skia/out/Release/gen /opt/skia/gen
+
+# Copy Skia source directory (required for internal headers like src/core/SkTHash.h)
+# This is needed because Skia's module headers reference internal source files
+COPY --from=skia-builder /build/third_party/skia/src /opt/skia/src
+
+WORKDIR /workspace
+
+# Default command: list available Skia libraries
+CMD ["ls", "-lh", "/opt/skia/lib"]
+

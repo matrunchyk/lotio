@@ -1,5 +1,6 @@
 #include "argument_parser.h"
 #include "../utils/logging.h"
+#include "../utils/version.h"
 #include <string>
 #include <iostream>
 #include <algorithm>
@@ -24,11 +25,7 @@ void printUsage(const char* program_name) {
 }
 
 void printVersion() {
-    #ifdef VERSION
-    std::cout << "lotio version " << VERSION << std::endl;
-    #else
-    std::cout << "lotio version dev" << std::endl;
-    #endif
+    std::cout << "lotio version " << getLotioVersion() << std::endl;
 }
 
 int parseArguments(int argc, char* argv[], Arguments& args) {

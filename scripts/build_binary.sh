@@ -2,10 +2,17 @@
 set -e
 
 ################################################################################
-# Minimal Build Script for Lotio
+# Binary Build Script for Lotio
 #
 # This script builds lotio with ZERO bundled dependencies!
 # All libraries use system/Homebrew versions - nothing is bundled in Skia.
+#
+# Usage:
+#   scripts/build_binary.sh [--target-cpu=arm64|x64] [--skip-skia] [--skip-skia-setup]
+#
+# For Docker multi-arch builds:
+#   TARGET_CPU=arm64 scripts/build_binary.sh --skip-skia-setup
+#   TARGET_CPU=x64 scripts/build_binary.sh --skip-skia-setup
 #
 # REQUIRED DEPENDENCIES: NONE (all use system libraries)
 # =====================================================
@@ -17,7 +24,7 @@ set -e
 # - zlib: System library (used by PNG encoding, available on all platforms)
 # - expat: Linked because fontconfig requires it (system on macOS, system on Linux)
 #
-# NOT NEEDED (removed from minimal build):
+# NOT NEEDED (removed from binary build):
 # =======================================
 # - GPU backends: angle2, dawn, swiftshader, vulkan-*, opengl-registry
 # - Other codecs: libavif, libjxl, libgav1
@@ -43,6 +50,8 @@ set -e
 # ======================
 # - HOMEBREW_PREFIX: Homebrew installation path (macOS, auto-detected)
 # - ICU_LIB: ICU library path (auto-detected per platform, any version 44-100 works)
+# - TARGET_CPU: Target CPU architecture (arm64 or x64, auto-detected if not set)
+# - VERSION: Version string for the binary (default: "dev")
 #
 ################################################################################
 
@@ -52,27 +61,63 @@ SKIA_ROOT="$PROJECT_ROOT/third_party/skia"
 SKIA_LIB_DIR="$SKIA_ROOT/out/Release"
 SRC_DIR="$PROJECT_ROOT/src"
 
+# Parse arguments
+SKIP_SKIA=false
+SKIP_SKIA_SETUP=false
+TARGET_CPU=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --skip-skia)
+            SKIP_SKIA=true
+            shift
+            ;;
+        --skip-skia-setup)
+            SKIP_SKIA_SETUP=true
+            shift
+            ;;
+        --target-cpu=*)
+            TARGET_CPU="${1#*=}"
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
 echo "🔨 Building Lotio (Zero Bundled Dependencies)"
 echo "=============================================="
 echo "All libraries use system/Homebrew - nothing is bundled!"
 echo ""
 
 # Detect OS and architecture
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    OS="macos"
-    ARCH=$(uname -m)
-    if [[ "$ARCH" == "arm64" ]]; then
-        TARGET_CPU="arm64"
+# Use TARGET_CPU from environment if set, otherwise auto-detect
+if [[ -z "$TARGET_CPU" ]]; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        OS="macos"
+        ARCH=$(uname -m)
+        if [[ "$ARCH" == "arm64" ]]; then
+            TARGET_CPU="arm64"
+        else
+            TARGET_CPU="x64"
+        fi
     else
-        TARGET_CPU="x64"
+        OS="linux"
+        ARCH=$(uname -m)
+        if [[ "$ARCH" == "aarch64" ]] || [[ "$ARCH" == "arm64" ]]; then
+            TARGET_CPU="arm64"
+        else
+            TARGET_CPU="x64"
+        fi
     fi
 else
-    OS="linux"
-    ARCH=$(uname -m)
-    if [[ "$ARCH" == "aarch64" ]] || [[ "$ARCH" == "arm64" ]]; then
-        TARGET_CPU="arm64"
+    # TARGET_CPU was set via argument or environment
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        OS="macos"
     else
-        TARGET_CPU="x64"
+        OS="linux"
     fi
 fi
 
@@ -158,213 +203,27 @@ if [ ! -d "$SRC_DIR" ]; then
 fi
 
 ################################################################################
-# Step 0: Set up minimal Skia (no bundled dependencies - all use system libraries)
+# Step 0: Build Skia (using shared script)
 ################################################################################
 
-echo "🗑️  Step 0: Setting up minimal Skia structure..."
-echo ""
-
-THIRD_PARTY_DIR="$PROJECT_ROOT/third_party"
-# Use system temp directory instead of project root
-SKIA_TEMP_DIR=$(mktemp -d -t skia_clone_XXXXXX)
-
-# Cleanup function for temp directory
-cleanup_skia_temp() {
-    if [ -n "$SKIA_TEMP_DIR" ] && [ -d "$SKIA_TEMP_DIR" ]; then
-        rm -rf "$SKIA_TEMP_DIR" 2>/dev/null || true
+if [[ "$SKIP_SKIA" == "false" ]]; then
+    if [[ "$SKIP_SKIA_SETUP" == "true" ]]; then
+        "$SCRIPT_DIR/_build_skia.sh" --target=binary --target-cpu="$TARGET_CPU" --skip-setup
+    else
+        "$SCRIPT_DIR/_build_skia.sh" --target=binary --target-cpu="$TARGET_CPU"
     fi
-}
-trap cleanup_skia_temp EXIT
-
-# Remove existing third_party if it exists
-if [ -d "$THIRD_PARTY_DIR" ]; then
-    echo "   Removing existing third_party directory..."
-    rm -rf "$THIRD_PARTY_DIR"
-fi
-
-# Create fresh structure
-mkdir -p "$THIRD_PARTY_DIR/skia"
-cd "$THIRD_PARTY_DIR"
-
-# Clone Skia repository
-echo "   Cloning Skia repository (this may take a while)..."
-cd "$SKIA_TEMP_DIR"
-git clone --depth 1 https://skia.googlesource.com/skia.git
-echo "   ✅ Skia cloned"
-
-# Copy only essential Skia files (exclude .git, tests, docs, etc.)
-echo "   Copying essential Skia files..."
-cd skia
-
-# Essential directories
-cp -r include "$THIRD_PARTY_DIR/skia/"
-cp -r modules "$THIRD_PARTY_DIR/skia/"
-cp -r src "$THIRD_PARTY_DIR/skia/"
-cp -r gn "$THIRD_PARTY_DIR/skia/"
-cp -r bin "$THIRD_PARTY_DIR/skia/"
-cp -r build_overrides "$THIRD_PARTY_DIR/skia/"
-cp -r toolchain "$THIRD_PARTY_DIR/skia/"
-# Copy tools directory (needed for git-sync-deps in WASM builds)
-if [ -d "tools" ]; then
-    cp -r tools "$THIRD_PARTY_DIR/skia/"
-fi
-# Copy experimental directory (needed for BUILD.gn references, even if we don't use it)
-if [ -d "experimental" ]; then
-    cp -r experimental "$THIRD_PARTY_DIR/skia/"
-fi
-
-# Essential files (DEPS will be created as minimal version)
-cp BUILD.gn "$THIRD_PARTY_DIR/skia/"
-cp LICENSE "$THIRD_PARTY_DIR/skia/"
-cp README "$THIRD_PARTY_DIR/skia/" 2>/dev/null || true
-cp .gn "$THIRD_PARTY_DIR/skia/" 2>/dev/null || true
-
-# Create third_party structure (but not externals yet)
-mkdir -p "$THIRD_PARTY_DIR/skia/third_party/externals"
-
-# Copy third_party config files (but not externals)
-if [ -d "third_party" ]; then
-    find third_party -type f -name "*.gn" -o -name "*.gni" | while read -r file; do
-        dir=$(dirname "$file")
-        mkdir -p "$THIRD_PARTY_DIR/skia/$dir"
-        cp "$file" "$THIRD_PARTY_DIR/skia/$file"
-    done
-fi
-
-echo "   ✅ Essential Skia files copied"
-
-# Create minimal DEPS file
-echo "   Creating minimal DEPS file..."
-cat > "$THIRD_PARTY_DIR/skia/DEPS" << 'EOF'
-vars = {
-  'checkout_android': False,
-  'checkout_angle': False,
-  'checkout_dawn': False,
-  'checkout_emsdk': False,
-  'checkout_ios': False,
-  'checkout_nacl': False,
-  'checkout_oculus_sdk': False,
-  'checkout_skqp': False,
-  'checkout_win_toolchain': False,
-}
-
-deps = {}
-
-# No hooks needed - we manually fetch GN using bin/fetch-gn (which downloads directly from chrome-infra-packages)
-hooks = []
-EOF
-
-echo "   ✅ Minimal DEPS file created (no dependencies - all use system libraries)"
-
-# No dependencies to fetch - all libraries are system/Homebrew
-echo "   ✅ No dependencies to fetch (all libraries use system/Homebrew versions)"
-echo ""
-
-################################################################################
-# Step 1: Build Skia with minimal dependencies
-################################################################################
-
-echo "📦 Step 1: Building Skia with minimal dependencies..."
-echo ""
-
-cd "$SKIA_ROOT"
-
-# Fetch GN if needed
-if [ ! -f "bin/gn" ]; then
-    echo "   Fetching GN binary..."
-    python3 bin/fetch-gn
-fi
-
-# Generate build files with minimal configuration
-echo "   Generating build files..."
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    GN_ARGS="target_cpu=\"${TARGET_CPU}\" \
-        is_official_build=true \
-        is_debug=false \
-        skia_enable_skottie=true \
-        skia_enable_fontmgr_fontconfig=true \
-        skia_enable_fontmgr_custom_directory=true \
-        skia_use_freetype=true \
-        skia_use_libpng_encode=true \
-        skia_use_libpng_decode=true \
-        skia_use_libjpeg_turbo_decode=false \
-        skia_use_libjpeg_turbo_encode=false \
-        skia_use_libwebp_decode=false \
-        skia_use_libwebp_encode=false \
-        skia_use_wuffs=false \
-        skia_use_expat=false \
-        skia_enable_pdf=false \
-        skia_use_dawn=false \
-        skia_use_angle=false \
-        skia_use_vulkan=false \
-        skia_enable_ganesh=false \
-        skia_enable_graphite=false \
-        skia_enable_tools=false \
-        skia_use_dng_sdk=false \
-        skia_use_system_icu=true \
-        skia_use_ffmpeg=false \
-        extra_cflags=[\"-O3\", \"-I$HOMEBREW_PREFIX/include\", \"-I$FREETYPE_INCLUDE\", \"-I$HARFBUZZ_INCLUDE\", \"-I$ICU_INCLUDE\"]"
 else
-    GN_ARGS="target_cpu=\"${TARGET_CPU}\" \
-        is_official_build=true \
-        is_debug=false \
-        skia_enable_skottie=true \
-        skia_enable_fontmgr_fontconfig=true \
-        skia_enable_fontmgr_custom_directory=true \
-        skia_use_freetype=true \
-        skia_use_libpng_encode=true \
-        skia_use_libpng_decode=true \
-        skia_use_libjpeg_turbo_decode=false \
-        skia_use_libjpeg_turbo_encode=false \
-        skia_use_libwebp_decode=false \
-        skia_use_libwebp_encode=false \
-        skia_use_wuffs=false \
-        skia_use_expat=false \
-        skia_enable_pdf=false \
-        skia_use_dawn=false \
-        skia_use_angle=false \
-        skia_use_vulkan=false \
-        skia_enable_ganesh=false \
-        skia_enable_graphite=false \
-        skia_enable_tools=false \
-        skia_use_dng_sdk=false \
-        skia_use_system_icu=true \
-        skia_use_ffmpeg=false \
-        extra_cflags=[\"-O3\", \"-Wno-psabi\", \"-I/usr/include\", \"-I/usr/include/freetype2\", \"-I/usr/include/harfbuzz\", \"-I/usr/include/fontconfig\", \"-I/usr/include/unicode\"]"
+    echo "⏭️  Skipping Skia build (--skip-skia specified)"
+    echo ""
 fi
 
-./bin/gn gen out/Release --args="$GN_ARGS"
-
-# Build gen/skia.h first (required)
-echo "   Building gen/skia.h..."
-cd out/Release
-ninja gen/skia.h
-cd ../..
-
-# Build only the libraries we need
-echo "   Building Skia libraries (this may take a while)..."
-# Use all CPU cores explicitly for faster compilation
-NINJA_JOBS=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 8)
-echo "   Using $NINJA_JOBS parallel jobs..."
-ninja -C out/Release -j$NINJA_JOBS :skia \
-    modules/skottie:skottie \
-    modules/skparagraph:skparagraph \
-    modules/sksg:sksg \
-    modules/skshaper:skshaper \
-    modules/skunicode:skunicode \
-    modules/skresources:skresources \
-    modules/jsonreader:jsonreader
-
-echo "✅ Skia built successfully"
-echo ""
-
 ################################################################################
-# Step 2: Build lotio
+# Step 1: Build lotio
 ################################################################################
 
 cd "$PROJECT_ROOT"
 
-echo "📝 Step 2: Building lotio..."
+echo "📝 Step 1: Building lotio..."
 echo ""
 
 # Set up library paths
@@ -441,6 +300,7 @@ LIBRARY_SOURCES=(
     "$SRC_DIR/utils/crash_handler.cpp"
     "$SRC_DIR/utils/logging.cpp"
     "$SRC_DIR/utils/string_utils.cpp"
+    "$SRC_DIR/utils/version.cpp"
     "$SRC_DIR/text/text_config.cpp"
     "$SRC_DIR/text/text_processor.cpp"
     "$SRC_DIR/text/font_utils.cpp"
@@ -455,8 +315,14 @@ MAIN_SOURCE="$SRC_DIR/main.cpp"
 TARGET="$PROJECT_ROOT/lotio"
 LIBRARY_TARGET="$PROJECT_ROOT/liblotio.a"
 
-# Get version from environment or default to "dev"
-VERSION_NUMBER="${VERSION:-dev}"
+# Get version from environment or generate dev version with build datetime
+if [ -z "$VERSION" ]; then
+    # Generate dev version with build datetime (build-time, not runtime)
+    BUILD_DATETIME=$(date +"%Y%m%d-%H%M%S")
+    VERSION_NUMBER="dev-${BUILD_DATETIME}"
+else
+    VERSION_NUMBER="$VERSION"
+fi
 VERSION_DEFINE="-DVERSION=\"${VERSION_NUMBER}\""
 
 # Compile library source files

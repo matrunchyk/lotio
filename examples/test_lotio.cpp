@@ -31,8 +31,6 @@ int main(int argc, char* argv[]) {
 
     // Configure rendering
     RenderConfig config;
-    config.output_png = true;
-    config.output_webp = false;
     config.stream_mode = false;
     config.output_dir = output_dir;
     config.fps = 30.0f;

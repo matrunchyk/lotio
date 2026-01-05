@@ -31,7 +31,7 @@ Headers are organized by module:
 ```cpp
 #include <lotio/core/animation_setup.h>  // Animation initialization
 #include <lotio/core/renderer.h>          // Frame rendering
-#include <lotio/core/frame_encoder.h>     // Frame encoding (PNG/WebP)
+#include <lotio/core/frame_encoder.h>     // Frame encoding (PNG)
 #include <lotio/text/text_processor.h>    // Text processing
 #include <lotio/text/text_config.h>       // Text configuration
 #include <lotio/text/font_utils.h>        // Text measurement modes

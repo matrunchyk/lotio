@@ -69,7 +69,7 @@ jobs:
             -v /tmp/test.json:/workspace/test.json:ro \
             -v /tmp/output:/workspace/output \
             matrunchyk/lotio:latest \
-            --png --webp /workspace/test.json /workspace/output 30
+            /workspace/test.json /workspace/output 30
 
       - name: Test video generation with --debug
         run: |
@@ -79,7 +79,7 @@ jobs:
             -v /tmp/test2.json:/workspace/test2.json:ro \
             -v /tmp/output2:/workspace/output2 \
             matrunchyk/lotio:latest \
-            --png --debug /workspace/test2.json /workspace/output2 30
+            --debug /workspace/test2.json /workspace/output2 30
 
   test-js-wasm:
     name: Test JS/WASM Library
@@ -295,5 +295,5 @@ jobs:
         run: |
           echo '{"v":"5.5.2","fr":30,"w":100,"h":100,"ip":0,"op":30,"layers":[]}' > /tmp/test.json
           mkdir -p /tmp/output
-          lotio --png /tmp/test.json /tmp/output 30
+          lotio /tmp/test.json /tmp/output 30
 

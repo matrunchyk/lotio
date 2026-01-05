@@ -1,13 +1,13 @@
 # Overview
 
-**Lotio** is a high-performance Lottie animation frame renderer using Skia. It renders Lottie animations to PNG/WebP frames for video encoding.
+**Lotio** is a high-performance Lottie animation frame renderer using Skia. It renders Lottie animations to PNG frames for video encoding.
 
 ## What is Lotio?
 
 Lotio is a powerful tool for converting Lottie animations into individual frames that can be used for video encoding, image sequences, or programmatic manipulation. It's built on top of Google's Skia graphics library, providing:
 
 - **High Performance**: Multi-threaded rendering for fast frame generation
-- **Multiple Formats**: Output to PNG, WebP, or stream directly to stdout
+- **PNG Output**: Outputs PNG frames or stream directly to stdout
 - **Text Customization**: Dynamic text replacement and auto-fit sizing
 - **Cross-Platform**: Native binaries for macOS and Linux, WebAssembly for browsers
 - **Multiple Interfaces**: Command-line tool, JavaScript library, and C++ library
@@ -19,7 +19,7 @@ Lotio takes Lottie animation JSON files and renders them frame-by-frame into ima
 ### Core Functionality
 
 1. **Frame Rendering**: Converts Lottie animations into individual frames at any FPS
-2. **Format Support**: Outputs PNG or WebP images
+2. **Format Support**: Outputs PNG images (default format)
 3. **Text Processing**: 
    - Dynamic text value replacement
    - Auto-fit font sizing to fit text boxes
@@ -89,7 +89,7 @@ npm install @matrunchyk/lotio
 
 ### Command Line
 ```bash
-lotio --png animation.json frames/ 30
+lotio animation.json frames/ 30
 ```
 
 ### JavaScript

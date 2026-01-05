@@ -1,4 +1,4 @@
-name: Build Lotio Docker Image
+name: Build Lotio-FFmpeg Docker Image
 
 on:
   push:
@@ -7,15 +7,16 @@ on:
       - 'v*'
     paths:
       - 'src/**'
+      - 'Dockerfile.lotio-ffmpeg'
       - 'Dockerfile.lotio'
-      - 'scripts/build_binary.sh'
+      - 'scripts/render_entrypoint.sh'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: build-lotio
+  group: build-lotio-ffmpeg
   cancel-in-progress: true
 
 jobs:
@@ -67,23 +68,24 @@ jobs:
             echo "SUFFIX=amd64" >> $GITHUB_OUTPUT
           fi
 
-      - name: Build and push Lotio image (architecture-specific)
+      - name: Build and push Lotio-FFmpeg image (architecture-specific)
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile.lotio
+          file: ./Dockerfile.lotio-ffmpeg
           platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            matrunchyk/lotio:${{ steps.version.outputs.VERSION }}-${{ steps.arch.outputs.SUFFIX }}
-            matrunchyk/lotio:latest-${{ steps.arch.outputs.SUFFIX }}
+            matrunchyk/lotio-ffmpeg:${{ steps.version.outputs.VERSION }}-${{ steps.arch.outputs.SUFFIX }}
+            matrunchyk/lotio-ffmpeg:latest-${{ steps.arch.outputs.SUFFIX }}
           cache-from: |
-            type=registry,ref=matrunchyk/lotio:latest-${{ steps.arch.outputs.SUFFIX }}
+            type=registry,ref=matrunchyk/lotio-ffmpeg:latest-${{ steps.arch.outputs.SUFFIX }}
             type=gha
           cache-to: |
-            type=registry,ref=matrunchyk/lotio:latest-${{ steps.arch.outputs.SUFFIX }},mode=max
+            type=registry,ref=matrunchyk/lotio-ffmpeg:latest-${{ steps.arch.outputs.SUFFIX }},mode=max
             type=gha,mode=max
           build-args: |
+            LOTIO_IMAGE=matrunchyk/lotio:latest
             BUILDKIT_INLINE_CACHE=1
 
   create-manifest:
@@ -121,27 +123,27 @@ jobs:
           
           # Create multi-platform manifest for version tag
           docker buildx imagetools create \
-            --tag matrunchyk/lotio:${VERSION} \
-            matrunchyk/lotio:${VERSION}-arm64 \
-            matrunchyk/lotio:${VERSION}-amd64
+            --tag matrunchyk/lotio-ffmpeg:${VERSION} \
+            matrunchyk/lotio-ffmpeg:${VERSION}-arm64 \
+            matrunchyk/lotio-ffmpeg:${VERSION}-amd64
           
           # Create multi-platform manifest for latest tag
           docker buildx imagetools create \
-            --tag matrunchyk/lotio:latest \
-            matrunchyk/lotio:latest-arm64 \
-            matrunchyk/lotio:latest-amd64
+            --tag matrunchyk/lotio-ffmpeg:latest \
+            matrunchyk/lotio-ffmpeg:latest-arm64 \
+            matrunchyk/lotio-ffmpeg:latest-amd64
 
       - name: Verify manifests
         run: |
           echo "Verifying multi-platform manifests..."
           echo ""
           echo "Latest (multi-platform):"
-          docker buildx imagetools inspect matrunchyk/lotio:latest
+          docker buildx imagetools inspect matrunchyk/lotio-ffmpeg:latest
           echo ""
           echo "Version ${{ steps.version.outputs.VERSION }} (multi-platform):"
-          docker buildx imagetools inspect matrunchyk/lotio:${{ steps.version.outputs.VERSION }}
+          docker buildx imagetools inspect matrunchyk/lotio-ffmpeg:${{ steps.version.outputs.VERSION }}
           echo ""
           echo "Architecture-specific tags:"
-          docker buildx imagetools inspect matrunchyk/lotio:${{ steps.version.outputs.VERSION }}-arm64
-          docker buildx imagetools inspect matrunchyk/lotio:${{ steps.version.outputs.VERSION }}-amd64
+          docker buildx imagetools inspect matrunchyk/lotio-ffmpeg:${{ steps.version.outputs.VERSION }}-arm64
+          docker buildx imagetools inspect matrunchyk/lotio-ffmpeg:${{ steps.version.outputs.VERSION }}-amd64
 

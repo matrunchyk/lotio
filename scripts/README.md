@@ -4,17 +4,17 @@ This directory contains build, test, and utility scripts for the `lotio` project
 
 ## Core Build Scripts
 
-### `build_minimal.sh` ⭐ **RECOMMENDED**
-**Purpose:** Builds lotio with minimal Skia dependencies (zero bundled dependencies)
+### `build_binary.sh` ⭐ **RECOMMENDED**
+**Purpose:** Builds lotio with zero bundled dependencies (all use system/Homebrew libraries)
 
 **Usage:**
 ```bash
-./scripts/build_minimal.sh
+./scripts/build_binary.sh
 ```
 
 **When to use:**
 - **Primary build method** - recommended for all local development
-- Building with minimal dependencies for faster builds
+- Building with zero bundled dependencies for faster builds
 - Reducing build size and complexity
 - CI/CD optimization
 
@@ -39,21 +39,6 @@ This directory contains build, test, and utility scripts for the `lotio` project
 - CI/CD workflows (recommended)
 
 ---
-**Purpose:** Builds lotio with minimal Skia dependencies (10 essential deps instead of 40+)
-
-**Usage:**
-```bash
-./scripts/build_minimal.sh
-```
-
-**When to use:**
-- Building with minimal dependencies for faster builds
-- Reducing build size and complexity
-- Understanding which dependencies are actually required
-- CI/CD optimization
-
-
----
 
 ### `build_wasm.sh`
 **Purpose:** Builds the WebAssembly version of lotio for browser use (unified script)
@@ -69,8 +54,8 @@ This directory contains build, test, and utility scripts for the `lotio` project
 - Testing browser functionality
 
 **Prerequisites:** 
-- Skia structure (run `build_minimal.sh` first to set up Skia)
 - Emscripten must be installed (`brew install emscripten` or EMSDK)
+- Skia will be built automatically if not present
 
 **Output:** 
 - `browser/lotio.wasm`
@@ -80,6 +65,205 @@ This directory contains build, test, and utility scripts for the `lotio` project
 **Used by:**
 - CI/CD workflows (for npm package publishing)
 - `test.sh` (unified test script)
+
+---
+
+### `_build_skia.sh` (Internal)
+**Purpose:** Shared Skia build script used by `build_binary.sh` and `build_wasm.sh`
+
+**Usage:**
+```bash
+# Not meant to be called directly - used internally by other build scripts
+scripts/_build_skia.sh --target=binary --target-cpu=arm64
+```
+
+**When to use:**
+- Only if you need to build Skia separately without building lotio
+- Generally not called directly - use `build_binary.sh` or `build_wasm.sh` instead
+
+**Key Features:**
+- Supports both binary (native) and WASM targets
+- Handles Skia structure setup, dependency fetching, and compilation
+- Auto-detects target CPU architecture
+- Can skip setup for incremental builds
+
+**Parameters:**
+- `--target=binary|wasm`: Build target (default: binary)
+- `--target-cpu=arm64|x64`: Target CPU for native builds (auto-detected if not specified)
+- `--skip-setup`: Skip Skia structure setup (assumes it exists)
+
+---
+
+### `build_skia_docker_multi.sh`
+**Purpose:** Builds and pushes multi-arch Skia Docker image to Docker Hub for use as a base image
+
+**Usage:**
+```bash
+./scripts/build_skia_docker_multi.sh
+./scripts/build_skia_docker_multi.sh --tag=v1.0.0
+./scripts/build_skia_docker_multi.sh --no-cache
+```
+
+**When to use:**
+- Building Skia Docker image for use as base image in other Dockerfiles
+- Publishing Skia image to Docker Hub for multi-arch support
+- Creating platform-specific Skia builds (arm64 and x86_64)
+- **Avoiding Skia rebuilds** - Use this image as base to skip cloning and compiling Skia
+
+**Prerequisites:**
+- Docker must be installed and running
+- Must be logged in to Docker Hub: `docker login`
+- BuildKit must be enabled (default in Docker 20.10+)
+
+**Key Features:**
+- Builds for both linux/arm64 and linux/amd64 platforms
+- Creates multi-arch manifest (single tag for both platforms)
+- Uses registry cache for faster rebuilds (stored separately in `matrunchyk/skia:cache`)
+- Automatically sets up buildx builder if needed
+- Verifies Docker Hub authentication before building
+
+**What the Image Contains:**
+- **Skia libraries** (`/opt/skia/lib/*.a`) - Pre-compiled static libraries
+- **Skia headers** (`/opt/skia/include`, `/opt/skia/modules`, `/opt/skia/gen`) - All headers needed for compilation
+- **Build tools** - g++, gcc, make, pkg-config (ready to compile against Skia)
+- **System dependencies** - All dev packages Skia links against (fontconfig, freetype, harfbuzz, icu, libpng, etc.)
+
+**How to Use as Base Image:**
+```dockerfile
+# Use the Skia base image - no need to clone or compile Skia!
+FROM matrunchyk/skia:latest AS my-app
+
+WORKDIR /build
+
+# Copy your source code
+COPY src/ ./src/
+
+# Compile against Skia (everything is already set up!)
+RUN g++ -std=c++17 -O3 \
+    -I/opt/skia/include \
+    -I/opt/skia/modules \
+    -I/opt/skia/gen \
+    -L/opt/skia/lib \
+    src/main.cpp src/renderer.cpp \
+    -lskia -lskottie -lskparagraph -lsksg -lskshaper \
+    -lskunicode_icu -lskunicode_core -lskresources -ljsonreader \
+    -lfreetype -lpng -lharfbuzz -licuuc -licui18n -licudata \
+    -lz -lfontconfig -lexpat -lm -lpthread \
+    -lX11 -lGL -lGLU \
+    -o /usr/local/bin/myapp
+```
+
+**Benefits:**
+- ✅ **No Skia cloning** - Skia is already built and included
+- ✅ **No Skia compilation** - Pre-compiled libraries ready to link
+- ✅ **Faster builds** - Skip 10-20 minutes of Skia build time
+- ✅ **Multi-arch support** - Docker automatically selects correct platform
+- ✅ **Ready to compile** - All build tools and dependencies included
+
+**Output:**
+- Pushes `matrunchyk/skia:latest` (or custom tag) to Docker Hub
+- Cache stored separately in `matrunchyk/skia:cache` (doesn't interfere with image)
+
+**Environment Variables:**
+- `DOCKER_USERNAME`: Docker Hub username (default: matrunchyk)
+- `DOCKER_TAG`: Tag to use (default: latest)
+
+---
+
+## Docker Build Chain
+
+The project uses a multi-stage Docker build chain for optimized, fast builds:
+
+### Build Chain Overview
+
+```
+Dockerfile.skia → matrunchyk/skia:latest
+    ↓
+Dockerfile.lotio → matrunchyk/lotio:latest (uses matrunchyk/skia:latest)
+    ↓
+Dockerfile.lotio-ffmpeg → matrunchyk/lotio-ffmpeg:latest (uses matrunchyk/lotio:latest)
+```
+
+### Dockerfile.skia
+**Purpose:** Base image with pre-built Skia libraries and headers
+
+**What it contains:**
+- Pre-compiled Skia static libraries (`/opt/skia/lib/*.a`)
+- Skia headers (`/opt/skia/include`, `/opt/skia/modules`, `/opt/skia/gen`)
+- Skia source directory (`/opt/skia/src`) - required for internal headers
+- Build tools (g++, gcc, make, pkg-config)
+- System dependencies (fontconfig, freetype, harfbuzz, icu, libpng, etc.)
+
+**Built by:** `build_skia_docker_multi.sh`
+
+**Benefits:**
+- Skia is built once and reused across all lotio builds
+- Reduces lotio build time from 15-25 minutes to 2-3 minutes
+- Multi-platform support (arm64 and amd64)
+
+### Dockerfile.lotio
+**Purpose:** Builds lotio binary using pre-built Skia image
+
+**What it contains:**
+- lotio binary (`/usr/local/bin/lotio`)
+- lotio static library (`/usr/local/lib/liblotio.a`)
+- lotio headers (`/usr/local/include/lotio/`)
+- Skia libraries and headers (copied from base image)
+
+**Base image:** `matrunchyk/skia:latest`
+
+**Key optimizations:**
+- Uses pre-built Skia (no Skia compilation)
+- Only compiles lotio source files
+- Minimal runtime image (only required libraries)
+
+**Multi-platform:** Supports `linux/arm64` and `linux/amd64`
+
+### Dockerfile.lotio-ffmpeg
+**Purpose:** Adds FFmpeg to lotio image for video encoding
+
+**What it contains:**
+- Everything from `matrunchyk/lotio:latest`
+- FFmpeg 8.0 with minimal build (optimized for lotio's use case)
+- Entrypoint script for automatic video encoding
+
+**Base image:** `matrunchyk/lotio:latest`
+
+**FFmpeg build optimizations:**
+- **Minimal build** - Only includes what lotio needs:
+  - PNG decoder (for `image2pipe` input)
+  - `image2`/`image2pipe` demuxer (for pipe and file input)
+  - ProRes encoder (`prores_ks`) - ProRes 4444 with alpha channel
+  - MOV muxer (for output)
+  - Format filter (for pixel format conversion)
+  - Pipe and file protocols
+- **Removed features:**
+  - No x264/x265 libraries (lotio uses ProRes, not H.264/H.265)
+  - No unnecessary codecs, filters, or protocols
+- **Benefits:**
+  - Faster FFmpeg build (no x264/x265 compilation)
+  - Smaller image size
+  - Still supports both pipe input (`image2pipe`) and disk-based input (`image2`)
+
+**Entrypoint behavior:**
+- If first argument is a command (e.g., `ffmpeg`, `lotio`), executes it directly
+- Otherwise, treats arguments as lotio commands and automatically:
+  - Adds `--stream` if not present
+  - Pipes lotio PNG output to ffmpeg
+  - Encodes to ProRes 4444 MOV with alpha channel
+
+**Usage examples:**
+```bash
+# Render Lottie to video (automatic ffmpeg encoding)
+docker run -v $(pwd):/workspace matrunchyk/lotio-ffmpeg:latest \
+  data.json - 30 --text-config text-config.json --output video.mov
+
+# Direct command execution
+docker run matrunchyk/lotio-ffmpeg:latest ffmpeg -version
+docker run matrunchyk/lotio-ffmpeg:latest lotio --version
+```
+
+**Multi-platform:** Supports `linux/arm64` and `linux/amd64` with architecture-specific tags (`-arm64`, `-amd64`)
 
 ---
 
@@ -100,7 +284,7 @@ This directory contains build, test, and utility scripts for the `lotio` project
 - Debugging bottle creation issues
 
 **Prerequisites:**
-- Binary and library must be built: `./scripts/build_minimal.sh`
+- Binary and library must be built: `./scripts/build_binary.sh`
 
 **What it does:**
 - Creates bottle directory structure (matches CI exactly)
@@ -151,18 +335,32 @@ This directory contains build, test, and utility scripts for the `lotio` project
 
 ## Utility Scripts
 
-### `debug_skia_gn.sh`
-**Purpose:** Debug script to see GN configuration warnings
+### `create_bottle.sh`
+**Purpose:** Creates Homebrew bottle tarball with correct directory structure
 
 **Usage:**
 ```bash
-./scripts/debug_skia_gn.sh
+./scripts/create_bottle.sh <VERSION> [BOTTLE_ARCH] [HOMEBREW_PREFIX]
 ```
 
 **When to use:**
-- When Skia build fails with GN warnings
-- Debugging build configuration issues
-- Understanding GN build system
+- Creating Homebrew bottles for releases
+- Testing bottle structure locally
+- Called automatically by CI/CD workflows
+
+**Parameters:**
+- `VERSION`: Version string (e.g., "v1.2.3" or "1.2.3")
+- `BOTTLE_ARCH`: Architecture (e.g., "arm64_big_sur") - auto-detected if not provided
+- `HOMEBREW_PREFIX`: Homebrew prefix (e.g., "/opt/homebrew") - auto-detected if not provided
+
+**Output:**
+- Bottle tarball: `lotio-<VERSION>.<BOTTLE_ARCH>.bottle.tar.gz`
+- SHA256 checksum (printed to stdout)
+- Sets `BOTTLE_FILENAME` and `BOTTLE_SHA256` environment variables (if sourced)
+
+**Used by:**
+- `.github/workflows/release.yml` (automated)
+- `test_bottle.sh` (for testing)
 
 ---
 
@@ -185,21 +383,91 @@ This directory contains build, test, and utility scripts for the `lotio` project
 
 ---
 
+### `build_docs.py`
+**Purpose:** Builds documentation for GitHub Pages from markdown files
+
+**Usage:**
+```bash
+./scripts/build_docs.py
+```
+
+**When to use:**
+- Building documentation site for GitHub Pages
+- Converting markdown to HTML with navigation
+- Updating documentation after changes
+
+**Prerequisites:**
+- Python 3
+- Optional: `markdown` library (`pip install markdown`) for enhanced formatting
+
+**Key Features:**
+- Converts markdown files to HTML
+- Adds sidebar navigation
+- Generates index pages
+- Supports code highlighting and tables
+
+**Output:**
+- HTML documentation in `docs/_site/` directory
+
+---
+
+### `render_entrypoint.sh`
+**Purpose:** Docker entrypoint script for rendering Lottie animations to video
+
+**Usage:**
+```bash
+# Used as Docker entrypoint in lotio-ffmpeg image
+docker run -v $(pwd):/workspace matrunchyk/lotio-ffmpeg:latest \
+  data.json - 30 --text-config text-config.json --output video.mov
+
+# Direct command execution (bypasses entrypoint wrapper)
+docker run matrunchyk/lotio-ffmpeg:latest ffmpeg -version
+docker run matrunchyk/lotio-ffmpeg:latest lotio --version
+```
+
+**When to use:**
+- Running lotio in Docker containers with video output
+- Automatically handles frame rendering and video encoding
+- Used in `Dockerfile.lotio-ffmpeg`
+
+**Key Features:**
+- **Smart command routing**: If first argument is a command (like `ffmpeg` or `lotio`), executes it directly
+- **Automatic video encoding**: Otherwise, treats arguments as lotio commands and wraps with ffmpeg pipeline
+- Renders Lottie animation frames using lotio
+- Encodes frames to video using ffmpeg (ProRes 4444 with alpha channel)
+- Passes through lotio arguments
+- Handles text padding and measurement mode options
+
+**Parameters:**
+- `--output` / `-o`: Output video file (default: output.mov)
+- `--text-padding` / `-p`: Text padding factor (default: 0.97)
+- `--text-measurement-mode` / `-m`: Text measurement mode (default: accurate)
+- All other arguments passed to lotio
+
+**How it works:**
+1. If first argument is a command found in PATH (e.g., `ffmpeg`, `lotio`), executes it directly
+2. Otherwise, treats arguments as lotio commands and automatically:
+   - Adds `--stream` if not present (required for piping to ffmpeg)
+   - Pipes lotio PNG output to ffmpeg
+   - Encodes to ProRes 4444 MOV with alpha channel support
+
+---
+
 ## Typical Workflows
 
 ### First-time Setup
 ```bash
-# 1. Install dependencies (minimal build needs fewer deps)
+# 1. Install dependencies (binary build needs fewer deps)
 brew install fontconfig freetype harfbuzz icu4c libpng ninja python@3.11
 
-# 2. Build lotio (build_minimal.sh handles Skia setup automatically)
-./scripts/build_minimal.sh
+# 2. Build lotio (build_binary.sh handles Skia setup automatically)
+./scripts/build_binary.sh
 ```
 
 ### Development Workflow
 ```bash
 # Make code changes, then:
-./scripts/build_minimal.sh  # Builds lotio binary + liblotio.a library
+./scripts/build_binary.sh  # Builds lotio binary + liblotio.a library
 ```
 
 ### WASM Development
@@ -231,20 +499,29 @@ brew install emscripten
 ## Script Dependencies
 
 ```
-build_minimal.sh ⭐ (RECOMMENDED)
-  └─> Handles everything: Skia setup + build + lotio compilation + liblotio.a
+build_binary.sh ⭐ (RECOMMENDED)
+  └─> _build_skia.sh (--target=binary)
+      └─> Handles: Skia setup + build + lotio compilation + liblotio.a
 
 build_wasm.sh
-  └─> Handles everything: Skia WASM build + lotio WASM compilation (requires Emscripten)
+  └─> _build_skia.sh (--target=wasm)
+      └─> Handles: Skia WASM build + lotio WASM compilation (requires Emscripten)
+
+build_skia_docker_multi.sh
+  └─> Dockerfile.skia
+      └─> build_binary.sh (for building Skia in Docker)
 
 test.sh
-  ├─> native: build_minimal.sh
-  ├─> linux: build_minimal.sh (in Docker)
-  ├─> wasm: build_wasm.sh (unified script)
+  ├─> native: build_binary.sh
+  ├─> linux: build_binary.sh (in Docker)
+  ├─> wasm: build_wasm.sh
   └─> bottle: test_bottle.sh
 
 test_bottle.sh
   └─> create_bottle.sh
+
+create_bottle.sh
+  └─> Requires: lotio binary, liblotio.a, headers (from build_binary.sh)
 ```
 
 ---

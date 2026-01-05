@@ -81,7 +81,7 @@ This Lambda function:
 ## Rendering Approach
 
 The Lambda function uses a streaming pipeline to render frames and encode video in one step:
-- Frames are rendered using `lotio --png --stream` which outputs PNG data to stdout
+- Frames are rendered using `lotio --stream` which outputs PNG data to stdout
 - PNG data is piped directly to ffmpeg via `image2pipe` format (no temporary files written to disk)
 - ffmpeg encodes the streamed frames to ProRes 4444 MOV
 - This approach minimizes disk I/O, reduces disk space usage, and improves performance in the Lambda environment

@@ -76,7 +76,7 @@ fi
 
 # Copy Skia headers (REQUIRED for programmatic use)
 echo "📦 Copying Skia headers..."
-SKIA_ROOT="third_party/skia/skia"
+SKIA_ROOT="third_party/skia"
 SKIA_INCLUDE_DIR="$SKIA_ROOT/include"
 SKIA_MODULES_DIR="$SKIA_ROOT/modules"
 SKIA_GEN_DIR="$SKIA_ROOT/out/Release/gen"
@@ -207,7 +207,7 @@ fi
 
 # Copy Skia static libraries
 echo "📦 Copying Skia libraries..."
-SKIA_LIB_DIR="third_party/skia/skia/out/Release"
+SKIA_LIB_DIR="third_party/skia/out/Release"
 LIB_COUNT=0
 for lib in skottie skia skparagraph sksg skshaper skunicode_icu skunicode_core skresources jsonreader; do
     if [ -f "$SKIA_LIB_DIR/lib${lib}.a" ]; then

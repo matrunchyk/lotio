@@ -12,8 +12,8 @@ brew install lotio
 
 ### From Source
 ```bash
-# Build lotio (minimal build with zero bundled dependencies)
-./scripts/build_minimal.sh
+# Build lotio (binary build with zero bundled dependencies)
+./scripts/build_binary.sh
 ```
 
 ## Basic Usage
@@ -30,14 +30,15 @@ lotio [OPTIONS] <input.json> <output_dir> [fps]
 
 ### Options
 
-- `--png` - Output frames as PNG files
-- `--webp` - Output frames as WebP files
-- `--stream` - Stream frames to stdout (for piping to ffmpeg)
+- `--stream` - Stream frames to stdout as PNG (for piping to ffmpeg)
 - `--debug` - Enable debug output
 - `--text-config <config.json>` - Path to text configuration JSON (for auto-fit and dynamic text values)
 - `--text-padding <0.0-1.0>` - Text padding factor (default: 0.97 = 3% padding)
 - `--text-measurement-mode <fast|accurate|pixel-perfect>` - Text measurement accuracy mode (default: accurate)
-- `--help` - Show help message
+- `--version` - Print version information and exit
+- `--help, -h` - Show help message
+
+**Note:** Frames are output as PNG by default. No format selection is needed.
 
 #### Text Padding
 
@@ -62,7 +63,7 @@ Example: `--text-measurement-mode pixel-perfect`
 ### Render to PNG
 
 ```bash
-lotio --png animation.json frames/ 30
+lotio animation.json frames/ 30
 ```
 
 This will create PNG files in the `frames/` directory:
@@ -78,16 +79,10 @@ frames/
 └── ...
 ```
 
-### Render to Both PNG and WebP
-
-```bash
-lotio --png --webp animation.json frames/ 30
-```
-
 ### Stream to ffmpeg
 
 ```bash
-lotio --png --stream animation.json - | ffmpeg -f image2pipe -i - output.mp4
+lotio --stream animation.json - | ffmpeg -f image2pipe -i - output.mp4
 ```
 
 This streams frames directly to ffmpeg for video encoding without creating intermediate files.
@@ -95,7 +90,7 @@ This streams frames directly to ffmpeg for video encoding without creating inter
 ### With Text Configuration
 
 ```bash
-lotio --png --text-config text_config.json animation.json frames/
+lotio --text-config text_config.json animation.json frames/
 ```
 
 The text configuration file allows you to:
@@ -106,7 +101,7 @@ The text configuration file allows you to:
 ### With Custom Text Padding
 
 ```bash
-lotio --png --text-padding 0.95 --text-config text_config.json animation.json frames/
+lotio --text-padding 0.95 --text-config text_config.json animation.json frames/
 ```
 
 Use 95% of text box width (5% padding) instead of the default 97% (3% padding).
@@ -114,7 +109,7 @@ Use 95% of text box width (5% padding) instead of the default 97% (3% padding).
 ### With Pixel-Perfect Text Measurement
 
 ```bash
-lotio --png --text-measurement-mode pixel-perfect --text-config text_config.json animation.json frames/
+lotio --text-measurement-mode pixel-perfect --text-config text_config.json animation.json frames/
 ```
 
 Use the most accurate text measurement mode for precise text sizing.
@@ -138,7 +133,7 @@ Example `text_config.json`:
 ### Debug Mode
 
 ```bash
-lotio --png --debug animation.json frames/ 30
+lotio --debug animation.json frames/ 30
 ```
 
 Enables verbose logging for troubleshooting.
@@ -199,29 +194,23 @@ Replace text layer content:
 }
 ```
 
-## Output Formats
+## Output Format
 
-### PNG
+Frames are output as PNG files by default. PNG provides:
 - Lossless compression
-- Widely supported
-- Larger file sizes
-
-### WebP
-- Better compression
-- Smaller file sizes
-- Modern format
+- Widely supported format
+- Perfect for video encoding pipelines
 
 ### Streaming
 - No intermediate files
-- Direct to stdout
+- Direct to stdout as PNG
 - Perfect for video encoding pipelines
 
 ## Performance Tips
 
-1. **Use WebP for smaller files**: If file size matters, use `--webp`
-2. **Stream for video**: Use `--stream` when piping to ffmpeg to avoid disk I/O
-3. **Adjust FPS**: Lower FPS means fewer frames to render (faster)
-4. **Multi-threading**: Lotio automatically uses multiple CPU cores
+1. **Stream for video**: Use `--stream` when piping to ffmpeg to avoid disk I/O
+2. **Adjust FPS**: Lower FPS means fewer frames to render (faster)
+3. **Multi-threading**: Lotio automatically uses multiple CPU cores
 
 ## Troubleshooting
 
@@ -247,7 +236,7 @@ Replace text layer content:
 
 ```bash
 for file in animations/*.json; do
-    lotio --png "$file" "output/$(basename "$file" .json)/" 30
+    lotio "$file" "output/$(basename "$file" .json)/" 30
 done
 ```
 
@@ -255,7 +244,7 @@ done
 
 ```bash
 # Render frames
-lotio --png --stream animation.json - | \
+lotio --stream animation.json - | \
   ffmpeg -f image2pipe -r 30 -i - \
   -c:v libx264 -pix_fmt yuv420p \
   output.mp4

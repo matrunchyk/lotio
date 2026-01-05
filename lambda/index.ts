@@ -324,7 +324,7 @@ export const handler = async (event: LambdaEvent): Promise<{
     const renderStart = Date.now();
     
     // Build lotio command arguments (streaming mode)
-    const renderArgs: string[] = ['--png', '--stream'];
+    const renderArgs: string[] = ['--stream'];
     if (textConfigPath) {
       renderArgs.push('--text-config', textConfigPath);
     }

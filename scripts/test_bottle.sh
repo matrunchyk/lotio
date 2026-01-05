@@ -15,7 +15,7 @@ echo ""
 # Check if binary exists
 if [ ! -f "lotio" ]; then
     echo "❌ Error: lotio binary not found!"
-    echo "💡 Run './scripts/build_minimal.sh' first to build the binary"
+    echo "💡 Run './scripts/build_binary.sh' first to build the binary"
     exit 1
 fi
 

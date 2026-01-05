@@ -1,19 +1,32 @@
 # Docker Usage
 
-Lotio provides a Docker image for easy deployment and consistent rendering across different environments. The Docker image includes lotio, Skia libraries, and ffmpeg for complete video encoding capabilities.
+Lotio provides Docker images for easy deployment and consistent rendering across different environments. There are two main images:
+
+1. **`matrunchyk/lotio:latest`** - Contains lotio binary with Skia libraries (for programmatic use or manual ffmpeg integration)
+2. **`matrunchyk/lotio-ffmpeg:latest`** - Contains lotio + FFmpeg with automatic video encoding (recommended for video output)
 
 ## Quick Start
 
-Pull the pre-built image from Docker Hub and run:
+### With Automatic Video Encoding (Recommended)
+
+```bash
+docker pull matrunchyk/lotio-ffmpeg:latest
+
+docker run --rm \
+  -v "$(pwd):/workspace" \
+  matrunchyk/lotio-ffmpeg:latest \
+  data.json - 30 --text-config text-config.json --output video.mov
+```
+
+### With lotio Binary Only
 
 ```bash
 docker pull matrunchyk/lotio:latest
 
 docker run --rm \
-  -v "$(pwd)/input:/workspace/input:ro" \
-  -v "$(pwd)/output:/workspace/output" \
+  -v "$(pwd):/workspace" \
   matrunchyk/lotio:latest \
-  input.json - 30 --output /workspace/output/video.mov
+  data.json - 30
 ```
 
 ## Pulling from Docker Hub
@@ -21,55 +34,118 @@ docker run --rm \
 Pre-built Docker images are available on Docker Hub:
 
 ```bash
-# Pull the latest version
-docker pull matrunchyk/lotio:latest
+# Pull lotio-ffmpeg (recommended for video encoding)
+docker pull matrunchyk/lotio-ffmpeg:latest
+docker pull matrunchyk/lotio-ffmpeg:v1.2.3
 
-# Pull a specific version
-docker pull matrunchyk/lotio:1.2.3
+# Pull lotio only (for programmatic use)
+docker pull matrunchyk/lotio:latest
 docker pull matrunchyk/lotio:v1.2.3
 ```
 
-The image is automatically built and pushed for each release. Available tags:
-- `latest` - Always points to the most recent release
-- `v1.2.3` - Specific version tag
-- `1.2.3` - Version number without 'v' prefix
+The images are automatically built and pushed for each release. Available tags:
+- `latest` - Always points to the most recent release (multi-platform manifest)
+- `v1.2.3` - Specific version tag (multi-platform manifest)
+- `v1.2.3-arm64` - Architecture-specific tag for ARM64
+- `v1.2.3-amd64` - Architecture-specific tag for x86_64
 
-## Building the Image
+**Multi-platform support:** Both images support `linux/arm64` and `linux/amd64`. Docker automatically selects the correct platform.
 
-### From Source
+## Building the Images
 
-If you need to build the image yourself (e.g., for custom modifications):
+### Build Chain
 
-```bash
-docker build -t lotio:latest -f Dockerfile.lotio-ffmpeg .
+The Docker images use a multi-stage build chain for optimized builds:
+
+```
+Dockerfile.skia → matrunchyk/skia:latest
+    ↓
+Dockerfile.lotio → matrunchyk/lotio:latest
+    ↓
+Dockerfile.lotio-ffmpeg → matrunchyk/lotio-ffmpeg:latest
 ```
 
-The Dockerfile uses a multi-stage build process:
-1. **Skia Builder**: Compiles Skia with Skottie support
-2. **Render Builder**: Compiles lotio binary
-3. **FFmpeg Builder**: Builds ffmpeg with ProRes support
-4. **Runtime**: Final image with all tools
+### Building from Source
+
+**Build lotio image:**
+```bash
+docker buildx build \
+  --platform linux/arm64,linux/amd64 \
+  -t matrunchyk/lotio:test \
+  -f Dockerfile.lotio \
+  --build-arg SKIA_IMAGE=matrunchyk/skia:latest \
+  --push .
+```
+
+**Build lotio-ffmpeg image:**
+```bash
+docker buildx build \
+  --platform linux/arm64,linux/amd64 \
+  -t matrunchyk/lotio-ffmpeg:test \
+  -f Dockerfile.lotio-ffmpeg \
+  --build-arg LOTIO_IMAGE=matrunchyk/lotio:test \
+  --push .
+```
+
+**Note:** The lotio image uses `matrunchyk/skia:latest` as base (built separately using `build_skia_docker_multi.sh`), and lotio-ffmpeg uses `matrunchyk/lotio:latest` as base.
 
 ### Image Details
 
-- **Base Image**: Ubuntu 22.04
-- **Architecture**: ARM64 (Linux)
+**matrunchyk/lotio:latest:**
+- **Base Image**: `matrunchyk/skia:latest` (contains pre-built Skia)
+- **Architecture**: Multi-platform (`linux/arm64`, `linux/amd64`)
 - **Includes**:
-  - lotio binary
-  - Skia libraries (with Skottie, SkParagraph, etc.)
-  - FFmpeg with ProRes 4444 support
-  - Font configuration support
+  - lotio binary (`/usr/local/bin/lotio`)
+  - lotio static library (`/usr/local/lib/liblotio.a`)
+  - lotio headers (`/usr/local/include/lotio/`)
+  - Skia libraries and headers (from base image)
+  - Runtime dependencies
+
+**matrunchyk/lotio-ffmpeg:latest:**
+- **Base Image**: `matrunchyk/lotio:latest`
+- **Architecture**: Multi-platform (`linux/arm64`, `linux/amd64`)
+- **Includes**:
+  - Everything from `matrunchyk/lotio:latest`
+  - FFmpeg 8.0 with minimal build (optimized for lotio):
+    - PNG decoder (for `image2pipe` input)
+    - `image2`/`image2pipe` demuxer (supports both pipe and file input)
+    - ProRes encoder (`prores_ks`) - ProRes 4444 with alpha channel
+    - MOV muxer
+    - Format filter
+  - Entrypoint script for automatic video encoding
 
 ## Basic Usage
 
-### Render Animation to Video
+### Render Animation to Video (Recommended)
+
+Using `lotio-ffmpeg` image with automatic video encoding:
 
 ```bash
 docker run --rm \
-  -v "$(pwd)/animation.json:/workspace/input.json:ro" \
-  -v "$(pwd):/workspace/output" \
-  matrunchyk/lotio:latest \
-  /workspace/input.json - 30 --output /workspace/output/output.mov
+  -v "$(pwd):/workspace" \
+  matrunchyk/lotio-ffmpeg:latest \
+  data.json - 30 --text-config text-config.json --output video.mov
+```
+
+The entrypoint script automatically:
+- Adds `--stream` if not present (required for piping to ffmpeg)
+- Pipes lotio PNG output to ffmpeg
+- Encodes to ProRes 4444 MOV with alpha channel support
+
+### Direct Command Execution
+
+The `lotio-ffmpeg` image supports direct command execution:
+
+```bash
+# Execute ffmpeg directly
+docker run --rm matrunchyk/lotio-ffmpeg:latest ffmpeg -version
+
+# Execute lotio directly
+docker run --rm matrunchyk/lotio-ffmpeg:latest lotio --version
+
+# Render to video (automatic encoding)
+docker run --rm -v $(pwd):/workspace matrunchyk/lotio-ffmpeg:latest \
+  data.json - 30 --output video.mov
 ```
 
 ### With Input Directory
@@ -84,24 +160,37 @@ docker run --rm \
 
 ## Command-Line Arguments
 
-The Docker container passes through all lotio command-line arguments. The entrypoint script automatically adds `--png --stream` if not present (required for video encoding).
+### lotio-ffmpeg Image
+
+The `lotio-ffmpeg` image has a smart entrypoint that:
+- **If first argument is a command** (like `ffmpeg` or `lotio`): Executes it directly
+- **Otherwise**: Treats arguments as lotio commands and automatically:
+  - Adds `--stream` if not present (required for piping to ffmpeg)
+  - Pipes lotio PNG output to ffmpeg
+  - Encodes to ProRes 4444 MOV with alpha channel
+
+### lotio Image
+
+The `lotio` image runs lotio directly - no automatic video encoding.
 
 ### Lotio Arguments
 
 All standard lotio arguments are supported:
 
-- `--png` - Output frames as PNG (automatically added if missing)
-- `--webp` - Also output WebP frames
-- `--stream` - Stream frames to stdout (automatically added if missing)
+- `--stream` - Stream frames to stdout as PNG (automatically added if missing for video encoding)
 - `--debug` - Enable debug output
 - `--text-config <file>` - Path to text configuration JSON
 - `--text-padding <0.0-1.0>` - Text padding factor (default: 0.97 = 3% padding)
 - `--text-measurement-mode <fast|accurate|pixel-perfect>` - Text measurement mode (default: accurate)
+- `--version` - Print version information and exit
+- `--help, -h` - Show help message
 - `<input.json>` - Input Lottie animation file (required)
 - `<output_dir>` - Output directory (use `-` for streaming)
 - `[fps]` - Frames per second (default: 25)
 
-### Docker-Specific Arguments
+**Note:** Frames are output as PNG by default. No format selection is needed.
+
+### Docker-Specific Arguments (lotio-ffmpeg image only)
 
 - `--output, -o <file>` - Output video file path (default: `output.mov`)
 - `--text-padding, -p <value>` - Text padding factor (0.0-1.0, default: 0.97)
@@ -125,65 +214,67 @@ The `--text-measurement-mode` option controls the accuracy vs performance trade-
 
 ```bash
 docker run --rm \
-  -v "$(pwd)/animation.json:/workspace/input.json:ro" \
-  -v "$(pwd):/workspace/output" \
-  matrunchyk/lotio:latest \
-  /workspace/input.json - 30 --output /workspace/output/video.mov
+  -v "$(pwd):/workspace" \
+  matrunchyk/lotio-ffmpeg:latest \
+  data.json - 30 --output video.mov
 ```
 
 ### With Text Configuration
 
 ```bash
 docker run --rm \
-  -v "$(pwd)/samples:/workspace/input:ro" \
-  -v "$(pwd):/workspace/output" \
-  matrunchyk/lotio:latest \
-  --text-config /workspace/input/text-config.json \
-  /workspace/input/data.json - 30 \
-  --output /workspace/output/video.mov
+  -v "$(pwd):/workspace" \
+  matrunchyk/lotio-ffmpeg:latest \
+  --text-config text-config.json \
+  data.json - 30 \
+  --output video.mov
 ```
 
 ### With Custom Text Padding and Measurement Mode
 
 ```bash
 docker run --rm \
-  -v "$(pwd)/samples:/workspace/input:ro" \
-  -v "$(pwd):/workspace/output" \
-  matrunchyk/lotio:latest \
-  --text-config /workspace/input/text-config.json \
+  -v "$(pwd):/workspace" \
+  matrunchyk/lotio-ffmpeg:latest \
+  --text-config text-config.json \
   --text-padding 0.95 \
   --text-measurement-mode pixel-perfect \
-  /workspace/input/data.json - 30 \
-  --output /workspace/output/video.mov
+  data.json - 30 \
+  --output video.mov
 ```
 
 ### With Debug Output
 
 ```bash
 docker run --rm \
-  -v "$(pwd)/animation.json:/workspace/input.json:ro" \
-  -v "$(pwd):/workspace/output" \
-  matrunchyk/lotio:latest \
+  -v "$(pwd):/workspace" \
+  matrunchyk/lotio-ffmpeg:latest \
   --debug \
-  /workspace/input.json - 30 \
-  --output /workspace/output/video.mov
+  data.json - 30 \
+  --output video.mov
 ```
 
-### Multiple Output Formats
+### Using lotio Image (Manual FFmpeg Integration)
+
+If you want to use lotio image and handle ffmpeg yourself:
 
 ```bash
+# Render frames to disk
 docker run --rm \
-  -v "$(pwd)/animation.json:/workspace/input.json:ro" \
-  -v "$(pwd):/workspace/output" \
+  -v "$(pwd):/workspace" \
   matrunchyk/lotio:latest \
-  --png --webp --debug \
-  /workspace/input.json - 30 \
-  --output /workspace/output/video.mov
+  data.json frames/ 30
+
+# Then encode with ffmpeg manually
+docker run --rm \
+  -v "$(pwd):/workspace" \
+  matrunchyk/lotio-ffmpeg:latest \
+  ffmpeg -i frames/frame_%05d.png -c:v prores_ks -profile:v 4444 output.mov
 ```
 
 ## Output Format
 
-The Docker container outputs **ProRes 4444 MOV files** with alpha channel support by default. This format:
+The `lotio-ffmpeg` image outputs **ProRes 4444 MOV files** with alpha channel support by default. This format:
 
 - Supports transparency (alpha channel)
 - Is widely compatible with video editing software
@@ -192,10 +283,11 @@ The Docker container outputs **ProRes 4444 MOV files** with alpha channel suppor
 
 ### Video Specifications
 
-- **Codec**: ProRes 4444 (`ap4h`)
-- **Pixel Format**: `yuva444p12le` (12-bit YUV with alpha)
+- **Codec**: ProRes 4444 (`prores_ks` with profile `4444`)
+- **Pixel Format**: `yuva444p10le` (10-bit YUV with alpha)
 - **Container**: MOV (QuickTime)
 - **Transparency**: Full alpha channel support
+- **Input Format**: `image2pipe` (PNG frames streamed via stdin)
 
 ## Volume Mounts
 
@@ -342,9 +434,42 @@ The Docker image can be used in CI/CD pipelines:
       --output /workspace/output/video.mov
 ```
 
+## Build Optimizations
+
+### FFmpeg Minimal Build
+
+The `lotio-ffmpeg` image uses a minimal FFmpeg build optimized for lotio's use case:
+
+**Included:**
+- PNG decoder (for `image2pipe` input)
+- `image2`/`image2pipe` demuxer (supports both pipe and file input)
+- ProRes encoder (`prores_ks`) - ProRes 4444 with alpha channel
+- MOV muxer
+- Format filter (for pixel format conversion)
+- Pipe and file protocols
+
+**Excluded (not needed):**
+- x264/x265 libraries (lotio uses ProRes, not H.264/H.265)
+- Unnecessary codecs, filters, or protocols
+
+**Benefits:**
+- Faster FFmpeg build (no x264/x265 compilation)
+- Smaller image size
+- Still supports both pipe input (`image2pipe`) and disk-based input (`image2`)
+
+### Docker Build Chain
+
+The build chain is optimized for speed:
+
+1. **Dockerfile.skia** - Builds Skia once (takes 15-20 minutes, but cached)
+2. **Dockerfile.lotio** - Uses pre-built Skia (takes 2-3 minutes)
+3. **Dockerfile.lotio-ffmpeg** - Uses pre-built lotio + builds minimal FFmpeg (takes 5-10 minutes)
+
+**Total build time:** ~20-30 minutes (first time), but subsequent builds are much faster due to caching.
+
 ## Limitations
 
-- **Architecture**: Currently built for ARM64 Linux
+- **Architecture**: Multi-platform support (`linux/arm64`, `linux/amd64`)
 - **Platform**: Designed for Linux containers (may work on macOS/Windows with proper Docker setup)
 - **Fonts**: Requires fonts to be mounted; system fonts not included
 
