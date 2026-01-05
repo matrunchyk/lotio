@@ -145,9 +145,16 @@ RUN echo "[BUILD] Setting up runtime environment..." && \
     echo "[BUILD] Runtime libraries installed"
 
 # Copy Skia libraries and headers from builder (which is based on the Skia image)
+# Headers are needed for .deb package extraction (development packages)
 COPY --from=lotio-builder /opt/skia/lib /opt/skia/lib
 COPY --from=lotio-builder /opt/skia/include /opt/skia/include
 COPY --from=lotio-builder /opt/skia/modules /opt/skia/modules
+
+# Verify Skia headers were copied successfully
+RUN echo "[BUILD] Verifying Skia headers..." && \
+    ls -la /opt/skia/ && \
+    test -d /opt/skia/include && test -d /opt/skia/modules && \
+    echo "[BUILD] Skia headers verified"
 
 # Copy lotio binary
 COPY --from=lotio-builder /build/lotio /usr/local/bin/lotio
