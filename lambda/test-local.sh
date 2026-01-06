@@ -2,13 +2,13 @@
 set -euo pipefail
 
 # Usage: ./test-local.sh <function-name> <region> <s3-bucket> <local-json-file> [text-config-file]
-# Example: ./test-local.sh skottie-render us-east-1 my-bucket ../shots/Your_Results_Positive_2.1/data.json
-# Example with text config: ./test-local.sh skottie-render us-east-1 my-bucket ../shots/Your_Results_Positive_2.1/data.json ../shots/Your_Results_Positive_2.1/text-config.json
+# Example: ./test-local.sh lotio-lambda us-east-1 my-bucket ../shots/Your_Results_Positive_2.1/data.json
+# Example with text config: ./test-local.sh lotio-lambda us-east-1 my-bucket ../shots/Your_Results_Positive_2.1/data.json ../shots/Your_Results_Positive_2.1/text-config.json
 
 if [ $# -lt 4 ]; then
   echo "Usage: $0 <function-name> <region> <s3-bucket> <local-json-file> [text-config-file]"
-  echo "Example: $0 skottie-render us-east-1 my-bucket ../shots/Your_Results_Positive_2.1/data.json"
-  echo "Example with text config: $0 skottie-render us-east-1 my-bucket ../shots/Your_Results_Positive_2.1/data.json ../shots/Your_Results_Positive_2.1/text-config.json"
+  echo "Example: $0 lotio-lambda us-east-1 my-bucket ../shots/Your_Results_Positive_2.1/data.json"
+  echo "Example with text config: $0 lotio-lambda us-east-1 my-bucket ../shots/Your_Results_Positive_2.1/data.json ../shots/Your_Results_Positive_2.1/text-config.json"
   exit 1
 fi
 

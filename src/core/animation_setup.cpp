@@ -58,11 +58,26 @@ AnimationSetupResult setupAndCreateAnimation(
     
     // Debug: save modified JSON to file for inspection
     if (g_debug_mode && !text_config_file.empty()) {
-        std::ofstream debugFile("/workspace/modified_json_debug.json");
-        if (debugFile.is_open()) {
-            debugFile << result.processed_json;
-            debugFile.close();
-            LOG_DEBUG("Saved modified JSON to modified_json_debug.json for inspection");
+        // Try multiple paths: workspace (Docker), current dir, temp dir
+        std::vector<std::string> debugPaths = {
+            "/workspace/modified_json_debug.json",
+            "modified_json_debug.json",
+            std::string(std::getenv("TMPDIR") ? std::getenv("TMPDIR") : "/tmp") + "/modified_json_debug.json"
+        };
+        
+        bool saved = false;
+        for (const auto& path : debugPaths) {
+            std::ofstream debugFile(path);
+            if (debugFile.is_open()) {
+                debugFile << result.processed_json;
+                debugFile.close();
+                LOG_DEBUG("Saved modified JSON to " << path << " for inspection");
+                saved = true;
+                break;
+            }
+        }
+        if (!saved) {
+            LOG_DEBUG("Warning: Could not save modified JSON to any debug location");
         }
     }
     

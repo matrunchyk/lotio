@@ -181,6 +181,78 @@ fi
 
 cd "$SKIA_ROOT"
 
+# Apply Skottie patches if patch file exists
+PATCH_FILE="$PROJECT_ROOT/scripts/patches/skottie.patch"
+if [ -f "$PATCH_FILE" ]; then
+    echo "   Applying Skottie patches..."
+    
+    # Check if patch is already applied by checking for a key change
+    PATCHED_FILES=(
+        "modules/skottie/src/text/TextAnimator.h"
+        "modules/skottie/src/text/TextAnimator.cpp"
+        "modules/skottie/src/text/TextAdapter.cpp"
+    )
+    
+    PATCH_ALREADY_APPLIED=false
+    for file in "${PATCHED_FILES[@]}"; do
+        if [ -f "$file" ] && grep -q "skew_axis" "$file" 2>/dev/null; then
+            PATCH_ALREADY_APPLIED=true
+            break
+        fi
+    done
+    
+    if [ "$PATCH_ALREADY_APPLIED" = true ]; then
+        echo "   ⚠️  Patch appears to be already applied, re-downloading affected files..."
+        
+        # Re-download only the files that need patching
+        SKIA_TEMP_DIR=$(mktemp -d -t skia_fresh_XXXXXX)
+        cleanup_fresh_skia() {
+            if [ -n "$SKIA_TEMP_DIR" ] && [ -d "$SKIA_TEMP_DIR" ]; then
+                rm -rf "$SKIA_TEMP_DIR" 2>/dev/null || true
+            fi
+        }
+        trap cleanup_fresh_skia EXIT
+        
+        cd "$SKIA_TEMP_DIR"
+        echo "   Cloning fresh Skia to get unpatched files..."
+        git clone --depth 1 https://skia.googlesource.com/skia.git
+        
+        # Re-copy only the text files that need patching
+        echo "   Replacing patched files with fresh copies..."
+        cp skia/modules/skottie/src/text/TextAnimator.h "$SKIA_ROOT/modules/skottie/src/text/"
+        cp skia/modules/skottie/src/text/TextAnimator.cpp "$SKIA_ROOT/modules/skottie/src/text/"
+        cp skia/modules/skottie/src/text/TextAdapter.cpp "$SKIA_ROOT/modules/skottie/src/text/"
+        
+        cd "$SKIA_ROOT"
+        cleanup_fresh_skia
+        trap - EXIT
+        echo "   ✅ Fresh files restored"
+    fi
+    
+    # Now apply the patch
+    if git apply --check "$PATCH_FILE" 2>/dev/null || patch -p1 --dry-run -s < "$PATCH_FILE" 2>/dev/null; then
+        if command -v git >/dev/null 2>&1 && [ -d ".git" ]; then
+            git apply "$PATCH_FILE" || {
+                echo "   ⚠️  Warning: git apply failed, trying patch command..."
+                patch -p1 < "$PATCH_FILE" || {
+                    echo "   ❌ ERROR: Failed to apply patch"
+                    exit 1
+                }
+            }
+        else
+            patch -p1 < "$PATCH_FILE" || {
+                echo "   ❌ ERROR: Failed to apply patch"
+                exit 1
+            }
+        fi
+        echo "   ✅ Skottie patches applied"
+    else
+        echo "   ❌ ERROR: Patch cannot be applied (files may be in unexpected state)"
+        exit 1
+    fi
+    echo ""
+fi
+
 ################################################################################
 # Step 1: Fetch dependencies (WASM only)
 ################################################################################

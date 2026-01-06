@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # Usage: ./deploy.sh <region> <lambda-function-name> <s3-bucket-name> [tag]
-# Example: ./deploy.sh us-east-1 skottie-render my-output-bucket latest
+# Example: ./deploy.sh us-east-1 lotio-lambda my-output-bucket latest
 
 if [ $# -lt 3 ]; then
   echo "Usage: $0 <region> <lambda-function-name> <s3-bucket-name> [tag]"
-  echo "Example: $0 us-east-1 skottie-render my-output-bucket latest"
+  echo "Example: $0 us-east-1 lotio-lambda my-output-bucket latest"
   exit 1
 fi
 
@@ -18,7 +18,7 @@ TAG=${4:-latest}
 # Get account ID from the main SSO profile (Lambda function will be in this account)
 LAMBDA_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text --profile 917630709045_AdministratorAccess 2>/dev/null || aws sts get-caller-identity --query Account --output text)
 ECR_ACCOUNT_ID=$LAMBDA_ACCOUNT_ID
-REPO_NAME="skottie-render"
+REPO_NAME="lotio-lambda-image"
 ECR_URI="${ECR_ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${REPO_NAME}"
 IMAGE_URI="${ECR_URI}:${TAG}"
 

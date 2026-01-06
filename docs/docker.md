@@ -57,7 +57,7 @@ The images are automatically built and pushed for each release. Available tags:
 
 The Docker images use a multi-stage build chain for optimized builds:
 
-```
+```bash
 Dockerfile.skia → matrunchyk/skia:latest
     ↓
 Dockerfile.lotio → matrunchyk/lotio:latest

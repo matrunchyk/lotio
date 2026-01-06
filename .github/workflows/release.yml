@@ -290,6 +290,8 @@ jobs:
           file: ./Dockerfile.lotio
           platforms: linux/arm64,linux/amd64
           push: true
+          provenance: false
+          sbom: false
           tags: |
             matrunchyk/lotio:${{ steps.version.outputs.VERSION }}
             matrunchyk/lotio:latest
@@ -297,7 +299,7 @@ jobs:
             type=registry,ref=matrunchyk/lotio:latest
             type=gha
           cache-to: |
-            type=registry,ref=matrunchyk/lotio:latest,mode=max
+            type=registry,ref=matrunchyk/lotio:latest
             type=gha,mode=max
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
@@ -311,6 +313,8 @@ jobs:
           file: ./Dockerfile.lotio-ffmpeg
           platforms: linux/arm64,linux/amd64
           push: true
+          provenance: false
+          sbom: false
           tags: |
             matrunchyk/lotio-ffmpeg:${{ steps.version.outputs.VERSION }}
             matrunchyk/lotio-ffmpeg:latest
@@ -318,7 +322,7 @@ jobs:
             type=registry,ref=matrunchyk/lotio-ffmpeg:latest
             type=gha
           cache-to: |
-            type=registry,ref=matrunchyk/lotio-ffmpeg:latest,mode=max
+            type=registry,ref=matrunchyk/lotio-ffmpeg:latest
             type=gha,mode=max
           build-args: |
             LOTIO_IMAGE=matrunchyk/lotio:${{ steps.version.outputs.VERSION }}

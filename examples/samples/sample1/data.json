@@ -19,6 +19,16 @@
 				"fStyle": "Bold",
 				"fName": "SegoeUI-Bold",
 				"ascent": 74.0234375
+			},
+			{
+				"origin": 0,
+				"fPath": "",
+				"fClass": "",
+				"fFamily": "Segoe UI",
+				"fWeight": "",
+				"fStyle": "Medium",
+				"fName": "SegoeUI-Medium",
+				"ascent": 74.0234375
 			}
 		]
 	},
@@ -294,7 +304,7 @@
 						{
 							"s": {
 								"s": 162,
-								"f": "SegoeUI-Bold",
+								"f": "SegoeUI-Medium",
 								"t": "GENES",
 								"ca": 0,
 								"j": 2,

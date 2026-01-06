@@ -13,6 +13,9 @@ interface LambdaEvent {
   jsonUrl: string; // HTTP or S3 URL to Lottie JSON file
   fps?: number; // Optional FPS (default: 30)
   textConfigUrl?: string; // Optional HTTP or S3 URL to text configuration JSON file
+  textMeasurementMode?: 'fast' | 'accurate' | 'pixel-perfect'; // Optional text measurement mode
+  textPadding?: number; // Optional text padding factor (0.0-1.0, default: 0.97 = 3% padding)
+  debug?: boolean; // Optional debug mode for verbose logging
   outputS3Bucket: string;
   outputS3Key: string;
 }
@@ -325,8 +328,17 @@ export const handler = async (event: LambdaEvent): Promise<{
     
     // Build lotio command arguments (streaming mode)
     const renderArgs: string[] = ['--stream'];
+    if (event.debug) {
+      renderArgs.push('--debug');
+    }
     if (textConfigPath) {
       renderArgs.push('--text-config', textConfigPath);
+    }
+    if (event.textMeasurementMode) {
+      renderArgs.push('--text-measurement-mode', event.textMeasurementMode);
+    }
+    if (event.textPadding !== undefined) {
+      renderArgs.push('--text-padding', String(event.textPadding));
     }
     renderArgs.push(jsonOutputPath, '-', String(fps)); // '-' means stdout
     

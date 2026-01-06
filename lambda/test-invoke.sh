@@ -2,13 +2,13 @@
 set -euo pipefail
 
 # Usage: ./test-invoke.sh <function-name> <region> <s3-bucket> <s3-key> [text-config-url]
-# Example: ./test-invoke.sh skottie-render us-east-1 my-bucket renders/test.mov
-# Example with text config: ./test-invoke.sh skottie-render us-east-1 my-bucket renders/test.mov https://example.com/text-config.json
+# Example: ./test-invoke.sh lotio-lambda us-east-1 my-bucket renders/test.mov
+# Example with text config: ./test-invoke.sh lotio-lambda us-east-1 my-bucket renders/test.mov https://example.com/text-config.json
 
 if [ $# -lt 4 ]; then
   echo "Usage: $0 <function-name> <region> <s3-bucket> <s3-key> [text-config-url]"
-  echo "Example: $0 skottie-render us-east-1 my-bucket renders/test.mov"
-  echo "Example with text config: $0 skottie-render us-east-1 my-bucket renders/test.mov https://example.com/text-config.json"
+  echo "Example: $0 lotio-lambda us-east-1 my-bucket renders/test.mov"
+  echo "Example with text config: $0 lotio-lambda us-east-1 my-bucket renders/test.mov https://example.com/text-config.json"
   exit 1
 fi
 

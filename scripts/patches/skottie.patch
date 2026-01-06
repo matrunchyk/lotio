@@ -1,0 +1,109 @@
+--- a/modules/skottie/src/text/TextAnimator.h	2026-01-06 09:17:53
++++ b/modules/skottie/src/text/TextAnimator.h	2026-01-06 09:17:48
+@@ -46,7 +46,9 @@
+                     fill_opacity   = 100,
+                     stroke_opacity = 100,
+                     tracking       = 0,
+-                    stroke_width   = 0;
++                    stroke_width   = 0,
++                    skew           = 0,
++                    skew_axis      = 0;
+     };
+ 
+     struct ResolvedProps {
+@@ -55,7 +57,9 @@
+                   rotation = { 0, 0, 0 };
+         float      opacity = 1,
+                   tracking = 0,
+-              stroke_width = 0;
++              stroke_width = 0,
++                  skew     = 0,
++              skew_axis    = 0;
+         SkColor fill_color = SK_ColorTRANSPARENT,
+               stroke_color = SK_ColorTRANSPARENT;
+         SkV2          blur = { 0, 0 },
+--- a/modules/skottie/src/text/TextAnimator.cpp	2026-01-06 09:17:53
++++ b/modules/skottie/src/text/TextAnimator.cpp	2026-01-06 09:17:48
+@@ -128,6 +128,9 @@
+     // Transform props compose.
+     modulated_props.position += static_cast<SkV3>(fTextProps.position) * amount;
+     modulated_props.rotation += fTextProps.rotation * amount;
++    // Skew props compose additively
++    modulated_props.skew      += fTextProps.skew * amount;
++    modulated_props.skew_axis += fTextProps.skew_axis * amount;
+     modulated_props.tracking += fTextProps.tracking * amount;
+     modulated_props.scale    *= SkV3{1,1,1} +
+             (static_cast<SkV3>(fTextProps.scale) * 0.01f - SkV3{1,1,1}) * amount;
+@@ -206,6 +209,10 @@
+     fRequiresAnchorPoint |= acontainer->bind(*abuilder, jprops["ry"], fTextProps.rotation.y);
+     fRequiresAnchorPoint |= acontainer->bind(*abuilder, jprops["r" ], fTextProps.rotation.z);
+ 
++    // Skew is anchor-point-dependent (like rotation and scale)
++    fRequiresAnchorPoint |= acontainer->bind(*abuilder, jprops["sk"], fTextProps.skew);
++    fRequiresAnchorPoint |= acontainer->bind(*abuilder, jprops["sa"], fTextProps.skew_axis);
++
+     fHasFillColor     = acontainer->bind(*abuilder, jprops["fc"], fTextProps.fill_color    );
+     fHasStrokeColor   = acontainer->bind(*abuilder, jprops["sc"], fTextProps.stroke_color  );
+     fHasFillOpacity   = acontainer->bind(*abuilder, jprops["fo"], fTextProps.fill_opacity  );
+--- a/modules/skottie/src/text/TextAdapter.cpp	2026-01-06 09:17:53
++++ b/modules/skottie/src/text/TextAdapter.cpp	2026-01-06 09:17:48
+@@ -984,14 +984,55 @@
+                                       const TextAnimator::DomainSpan* grouping_span) const {
+     const auto anchor_point = this->fragmentAnchorPoint(rec, grouping_alignment, grouping_span);
+ 
+-    rec.fMatrixNode->setMatrix(
+-                this->fragmentMatrix(props, rec, anchor_point + frag_offset)
++    // Build transform matrix with skew support
++    SkM44 transform = this->fragmentMatrix(props, rec, anchor_point + frag_offset)
+               * SkM44::Rotate({ 1, 0, 0 }, SkDegreesToRadians(props.rotation.x))
+               * SkM44::Rotate({ 0, 1, 0 }, SkDegreesToRadians(props.rotation.y))
+-              * SkM44::Rotate({ 0, 0, 1 }, SkDegreesToRadians(props.rotation.z))
++              * SkM44::Rotate({ 0, 0, 1 }, SkDegreesToRadians(props.rotation.z));
++
++    // Apply skew transformation if present
++    // Skew is a horizontal shear: baseline stays fixed, top moves left/right
++    // Like a person standing on their feet and bending left/right (not rotating)
++    // The baseline (bottom) stays in place, only the top moves horizontally
++    if (props.skew != 0.0f) {
++        const float skew_rad = SkDegreesToRadians(props.skew);
++        const float axis_rad = SkDegreesToRadians(props.skew_axis);
++        
++        // Calculate baseline offset from anchor point
++        // The baseline is at rec.fOrigin.fY, anchor point is at center of 2x ascent box
++        const float baseline_offset_y = rec.fOrigin.fY - anchor_point.y;
++        
++        // Horizontal shear: x' = x + tan(skew) * (y - baseline), y' = y
++        // This keeps the baseline fixed and shifts points above it horizontally
++        const float tan_skew = std::tan(skew_rad);
++        
++        // Create horizontal shear matrix (row-major order)
++        // [1, tan(skew), 0, 0; 0, 1, 0, 0; 0, 0, 1, 0; 0, 0, 0, 1]
++        SkM44 horizontal_shear(1.0f, tan_skew, 0.0f, 0.0f,
++                               0.0f, 1.0f, 0.0f, 0.0f,
++                               0.0f, 0.0f, 1.0f, 0.0f,
++                               0.0f, 0.0f, 0.0f, 1.0f);
++        
++        // Apply skew relative to baseline:
++        // 1. Translate to baseline (so baseline becomes y=0)
++        // 2. Rotate coordinate system by -axis to orient the shear direction
++        // 3. Apply horizontal shear (shifts x based on y, keeping y=0 fixed)
++        // 4. Rotate back
++        // 5. Translate back from baseline
++        transform = transform
++            * SkM44::Translate(0, baseline_offset_y, 0)
++            * SkM44::Rotate({ 0, 0, 1 }, -axis_rad)
++            * horizontal_shear
++            * SkM44::Rotate({ 0, 0, 1 }, axis_rad)
++            * SkM44::Translate(0, -baseline_offset_y, 0);
++    }
++
++    transform = transform
+               * SkM44::Scale(props.scale.x, props.scale.y, props.scale.z)
+-              * SkM44::Translate(-anchor_point.x, -anchor_point.y, 0));
++              * SkM44::Translate(-anchor_point.x, -anchor_point.y, 0);
+ 
++    rec.fMatrixNode->setMatrix(transform);
++
+     const auto scale_alpha = [](SkColor c, float o) {
+         return SkColorSetA(c, SkScalarRoundToInt(o * SkColorGetA(c)));
+     };
