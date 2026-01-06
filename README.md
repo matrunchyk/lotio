@@ -35,13 +35,13 @@ xcode-select --install
 ### Command Line
 
 ```bash
-lotio [--stream] [--debug] [--text-config <config.json>] [--text-padding <0.0-1.0>] [--text-measurement-mode <fast|accurate|pixel-perfect>] <input.json> <output_dir> [fps]
+lotio [--stream] [--debug] [--layer-overrides <config.json>] [--text-padding <0.0-1.0>] [--text-measurement-mode <fast|accurate|pixel-perfect>] <input.json> <output_dir> [fps]
 ```
 
 **Options:**
 - `--stream` - Stream frames to stdout as PNG (for piping to ffmpeg)
 - `--debug` - Enable debug output
-- `--text-config` - Path to text configuration JSON (for auto-fit and dynamic text values)
+- `--layer-overrides` - Path to layer overrides JSON (for text auto-fit, dynamic text values, and image path overrides)
 - `--text-padding` - Text padding factor (0.0-1.0, default: 0.97 = 3% padding)
 - `--text-measurement-mode` - Text measurement mode: `fast` | `accurate` | `pixel-perfect` (default: `accurate`)
 - `--version` - Print version information and exit
@@ -56,8 +56,8 @@ lotio animation.json frames/ 30
 # Stream to ffmpeg
 lotio --stream animation.json - | ffmpeg -f image2pipe -i - output.mp4
 
-# With text configuration
-lotio --text-config text_config.json animation.json frames/
+# With layer overrides
+lotio --layer-overrides layer-overrides.json animation.json frames/
 ```
 
 ### Docker (Recommended for Video Output)
@@ -65,7 +65,7 @@ lotio --text-config text_config.json animation.json frames/
 **Quick start with automatic video encoding:**
 ```bash
 docker run --rm -v $(pwd):/workspace matrunchyk/lotio-ffmpeg:latest \
-  data.json - 30 --text-config text-config.json --output video.mov
+  data.json - 30 --layer-overrides layer-overrides.json --output video.mov
 ```
 
 **Available images:**
@@ -102,7 +102,7 @@ const animation = new Lotio({
   fonts: [{ name: 'OpenSans-Bold', data: fontData }],
   fps: 30,
   animation: animationData,
-  textConfig: { /* optional text config */ },
+  layerOverrides: { /* optional layer overrides */ },
   textPadding: 0.97,  // Optional: text padding factor (default: 0.97)
   textMeasurementMode: TextMeasurementMode.ACCURATE,  // Optional: TextMeasurementMode.FAST | TextMeasurementMode.ACCURATE | TextMeasurementMode.PIXEL_PERFECT
   wasmPath: './lotio.wasm'
@@ -216,9 +216,9 @@ animation.destroy();
 
 The `samples/` directory contains example Lottie animations and configurations:
 
-- **`samples/sample1/`** - Basic animation with text configuration
+- **`samples/sample1/`** - Basic animation with layer overrides
   - `data.json` - Lottie animation file
-  - `text-config.json` - Text customization configuration
+  - `layer-overrides.json` - Text and image customization configuration
   - `output/` - Rendered frames (run lotio to generate)
 
 - **`samples/sample2/`** - Animation with external images
@@ -230,7 +230,7 @@ The `samples/` directory contains example Lottie animations and configurations:
 ```bash
 # Sample 1: Basic animation with text customization
 cd samples/sample1
-lotio --text-config text-config.json data.json output/ 30
+lotio --layer-overrides layer-overrides.json data.json output/ 30
 
 # Sample 2: Animation with external images
 cd samples/sample2

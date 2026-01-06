@@ -221,24 +221,24 @@ animation
       
       const processedAnim = await convertImagesToDataURIs(animData, sampleName);
       
-      let textConfig = null;
+      let layerOverrides = null;
       try {
-        const textConfigResponse = await fetch(`./samples/${sampleName}/text-config.json`);
-        if (textConfigResponse.ok) {
-          textConfig = await textConfigResponse.json();
-        } else if (textConfigResponse.status === 404) {
-          // Text config is optional, 404 is expected if it doesn't exist
-          // Silently continue without text config
+        const layerOverridesResponse = await fetch(`./samples/${sampleName}/layer-overrides.json`);
+        if (layerOverridesResponse.ok) {
+          layerOverrides = await layerOverridesResponse.json();
+        } else if (layerOverridesResponse.status === 404) {
+          // Layer overrides are optional, 404 is expected if it doesn't exist
+          // Silently continue without layer overrides
         }
       } catch (e) {
-        // Text config is optional, ignore errors
+        // Layer overrides are optional, ignore errors
       }
       
       animation = new Lotio({
         fonts: [{ name: 'OpenSans-Bold', data: fontData }],
         fps: parseFloat(fpsSlider.value),
         animation: processedAnim,
-        textConfig: textConfig,
+        layerOverrides: layerOverrides,
         textPadding: textPadding,
         textMeasurementMode: textMeasurementMode,
         wasmPath: './browser/lotio.wasm'
@@ -409,7 +409,7 @@ new Lotio(options)
 - `fonts` (Array): Font files to load. Each font should have `{ name: string, data: Uint8Array }`
 - `fps` (number): Frames per second (default: 30)
 - `animation` (Object|string): Lottie animation JSON (object or stringified)
-- `textConfig` (Object|string, optional): Text configuration JSON
+- `layerOverrides` (Object|string, optional): Layer overrides JSON (for text and image overrides)
 - `textPadding` (number, optional): Text padding factor (0.0-1.0, default: 0.97 = 3% padding)
 - `textMeasurementMode` (string, optional): Text measurement mode: `'fast'` | `'accurate'` | `'pixel-perfect'` (default: `'accurate'`)
 - `wasmPath` (string): Path to `lotio.wasm` file (default: `'./lotio.wasm'`)
@@ -440,7 +440,7 @@ The `textMeasurementMode` option controls the accuracy vs performance trade-off 
 
 - `setFps(fps)` - Set frames per second
 - `setAnimation(animation)` - Set animation data
-- `setTextConfig(textConfig)` - Set text configuration
+- `setLayerOverrides(layerOverrides)` - Set layer overrides
 - `setFonts(fonts)` - Set fonts array
 
 #### Getters
@@ -450,7 +450,7 @@ The `textMeasurementMode` option controls the accuracy vs performance trade-off 
 
 - `getFps()` - Get current FPS
 - `getAnimation()` - Get animation data
-- `getTextConfig()` - Get text configuration
+- `getLayerOverrides()` - Get layer overrides
 - `getState()` - Get current state (`'stopped'`, `'paused'`, `'loaded'`, `'error'`, `'playing'`)
 - `getCurrentFrame()` - Get current frame data
 - `getAnimationInfo()` - Get animation metadata (width, height, duration, fps)
@@ -520,7 +520,7 @@ animation.on('frame', () => {
 });
 ```
 
-### With Fonts and Text Config
+### With Fonts and Layer Overrides
 
 ```javascript
 const fontData = new Uint8Array(await fontResponse.arrayBuffer());
@@ -528,7 +528,7 @@ const fontData = new Uint8Array(await fontResponse.arrayBuffer());
 const animation = new Lotio({
   fonts: [{ name: 'OpenSans-Bold', data: fontData }],
   animation: animationData,
-  textConfig: {
+  layerOverrides: {
     textLayers: {
       "Patient_Name": {
         minSize: 20,
@@ -538,6 +538,9 @@ const animation = new Lotio({
     },
     textValues: {
       "Patient_Name": "John Doe"
+    },
+    imagePaths: {
+      "image_0": "images/custom_image.png"
     }
   }
 });
@@ -550,7 +553,7 @@ import Lotio, { TextMeasurementMode } from '@matrunchyk/lotio';
 
 const animation = new Lotio({
   animation: animationData,
-  textConfig: textConfigData,
+  layerOverrides: layerOverridesData,
   textPadding: 0.95,  // Use 95% of width (5% padding)
   textMeasurementMode: TextMeasurementMode.PIXEL_PERFECT,  // Most accurate measurement
   wasmPath: './lotio.wasm'

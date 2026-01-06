@@ -1,8 +1,16 @@
 # Multi-stage Dockerfile for Lambda function using lotio (Lottie renderer)
-# Target: Linux ARM64
+# Supports multi-arch builds (arm64, amd64)
 
 # Allow overriding the base lotio-ffmpeg image for local testing
 ARG LOTIO_FFMPEG_IMAGE=matrunchyk/lotio-ffmpeg:latest
+
+# BuildKit automatically provides TARGETARCH for multi-arch builds
+ARG TARGETARCH
+# AWS Lambda architecture mapping: amd64 -> x86_64, arm64 -> arm64
+# This will be set automatically by buildx based on TARGETARCH
+ARG LAMBDA_ARCH=arm64
+# Default mapping: if TARGETARCH is amd64, use x86_64; otherwise use arm64
+# This is handled by passing --build-arg LAMBDA_ARCH=x86_64 for amd64 builds
 
 ########################################################################################
 # Stage 0: Lotio-FFmpeg Image - Source for lotio binary and ffmpeg
@@ -11,7 +19,9 @@ FROM ${LOTIO_FFMPEG_IMAGE} AS lotio-ffmpeg-source
 
 ########################################################################################
 # Stage 1: FFmpeg Builder - Build ffmpeg on AL2023 for GLIBC compatibility
-FROM public.ecr.aws/lambda/nodejs:22-arm64 AS ffmpeg-builder
+# Use architecture-specific Lambda base image
+# AWS Lambda uses 'x86_64' for AMD64, not 'amd64'
+FROM public.ecr.aws/lambda/nodejs:22-${LAMBDA_ARCH} AS ffmpeg-builder
 
 # Install build dependencies
 RUN dnf install -y \
@@ -65,7 +75,10 @@ RUN npm run build
 
 ########################################################################################
 # Stage 3: Lambda Runtime - Final image
-FROM public.ecr.aws/lambda/nodejs:22-arm64
+# Use architecture-specific Lambda base image
+# AWS Lambda uses 'x86_64' for AMD64, not 'amd64'
+ARG LAMBDA_ARCH
+FROM public.ecr.aws/lambda/nodejs:22-${LAMBDA_ARCH}
 
 # Install runtime libraries
 RUN dnf install -y \

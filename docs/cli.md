@@ -32,7 +32,7 @@ lotio [OPTIONS] <input.json> <output_dir> [fps]
 
 - `--stream` - Stream frames to stdout as PNG (for piping to ffmpeg)
 - `--debug` - Enable debug output
-- `--text-config <config.json>` - Path to text configuration JSON (for auto-fit and dynamic text values)
+- `--layer-overrides <config.json>` - Path to layer overrides JSON (for text auto-fit, dynamic text values, and image path overrides)
 - `--text-padding <0.0-1.0>` - Text padding factor (default: 0.97 = 3% padding)
 - `--text-measurement-mode <fast|accurate|pixel-perfect>` - Text measurement accuracy mode (default: accurate)
 - `--version` - Print version information and exit
@@ -87,21 +87,22 @@ lotio --stream animation.json - | ffmpeg -f image2pipe -i - output.mp4
 
 This streams frames directly to ffmpeg for video encoding without creating intermediate files.
 
-### With Text Configuration
+### With Layer Overrides
 
 ```bash
-lotio --text-config text_config.json animation.json frames/
+lotio --layer-overrides layer-overrides.json animation.json frames/
 ```
 
-The text configuration file allows you to:
+The layer overrides file allows you to:
 - Replace text layer values dynamically
 - Auto-fit font sizes to text boxes
-- Customize text appearance
+- Override image paths by asset ID
+- Customize text and image appearance
 
 ### With Custom Text Padding
 
 ```bash
-lotio --text-padding 0.95 --text-config text_config.json animation.json frames/
+lotio --text-padding 0.95 --layer-overrides layer-overrides.json animation.json frames/
 ```
 
 Use 95% of text box width (5% padding) instead of the default 97% (3% padding).
@@ -109,12 +110,12 @@ Use 95% of text box width (5% padding) instead of the default 97% (3% padding).
 ### With Pixel-Perfect Text Measurement
 
 ```bash
-lotio --text-measurement-mode pixel-perfect --text-config text_config.json animation.json frames/
+lotio --text-measurement-mode pixel-perfect --layer-overrides layer-overrides.json animation.json frames/
 ```
 
 Use the most accurate text measurement mode for precise text sizing.
 
-Example `text_config.json`:
+Example `layer-overrides.json`:
 ```json
 {
   "textLayers": {
@@ -138,9 +139,9 @@ lotio --debug animation.json frames/ 30
 
 Enables verbose logging for troubleshooting.
 
-## Text Configuration
+## Layer Overrides
 
-The text configuration JSON file supports:
+The layer overrides JSON file supports text and image customization:
 
 ### Text Layers
 
@@ -171,6 +172,24 @@ Replace text layer content:
 }
 ```
 
+### Image Paths
+
+Override image asset paths by asset ID. If no override is provided, the original path from data.json is used (fallback):
+
+```json
+{
+  "imagePaths": {
+    "image_0": "images/custom_image.png",
+    "image_1": "/absolute/path/to/image.png"
+  }
+}
+```
+
+- Keys are asset IDs (e.g., `"image_0"`, `"image_1"`)
+- Values are combined paths (directory + filename)
+- Paths can be relative or absolute
+- If an asset ID is not in `imagePaths`, the original `u` and `p` from data.json are used
+
 ### Complete Example
 
 ```json
@@ -190,6 +209,10 @@ Replace text layer content:
   "textValues": {
     "Title": "Welcome to Lotio",
     "Subtitle": "High-performance Lottie renderer"
+  },
+  "imagePaths": {
+    "image_0": "images/custom_logo.png",
+    "image_1": "/path/to/background.png"
   }
 }
 ```

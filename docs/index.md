@@ -59,7 +59,7 @@ new Lotio(options)
 - `fonts` (Array): Font files to load. Each font should have `{ name: string, data: Uint8Array }`
 - `fps` (number): Frames per second (default: 30)
 - `animation` (Object|string): Lottie animation JSON (object or stringified)
-- `textConfig` (Object|string, optional): Text configuration JSON
+- `layerOverrides` (Object|string, optional): Layer overrides JSON
 - `wasmPath` (string): Path to `lotio.wasm` file (default: `'./lotio.wasm'`)
 
 ### Methods
@@ -76,14 +76,14 @@ new Lotio(options)
 
 - `setFps(fps)` - Set frames per second
 - `setAnimation(animation)` - Set animation data
-- `setTextConfig(textConfig)` - Set text configuration
+- `setLayerOverrides(layerOverrides)` - Set layer overrides
 - `setFonts(fonts)` - Set fonts array
 
 #### Getters
 
 - `getFps()` - Get current FPS
 - `getAnimation()` - Get animation data
-- `getTextConfig()` - Get text configuration
+- `getLayerOverrides()` - Get layer overrides
 - `getState()` - Get current state (`'stopped'`, `'paused'`, `'loaded'`, `'error'`, `'playing'`)
 - `getCurrentFrame()` - Get current frame data
 - `getAnimationInfo()` - Get animation metadata (width, height, duration, fps)
@@ -150,7 +150,7 @@ animation.on('frame', () => {
 });
 ```
 
-### With Fonts and Text Config
+### With Fonts and Layer Overrides
 
 ```javascript
 const fontData = new Uint8Array(await fontResponse.arrayBuffer());
@@ -158,7 +158,7 @@ const fontData = new Uint8Array(await fontResponse.arrayBuffer());
 const animation = new Lotio({
   fonts: [{ name: 'OpenSans-Bold', data: fontData }],
   animation: animationData,
-  textConfig: {
+  layerOverrides: {
     textLayers: {
       "Patient_Name": {
         minSize: 20,

@@ -2,7 +2,7 @@
 #include <emscripten/bind.h>
 #include "../core/animation_setup.h"
 #include "../text/json_manipulation.h"
-#include "../text/text_config.h"
+#include "../text/layer_overrides.h"
 #include "../text/text_processor.h"
 #include "../text/font_utils.h"
 #include "../text/text_sizing.h"
@@ -34,9 +34,9 @@
 #include <ctime>
 #include <iomanip>
 
-// Helper to parse text config from string (for WASM)
-static std::map<std::string, TextLayerConfig> parseTextConfigFromString(const std::string& json) {
-    std::map<std::string, TextLayerConfig> configs;
+// Helper to parse layer overrides from string (for WASM)
+static std::map<std::string, LayerOverride> parseLayerOverridesFromString(const std::string& json) {
+    std::map<std::string, LayerOverride> configs;
     
     // Extract textLayers section - find the start of the object
     size_t textLayersPos = json.find("\"textLayers\"");
@@ -84,12 +84,13 @@ static std::map<std::string, TextLayerConfig> parseTextConfigFromString(const st
                     if (layerEnd > layerStart) {
                         std::string layerConfig = layersJson.substr(layerStart + 1, layerEnd - layerStart - 1);
                         
-                        TextLayerConfig config;
+                        LayerOverride config;
                         config.minSize = extractJsonFloat(layerConfig, "minSize");
                         config.maxSize = extractJsonFloat(layerConfig, "maxSize");
                         config.fallbackText = extractJsonString(layerConfig, "fallbackText");
                         config.textBoxWidth = extractJsonFloat(layerConfig, "textBoxWidth");
                         config.textValue = "";
+                        config.imagePath = "";
                         
                         configs[layerName] = config;
                     }
@@ -141,15 +142,130 @@ static std::map<std::string, TextLayerConfig> parseTextConfigFromString(const st
     return configs;
 }
 
-// Helper to process text configuration from string (for WASM)
-static void processTextConfigurationFromString(std::string& json_data, const std::string& text_config_json, SkFontMgr* fontMgr = nullptr, float textPadding = 0.97f, TextMeasurementMode textMeasurementMode = TextMeasurementMode::ACCURATE) {
-    if (text_config_json.empty()) {
+// Helper to parse image paths from string (for WASM)
+static std::map<std::string, std::string> parseImagePathsFromString(const std::string& json) {
+    std::map<std::string, std::string> imagePaths;
+    
+    size_t imagePathsPos = json.find("\"imagePaths\"");
+    if (imagePathsPos != std::string::npos) {
+        size_t openBrace = json.find('{', imagePathsPos);
+        if (openBrace != std::string::npos) {
+            int braceCount = 0;
+            size_t closeBrace = openBrace;
+            for (size_t i = openBrace; i < json.length(); i++) {
+                if (json[i] == '{') braceCount++;
+                if (json[i] == '}') braceCount--;
+                if (braceCount == 0) {
+                    closeBrace = i;
+                    break;
+                }
+            }
+            
+            if (closeBrace > openBrace) {
+                std::string pathsJson = json.substr(openBrace + 1, closeBrace - openBrace - 1);
+                
+                std::regex pathPattern("\"([^\"]+)\"\\s*:\\s*\"([^\"]+)\"");
+                std::sregex_iterator iter(pathsJson.begin(), pathsJson.end(), pathPattern);
+                std::sregex_iterator end;
+                
+                for (; iter != end; ++iter) {
+                    std::smatch match = *iter;
+                    std::string assetId = match[1].str();
+                    std::string imagePath = match[2].str();
+                    
+                    imagePaths[assetId] = imagePath;
+                }
+            }
+        }
+    }
+    
+    return imagePaths;
+}
+
+// Helper to process layer overrides from string (for WASM)
+static void processLayerOverridesFromString(std::string& json_data, const std::string& layer_overrides_json, SkFontMgr* fontMgr = nullptr, float textPadding = 0.97f, TextMeasurementMode textMeasurementMode = TextMeasurementMode::ACCURATE) {
+    if (layer_overrides_json.empty()) {
         return;
     }
     
-    auto textConfigs = parseTextConfigFromString(text_config_json);
+    auto layerOverrides = parseLayerOverridesFromString(layer_overrides_json);
+    auto imagePaths = parseImagePathsFromString(layer_overrides_json);
     
-    if (textConfigs.empty()) {
+    // Process image path overrides first
+    if (!imagePaths.empty()) {
+        size_t assetsPos = json_data.find("\"assets\"");
+        if (assetsPos != std::string::npos) {
+            size_t arrayStart = json_data.find('[', assetsPos);
+            if (arrayStart != std::string::npos) {
+                int bracketCount = 0;
+                size_t arrayEnd = arrayStart;
+                for (size_t i = arrayStart; i < json_data.length(); i++) {
+                    if (json_data[i] == '[') bracketCount++;
+                    if (json_data[i] == ']') bracketCount--;
+                    if (bracketCount == 0) {
+                        arrayEnd = i;
+                        break;
+                    }
+                }
+                
+                if (arrayEnd > arrayStart) {
+                    std::string assetsJson = json_data.substr(arrayStart, arrayEnd - arrayStart + 1);
+                    std::string modifiedAssets = assetsJson;
+                    
+                    for (const auto& [assetId, imagePath] : imagePaths) {
+                        std::string idPattern = "\"id\"\\s*:\\s*\"" + assetId + "\"";
+                        std::regex idRegex(idPattern);
+                        std::smatch idMatch;
+                        
+                        if (std::regex_search(modifiedAssets, idMatch, idRegex)) {
+                            size_t assetStart = idMatch.position(0);
+                            size_t objStart = modifiedAssets.rfind('{', assetStart);
+                            if (objStart != std::string::npos) {
+                                int objBraceCount = 0;
+                                size_t objEnd = objStart;
+                                for (size_t i = objStart; i < modifiedAssets.length(); i++) {
+                                    if (modifiedAssets[i] == '{') objBraceCount++;
+                                    if (modifiedAssets[i] == '}') objBraceCount--;
+                                    if (objBraceCount == 0) {
+                                        objEnd = i;
+                                        break;
+                                    }
+                                }
+                                
+                                if (objEnd > objStart) {
+                                    std::string assetObj = modifiedAssets.substr(objStart, objEnd - objStart + 1);
+                                    
+                                    // Split path into u and p
+                                    size_t lastSlash = imagePath.find_last_of("/\\");
+                                    std::string dir = (lastSlash != std::string::npos) ? imagePath.substr(0, lastSlash + 1) : "";
+                                    std::string filename = (lastSlash != std::string::npos) ? imagePath.substr(lastSlash + 1) : imagePath;
+                                    
+                                    if (dir == "/" || dir == "\\") {
+                                        dir = "";
+                                    }
+                                    
+                                    std::regex uPattern("\"u\"\\s*:\\s*\"[^\"]*\"");
+                                    std::regex pPattern("\"p\"\\s*:\\s*\"[^\"]*\"");
+                                    
+                                    std::string newU = "\"u\":\"" + dir + "\"";
+                                    std::string newP = "\"p\":\"" + filename + "\"";
+                                    
+                                    assetObj = std::regex_replace(assetObj, uPattern, newU);
+                                    assetObj = std::regex_replace(assetObj, pPattern, newP);
+                                    
+                                    modifiedAssets.replace(objStart, objEnd - objStart + 1, assetObj);
+                                }
+                            }
+                        }
+                    }
+                    
+                    json_data.replace(arrayStart, arrayEnd - arrayStart + 1, modifiedAssets);
+                }
+            }
+        }
+    }
+    
+    if (layerOverrides.empty()) {
         return;
     }
     
@@ -180,7 +296,7 @@ static void processTextConfigurationFromString(std::string& json_data, const std
     };
     std::vector<LayerModification> modifications;
     
-    for (const auto& [layerName, config] : textConfigs) {
+    for (const auto& [layerName, config] : layerOverrides) {
         FontInfo fontInfo = extractFontInfoFromJson(json_data, layerName);
         
         if (fontInfo.name.empty()) {
@@ -536,7 +652,7 @@ static std::unique_ptr<WasmAnimationContext> g_context;
 
 extern "C" {
     EMSCRIPTEN_KEEPALIVE
-    int lotio_init(const char* json_data, size_t json_len, const char* text_config_json, size_t text_config_len, float textPadding, int textMeasurementModeInt) {
+    int lotio_init(const char* json_data, size_t json_len, const char* layer_overrides_json, size_t layer_overrides_len, float textPadding, int textMeasurementModeInt) {
         try {
             // If context already exists (fonts were registered), reuse it
             // Otherwise create a new one
@@ -558,10 +674,10 @@ extern "C" {
                 textMeasurementMode = TextMeasurementMode::PIXEL_PERFECT;
             }
             
-            if (text_config_json && text_config_len > 0) {
-                std::string text_config(text_config_json, text_config_len);
+            if (layer_overrides_json && layer_overrides_len > 0) {
+                std::string layer_overrides(layer_overrides_json, layer_overrides_len);
                 // Pass the font manager with registered fonts for proper text measurement
-                processTextConfigurationFromString(g_context->processed_json, text_config, g_context->fontMgr.get(), textPadding, textMeasurementMode);
+                processLayerOverridesFromString(g_context->processed_json, layer_overrides, g_context->fontMgr.get(), textPadding, textMeasurementMode);
             }
             
             // Register codecs needed by SkResources for image decoding

@@ -56,7 +56,7 @@ RUN ACTUAL_VERSION=$(cat /tmp/version.txt) && \
                src/utils/logging.cpp \
                src/utils/string_utils.cpp \
                src/utils/version.cpp \
-               src/text/text_config.cpp \
+               src/text/layer_overrides.cpp \
                src/text/text_processor.cpp \
                src/text/font_utils.cpp \
                src/text/text_sizing.cpp \
@@ -78,7 +78,7 @@ RUN echo "[BUILD] Creating liblotio.a..." && \
         src/utils/logging.o \
         src/utils/string_utils.o \
         src/utils/version.o \
-        src/text/text_config.o \
+        src/text/layer_overrides.o \
         src/text/text_processor.o \
         src/text/font_utils.o \
         src/text/text_sizing.o \

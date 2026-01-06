@@ -256,7 +256,7 @@ Dockerfile.lotio-ffmpeg → matrunchyk/lotio-ffmpeg:latest (uses matrunchyk/loti
 ```bash
 # Render Lottie to video (automatic ffmpeg encoding)
 docker run -v $(pwd):/workspace matrunchyk/lotio-ffmpeg:latest \
-  data.json - 30 --text-config text-config.json --output video.mov
+  data.json - 30 --layer-overrides layer-overrides.json --output video.mov
 
 # Direct command execution
 docker run matrunchyk/lotio-ffmpeg:latest ffmpeg -version
@@ -418,7 +418,7 @@ docker run matrunchyk/lotio-ffmpeg:latest lotio --version
 ```bash
 # Used as Docker entrypoint in lotio-ffmpeg image
 docker run -v $(pwd):/workspace matrunchyk/lotio-ffmpeg:latest \
-  data.json - 30 --text-config text-config.json --output video.mov
+  data.json - 30 --layer-overrides layer-overrides.json --output video.mov
 
 # Direct command execution (bypasses entrypoint wrapper)
 docker run matrunchyk/lotio-ffmpeg:latest ffmpeg -version

@@ -10,12 +10,12 @@ int main(int argc, char* argv[]) {
 
     std::string input_file = argv[1];
     std::string output_dir = argv[2];
-    std::string text_config = (argc > 3) ? argv[3] : "";
+    std::string layer_overrides = (argc > 3) ? argv[3] : "";
 
     std::cout << "Loading animation from: " << input_file << std::endl;
 
     // Setup and create animation
-    AnimationSetupResult result = setupAndCreateAnimation(input_file, text_config);
+    AnimationSetupResult result = setupAndCreateAnimation(input_file, layer_overrides);
     
     if (!result.success()) {
         std::cerr << "Failed to load animation" << std::endl;

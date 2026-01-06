@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
     // Setup and create animation
     AnimationSetupResult setup_result = setupAndCreateAnimation(
         args.input_file, 
-        args.text_config_file,
+        args.layer_overrides_file,
         args.text_padding,
         args.text_measurement_mode
     );

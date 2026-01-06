@@ -11,10 +11,10 @@
 #include <fstream>
 #include <filesystem>
 
-// Read JSON file and apply text processing
+// Read JSON file and apply layer overrides
 static std::string readAndProcessJson(
     const std::string& input_file,
-    const std::string& text_config_file,
+    const std::string& layer_overrides_file,
     float textPadding,
     TextMeasurementMode textMeasurementMode
 ) {
@@ -36,28 +36,28 @@ static std::string readAndProcessJson(
 
     normalizeLottieTextNewlines(json_data);
     
-    // Apply text configuration if config file is provided
-    processTextConfiguration(json_data, text_config_file, textPadding, textMeasurementMode);
+    // Apply layer overrides if config file is provided
+    processLayerOverrides(json_data, layer_overrides_file, textPadding, textMeasurementMode);
     
     return json_data;
 }
 
 AnimationSetupResult setupAndCreateAnimation(
     const std::string& input_file,
-    const std::string& text_config_file,
+    const std::string& layer_overrides_file,
     float textPadding,
     TextMeasurementMode textMeasurementMode
 ) {
     AnimationSetupResult result;
     
-    // Read and process JSON (apply text config if needed)
-    result.processed_json = readAndProcessJson(input_file, text_config_file, textPadding, textMeasurementMode);
+    // Read and process JSON (apply layer overrides if needed)
+    result.processed_json = readAndProcessJson(input_file, layer_overrides_file, textPadding, textMeasurementMode);
     if (result.processed_json.empty()) {
         return result;  // animation will be nullptr
     }
     
     // Debug: save modified JSON to file for inspection
-    if (g_debug_mode && !text_config_file.empty()) {
+    if (g_debug_mode && !layer_overrides_file.empty()) {
         // Try multiple paths: workspace (Docker), current dir, temp dir
         std::vector<std::string> debugPaths = {
             "/workspace/modified_json_debug.json",

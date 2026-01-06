@@ -33,7 +33,7 @@ Headers are organized by module:
 #include <lotio/core/renderer.h>          // Frame rendering
 #include <lotio/core/frame_encoder.h>     // Frame encoding (PNG)
 #include <lotio/text/text_processor.h>    // Text processing
-#include <lotio/text/text_config.h>       // Text configuration
+#include <lotio/text/layer_overrides.h>   // Layer overrides
 #include <lotio/text/font_utils.h>        // Text measurement modes
 #include <lotio/utils/logging.h>          // Logging utilities
 ```
@@ -66,12 +66,12 @@ The `TextMeasurementMode` enum controls the accuracy vs performance trade-off fo
 
 int main() {
     std::string inputJson = "animation.json";
-    std::string textConfigJson = "";  // Optional
+    std::string layerOverridesJson = "";  // Optional
     
     // Setup and create animation with default text padding and measurement mode
     AnimationSetupResult result = setupAndCreateAnimation(
         inputJson, 
-        textConfigJson,
+        layerOverridesJson,
         0.97f,  // textPadding: 97% of width (3% padding)
         TextMeasurementMode::ACCURATE  // textMeasurementMode: good balance
     );
@@ -110,13 +110,14 @@ bool success = encodeFrameToPNG(rgbaData, width, height, outputPath);
 
 ```cpp
 #include <lotio/text/text_processor.h>
-#include <lotio/text/text_config.h>
+#include <lotio/text/layer_overrides.h>
 
-// Load text configuration
-TextConfig config = loadTextConfig("text_config.json");
+// Load layer overrides
+auto layerOverrides = parseLayerOverrides("layer-overrides.json");
+auto imagePaths = parseImagePaths("layer-overrides.json");
 
-// Process text layers in animation JSON
-std::string modifiedJson = processTextLayers(
+// Process layer overrides in animation JSON
+std::string modifiedJson = processLayerOverrides(
     originalJson,
     config
 );
@@ -154,7 +155,7 @@ struct AnimationSetupResult {
 
 AnimationSetupResult setupAndCreateAnimation(
     const std::string& inputJsonPath,
-    const std::string& textConfigPath,
+    const std::string& layerOverridesPath,
     float textPadding = 0.97f,
     TextMeasurementMode textMeasurementMode = TextMeasurementMode::ACCURATE
 );
@@ -162,7 +163,7 @@ AnimationSetupResult setupAndCreateAnimation(
 
 **Parameters:**
 - `inputJsonPath`: Path to Lottie animation JSON file
-- `textConfigPath`: Path to text configuration JSON file (empty string if not used)
+- `layerOverridesPath`: Path to layer overrides JSON file (empty string if not used)
 - `textPadding`: Text padding factor (0.0-1.0, default: 0.97 = 3% padding). Controls how much of the target text box width is used for text sizing.
 - `textMeasurementMode`: Text measurement accuracy mode (default: `ACCURATE`). See `TextMeasurementMode` enum above.
 ```
@@ -196,22 +197,22 @@ Encodes RGBA pixel data to PNG format. The C++ library outputs PNG frames by def
 ### Text Processing
 
 ```cpp
-struct TextLayerConfig {
-    int minSize;
-    int maxSize;
-    int textBoxWidth;
-    int textBoxHeight;  // Optional
+struct LayerOverride {
+    float minSize;
+    float maxSize;
+    std::string fallbackText;
+    std::string textValue;
+    float textBoxWidth;
+    std::string imagePath;  // Optional: image path override
 };
 
-struct TextConfig {
-    std::map<std::string, TextLayerConfig> textLayers;
-    std::map<std::string, std::string> textValues;
-};
-
-TextConfig loadTextConfig(const std::string& configPath);
-std::string processTextLayers(
-    const std::string& animationJson,
-    const TextConfig& config
+std::map<std::string, LayerOverride> parseLayerOverrides(const std::string& configPath);
+std::map<std::string, std::string> parseImagePaths(const std::string& configPath);
+std::string processLayerOverrides(
+    std::string& animationJson,
+    const std::string& layerOverridesPath,
+    float textPadding = 0.97f,
+    TextMeasurementMode textMeasurementMode = TextMeasurementMode::ACCURATE
 );
 ```
 

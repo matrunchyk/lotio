@@ -1,4 +1,4 @@
-#include "text_config.h"
+#include "layer_overrides.h"
 #include "../utils/string_utils.h"
 #include "../utils/logging.h"
 #include <fstream>
@@ -27,8 +27,8 @@ float extractJsonFloat(const std::string& json, const std::string& key) {
     return 0.0f;
 }
 
-std::map<std::string, TextLayerConfig> parseTextConfig(const std::string& configPath) {
-    std::map<std::string, TextLayerConfig> configs;
+std::map<std::string, LayerOverride> parseLayerOverrides(const std::string& configPath) {
+    std::map<std::string, LayerOverride> configs;
     
     std::ifstream file(configPath);
     if (!file.is_open()) {
@@ -84,12 +84,13 @@ std::map<std::string, TextLayerConfig> parseTextConfig(const std::string& config
                     if (layerEnd > layerStart) {
                         std::string layerConfig = layersJson.substr(layerStart + 1, layerEnd - layerStart - 1);
                         
-                        TextLayerConfig config;
+                        LayerOverride config;
                         config.minSize = extractJsonFloat(layerConfig, "minSize");
                         config.maxSize = extractJsonFloat(layerConfig, "maxSize");
                         config.fallbackText = extractJsonString(layerConfig, "fallbackText");
                         config.textBoxWidth = extractJsonFloat(layerConfig, "textBoxWidth");  // Optional override
                         config.textValue = "";  // Will be set from textValues section if present
+                        config.imagePath = "";  // Will be set from imagePaths section if present
                         
                         configs[layerName] = config;
                     }
@@ -141,5 +142,56 @@ std::map<std::string, TextLayerConfig> parseTextConfig(const std::string& config
     }
     
     return configs;
+}
+
+std::map<std::string, std::string> parseImagePaths(const std::string& configPath) {
+    std::map<std::string, std::string> imagePaths;
+    
+    std::ifstream file(configPath);
+    if (!file.is_open()) {
+        return imagePaths;
+    }
+    
+    std::string json((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
+    
+    // Extract imagePaths section - find the start of the object
+    size_t imagePathsPos = json.find("\"imagePaths\"");
+    if (imagePathsPos != std::string::npos) {
+        // Find the opening brace after "imagePaths"
+        size_t openBrace = json.find('{', imagePathsPos);
+        if (openBrace != std::string::npos) {
+            // Find matching closing brace by counting braces
+            int braceCount = 0;
+            size_t closeBrace = openBrace;
+            for (size_t i = openBrace; i < json.length(); i++) {
+                if (json[i] == '{') braceCount++;
+                if (json[i] == '}') braceCount--;
+                if (braceCount == 0) {
+                    closeBrace = i;
+                    break;
+                }
+            }
+            
+            if (closeBrace > openBrace) {
+                std::string pathsJson = json.substr(openBrace + 1, closeBrace - openBrace - 1);
+                
+                // Find each image path - format: "asset_id": "path/to/image.png"
+                std::regex pathPattern("\"([^\"]+)\"\\s*:\\s*\"([^\"]+)\"");
+                std::sregex_iterator iter(pathsJson.begin(), pathsJson.end(), pathPattern);
+                std::sregex_iterator end;
+                
+                for (; iter != end; ++iter) {
+                    std::smatch match = *iter;
+                    std::string assetId = match[1].str();
+                    std::string imagePath = match[2].str();
+                    
+                    imagePaths[assetId] = imagePath;
+                }
+            }
+        }
+    }
+    
+    return imagePaths;
 }
 

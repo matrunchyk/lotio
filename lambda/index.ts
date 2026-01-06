@@ -12,7 +12,7 @@ const s3 = new S3Client({});
 interface LambdaEvent {
   jsonUrl: string; // HTTP or S3 URL to Lottie JSON file
   fps?: number; // Optional FPS (default: 30)
-  textConfigUrl?: string; // Optional HTTP or S3 URL to text configuration JSON file
+  layerOverridesUrl?: string; // Optional HTTP or S3 URL to layer overrides JSON file
   textMeasurementMode?: 'fast' | 'accurate' | 'pixel-perfect'; // Optional text measurement mode
   textPadding?: number; // Optional text padding factor (0.0-1.0, default: 0.97 = 3% padding)
   debug?: boolean; // Optional debug mode for verbose logging
@@ -306,14 +306,14 @@ export const handler = async (event: LambdaEvent): Promise<{
     const jsonOutputPath = path.join(tmpdir, 'animation.json');
     await fs.writeFile(jsonOutputPath, JSON.stringify(lottieJson));
     
-    // 9. Download text configuration file if provided
-    let textConfigPath: string | undefined;
-    if (event.textConfigUrl) {
-      const textConfigUrl = event.textConfigUrl; // Type narrowing
-      console.log(`[DOWNLOAD] Downloading text configuration from ${textConfigUrl}`);
-      textConfigPath = path.join(tmpdir, 'text-config.json');
-      await downloadFromUrl(textConfigUrl, textConfigPath);
-      console.log(`[DOWNLOAD] Text configuration downloaded to ${textConfigPath}`);
+    // 9. Download layer overrides file if provided
+    let layerOverridesPath: string | undefined;
+    if (event.layerOverridesUrl) {
+      const layerOverridesUrl = event.layerOverridesUrl; // Type narrowing
+      console.log(`[DOWNLOAD] Downloading layer overrides from ${layerOverridesUrl}`);
+      layerOverridesPath = path.join(tmpdir, 'layer-overrides.json');
+      await downloadFromUrl(layerOverridesUrl, layerOverridesPath);
+      console.log(`[DOWNLOAD] Layer overrides downloaded to ${layerOverridesPath}`);
     }
     
     // 10. Render frames and encode to MOV in one streaming pipeline
@@ -321,8 +321,8 @@ export const handler = async (event: LambdaEvent): Promise<{
     const outputMov = path.join(tmpdir, 'output.mov');
     
     console.log(`[RENDER] Rendering frames and encoding MOV (streaming mode): ${jsonOutputPath} -> ${outputMov} (${fps} fps)`);
-    if (textConfigPath) {
-      console.log(`[RENDER] Using text configuration: ${textConfigPath}`);
+    if (layerOverridesPath) {
+      console.log(`[RENDER] Using layer overrides: ${layerOverridesPath}`);
     }
     const renderStart = Date.now();
     
@@ -331,8 +331,8 @@ export const handler = async (event: LambdaEvent): Promise<{
     if (event.debug) {
       renderArgs.push('--debug');
     }
-    if (textConfigPath) {
-      renderArgs.push('--text-config', textConfigPath);
+    if (layerOverridesPath) {
+      renderArgs.push('--layer-overrides', layerOverridesPath);
     }
     if (event.textMeasurementMode) {
       renderArgs.push('--text-measurement-mode', event.textMeasurementMode);

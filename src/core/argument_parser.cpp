@@ -8,10 +8,10 @@
 #include <filesystem>
 
 void printUsage(const char* program_name) {
-    std::cerr << "Usage: " << program_name << " [--stream] [--debug] [--text-config <config.json>] [--text-padding <0.0-1.0>] [--text-measurement-mode <fast|accurate|pixel-perfect>] <input.json> <output_dir> [fps]" << std::endl;
+    std::cerr << "Usage: " << program_name << " [--stream] [--debug] [--layer-overrides <config.json>] [--text-padding <0.0-1.0>] [--text-measurement-mode <fast|accurate|pixel-perfect>] <input.json> <output_dir> [fps]" << std::endl;
     std::cerr << "  --stream:               Stream frames to stdout as PNG (for piping to ffmpeg)" << std::endl;
     std::cerr << "  --debug:                Enable debug output" << std::endl;
-    std::cerr << "  --text-config:          Path to text configuration JSON (for auto-fit and dynamic text values)" << std::endl;
+    std::cerr << "  --layer-overrides:      Path to layer overrides JSON (for text auto-fit, dynamic text values, and image path overrides)" << std::endl;
     std::cerr << "  --text-padding:         Text padding factor (0.0-1.0, default: 0.97 = 3% padding)" << std::endl;
     std::cerr << "  --text-measurement-mode: Text measurement mode (fast|accurate|pixel-perfect, default: accurate)" << std::endl;
     std::cerr << "                          fast: Fastest, basic accuracy" << std::endl;
@@ -36,11 +36,11 @@ int parseArguments(int argc, char* argv[], Arguments& args) {
             args.stream_mode = true;
         } else if (arg == "--debug") {
             args.debug_mode = true;
-        } else if (arg == "--text-config") {
+        } else if (arg == "--layer-overrides") {
             if (i + 1 < argc) {
-                args.text_config_file = argv[++i];
+                args.layer_overrides_file = argv[++i];
             } else {
-                std::cerr << "Error: --text-config requires a file path" << std::endl;
+                std::cerr << "Error: --layer-overrides requires a file path" << std::endl;
                 return 1;
             }
         } else if (arg == "--text-padding") {

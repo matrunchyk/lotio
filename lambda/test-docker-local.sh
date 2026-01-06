@@ -42,8 +42,8 @@ if [ ! -f "$SAMPLE_DIR/data.json" ]; then
     exit 1
 fi
 
-if [ ! -f "$SAMPLE_DIR/text-config.json" ]; then
-    echo -e "${RED}Error: $SAMPLE_DIR/text-config.json not found${NC}"
+if [ ! -f "$SAMPLE_DIR/layer-overrides.json" ]; then
+    echo -e "${RED}Error: $SAMPLE_DIR/layer-overrides.json not found${NC}"
     exit 1
 fi
 
@@ -75,7 +75,7 @@ fi
 
 echo -e "${GREEN}✓ HTTP server started on port $PORT${NC}"
 echo "  Data JSON: http://localhost:$PORT/data.json"
-echo "  Text Config: http://localhost:$PORT/text-config.json"
+echo "  Layer Overrides: http://localhost:$PORT/layer-overrides.json"
 echo ""
 
 # Cleanup function
@@ -111,7 +111,7 @@ TEST_EVENT=$(cat <<EOF
 {
   "jsonUrl": "http://host.docker.internal:$PORT/data.json",
   "fps": 30,
-  "textConfigUrl": "http://host.docker.internal:$PORT/text-config.json",
+  "layerOverridesUrl": "http://host.docker.internal:$PORT/layer-overrides.json",
   "textMeasurementMode": "accurate",
   "debug": true,
   "outputS3Bucket": "test-bucket",

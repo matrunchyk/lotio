@@ -17,13 +17,13 @@ struct AnimationSetupResult {
 };
 
 // Setup Skottie animation builder and create animation
-// Reads JSON file, applies text processing, and creates animation
+// Reads JSON file, applies layer overrides (text and image), and creates animation
 // Returns result with animation, builder, and processed JSON on success
 // textPadding: padding factor (0.0-1.0), default 0.97 means 97% of target width (3% padding)
 // textMeasurementMode: measurement accuracy mode (default: ACCURATE for good balance)
 AnimationSetupResult setupAndCreateAnimation(
     const std::string& input_file,
-    const std::string& text_config_file,
+    const std::string& layer_overrides_file,
     float textPadding = 0.97f,
     TextMeasurementMode textMeasurementMode = TextMeasurementMode::ACCURATE
 );

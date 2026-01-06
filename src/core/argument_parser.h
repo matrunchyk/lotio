@@ -11,7 +11,7 @@ struct Arguments {
     bool show_version = false;  // --version flag
     std::string input_file;
     std::string output_dir;
-    std::string text_config_file;
+    std::string layer_overrides_file;
     float fps = 25.0f;
     float text_padding = 0.97f;  // Text padding factor (0.0-1.0), default 0.97 (3% padding)
     TextMeasurementMode text_measurement_mode = TextMeasurementMode::ACCURATE;  // Text measurement mode

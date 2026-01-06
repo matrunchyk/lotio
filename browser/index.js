@@ -71,7 +71,7 @@ export class Lotio extends EventEmitter {
      * @param {Array<{name: string, data: Uint8Array}>} options.fonts - Font files to load
      * @param {number} options.fps - Frames per second (default: 30)
      * @param {Object|string} options.animation - Lottie animation JSON (object or string)
-     * @param {Object|string} options.textConfig - Text configuration JSON (object or string)
+     * @param {Object|string} options.layerOverrides - Layer overrides JSON (object or string) for text and image overrides
      * @param {number} options.textPadding - Text padding factor (0.0-1.0, default: 0.97)
      * @param {string} options.textMeasurementMode - Text measurement mode: 'fast'|'accurate'|'pixel-perfect' (default: 'accurate')
      * @param {string} options.wasmPath - Path to lotio.wasm file (default: './lotio.wasm')
@@ -83,7 +83,7 @@ export class Lotio extends EventEmitter {
         this._fonts = options.fonts || [];
         this._fps = options.fps || 30;
         this._animation = options.animation || null;
-        this._textConfig = options.textConfig || null;
+        this._layerOverrides = options.layerOverrides || null;
         this._textPadding = options.textPadding !== undefined ? options.textPadding : 0.97;
         this._textMeasurementMode = options.textMeasurementMode || 'accurate';
         this._state = State.STOPPED;
@@ -167,15 +167,15 @@ export class Lotio extends EventEmitter {
                 ? this._animation 
                 : JSON.stringify(this._animation);
             
-            const textConfigJson = this._textConfig 
-                ? (typeof this._textConfig === 'string' 
-                    ? this._textConfig 
-                    : JSON.stringify(this._textConfig))
+            const layerOverridesJson = this._layerOverrides 
+                ? (typeof this._layerOverrides === 'string' 
+                    ? this._layerOverrides 
+                    : JSON.stringify(this._layerOverrides))
                 : null;
 
             this._animationInfo = createAnimation(
                 JSON.parse(animationJson),
-                textConfigJson ? JSON.parse(textConfigJson) : null,
+                layerOverridesJson ? JSON.parse(layerOverridesJson) : null,
                 this._textPadding,
                 this._textMeasurementMode
             );
@@ -243,8 +243,8 @@ export class Lotio extends EventEmitter {
         return this._animation;
     }
 
-    getTextConfig() {
-        return this._textConfig;
+    getLayerOverrides() {
+        return this._layerOverrides;
     }
 
     getTextPadding() {
@@ -310,8 +310,8 @@ export class Lotio extends EventEmitter {
         return this;
     }
 
-    async setTextConfig(textConfig) {
-        this._textConfig = textConfig;
+    async setLayerOverrides(layerOverrides) {
+        this._layerOverrides = layerOverrides;
         
         if (this._animation) {
             await this._loadAnimation();

@@ -28,7 +28,7 @@
   - `renderer.cpp` - Multi-threaded frame rendering
 
 - **`src/text/`** - Text processing
-  - `text_config.cpp` - Text configuration parsing
+  - `layer_overrides.cpp` - Layer overrides parsing (text and image)
   - `text_processor.cpp` - Text layer modification
   - `font_utils.cpp` - Font utilities
   - `text_sizing.cpp` - Optimal font sizing

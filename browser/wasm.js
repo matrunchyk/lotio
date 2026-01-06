@@ -100,7 +100,7 @@ export async function initLotio(wasmPath = './lotio.wasm') {
     });
 }
 
-export function createAnimation(jsonData, textConfig = null, textPadding = 0.97, textMeasurementMode = 'accurate') {
+export function createAnimation(jsonData, layerOverrides = null, textPadding = 0.97, textMeasurementMode = 'accurate') {
     if (!Module) {
         throw new Error('WASM module not initialized. Call initLotio() first.');
     }
@@ -159,7 +159,7 @@ export function createAnimation(jsonData, textConfig = null, textPadding = 0.97,
     }
     
     const jsonStr = typeof jsonData === 'string' ? jsonData : JSON.stringify(jsonData);
-    const textConfigStr = textConfig ? (typeof textConfig === 'string' ? textConfig : JSON.stringify(textConfig)) : null;
+    const layerOverridesStr = layerOverrides ? (typeof layerOverrides === 'string' ? layerOverrides : JSON.stringify(layerOverrides)) : null;
     
     // Convert textMeasurementMode string to integer (0=FAST, 1=ACCURATE, 2=PIXEL_PERFECT)
     const modeStr = String(textMeasurementMode).toLowerCase();
@@ -179,23 +179,23 @@ export function createAnimation(jsonData, textConfig = null, textPadding = 0.97,
     }
     Module.stringToUTF8(jsonStr, jsonPtr, jsonStr.length + 1);
     
-    let textConfigPtr = 0;
-    let textConfigLen = 0;
-    if (textConfigStr) {
-        textConfigPtr = Module._malloc(textConfigStr.length + 1);
-        if (!textConfigPtr) {
+    let layerOverridesPtr = 0;
+    let layerOverridesLen = 0;
+    if (layerOverridesStr) {
+        layerOverridesPtr = Module._malloc(layerOverridesStr.length + 1);
+        if (!layerOverridesPtr) {
             Module._free(jsonPtr);
-            throw new Error('Failed to allocate memory for text config');
+            throw new Error('Failed to allocate memory for layer overrides');
         }
-        textConfigLen = textConfigStr.length;
-        Module.stringToUTF8(textConfigStr, textConfigPtr, textConfigStr.length + 1);
+        layerOverridesLen = layerOverridesStr.length;
+        Module.stringToUTF8(layerOverridesStr, layerOverridesPtr, layerOverridesStr.length + 1);
     }
     
-    const result = Module._lotio_init(jsonPtr, jsonStr.length, textConfigPtr, textConfigLen, textPadding, modeInt);
+    const result = Module._lotio_init(jsonPtr, jsonStr.length, layerOverridesPtr, layerOverridesLen, textPadding, modeInt);
     
     Module._free(jsonPtr);
-    if (textConfigPtr) {
-        Module._free(textConfigPtr);
+    if (layerOverridesPtr) {
+        Module._free(layerOverridesPtr);
     }
     
     if (result !== 0) {

@@ -53,12 +53,12 @@ while [[ $# -gt 0 ]]; do
             echo "  --text-measurement-mode, -m MODE  Text measurement mode: fast|accurate|pixel-perfect (default: accurate)"
             echo ""
             echo "lotio usage:"
-            lotio --help 2>&1 || echo "  lotio [--stream] [--debug] [--text-config <config.json>] [--text-padding <0.0-1.0>] [--text-measurement-mode <fast|accurate|pixel-perfect>] <input.json> <output_dir> [fps]"
+            lotio --help 2>&1 || echo "  lotio [--stream] [--debug] [--layer-overrides <config.json>] [--text-padding <0.0-1.0>] [--text-measurement-mode <fast|accurate|pixel-perfect>] <input.json> <output_dir> [fps]"
             echo ""
             echo "Note: --stream is automatically added if not present (required for video encoding)"
             echo ""
             echo "Example:"
-            echo "  $0 --text-config config.json input.json - 30 --output output.mov"
+            echo "  $0 --layer-overrides config.json input.json - 30 --output output.mov"
             echo "  $0 --stream --debug input.json - 25 --output output.mov"
             exit 0
             ;;
@@ -83,7 +83,7 @@ for i in "${!LOTIO_ARGS[@]}"; do
         if [ $i -gt 0 ]; then
             prev_arg="${LOTIO_ARGS[$((i - 1))]}"
             # If previous arg is a flag that takes a value, this isn't fps
-            if [[ "$prev_arg" == "--text-config" ]] || \
+            if [[ "$prev_arg" == "--layer-overrides" ]] || \
                [[ "$prev_arg" == "--text-padding" ]] || \
                [[ "$prev_arg" == "-p" ]] || \
                [[ "$prev_arg" == "--text-measurement-mode" ]] || \

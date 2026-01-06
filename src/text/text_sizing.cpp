@@ -6,7 +6,7 @@
 float calculateOptimalFontSize(
     SkFontMgr* fontMgr,
     const FontInfo& fontInfo,
-    const TextLayerConfig& config,
+    const LayerOverride& config,
     const std::string& text,
     float targetWidth,
     TextMeasurementMode mode

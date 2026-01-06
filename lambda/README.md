@@ -36,7 +36,7 @@ This Lambda function:
 {
   "jsonUrl": "https://example.com/animation.json",
   "fps": 30,
-  "textConfigUrl": "https://example.com/text-config.json",
+  "layerOverridesUrl": "https://example.com/layer-overrides.json",
   "outputS3Bucket": "my-bucket",
   "outputS3Key": "renders/video.mov"
 }
@@ -46,7 +46,7 @@ This Lambda function:
 
 - **jsonUrl** (required): HTTP or S3 URL to the Lottie animation JSON file
 - **fps** (optional): Frame rate for the output video (default: 30)
-- **textConfigUrl** (optional): HTTP or S3 URL to text configuration JSON file for dynamic text values and auto-fit. See [TEXT_CONFIGURATION.md](../TEXT_CONFIGURATION.md) for format details.
+- **layerOverridesUrl** (optional): HTTP or S3 URL to layer overrides JSON file for text and image customization. See the [CLI documentation](../docs/cli.html) for format details.
 - **outputS3Bucket** (required): S3 bucket for the output MOV file
 - **outputS3Key** (required): S3 key for the output MOV file
 
@@ -86,15 +86,15 @@ The Lambda function uses a streaming pipeline to render frames and encode video 
 - ffmpeg encodes the streamed frames to ProRes 4444 MOV
 - This approach minimizes disk I/O, reduces disk space usage, and improves performance in the Lambda environment
 
-## Text Configuration
+## Layer Overrides
 
-The Lambda function supports text configuration files for dynamic text replacement and auto-fitting. When `textConfigUrl` is provided in the event:
+The Lambda function supports layer overrides files for text and image customization. When `layerOverridesUrl` is provided in the event:
 
-1. The text configuration file is downloaded from the provided URL (HTTP or S3)
-2. It's passed to `lotio` with the `--text-config` parameter
-3. Text layers are dynamically updated and auto-fitted according to the configuration
+1. The layer overrides file is downloaded from the provided URL (HTTP or S3)
+2. It's passed to `lotio` with the `--layer-overrides` parameter
+3. Text layers are dynamically updated and auto-fitted, and image paths are overridden according to the configuration
 
-See [TEXT_CONFIGURATION.md](../TEXT_CONFIGURATION.md) for complete documentation on the text configuration format.
+See the [CLI documentation](../docs/cli.html) for complete documentation on the layer overrides format.
 
 ## Files
 

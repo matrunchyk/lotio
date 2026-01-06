@@ -334,15 +334,15 @@ animation.start();</pre></code>
                 // Convert images to data URIs
                 const processedAnim = await convertImagesToDataURIs(animData, sampleName);
                 
-                // Load text config if available
-                let textConfig = null;
+                // Load layer overrides if available
+                let layerOverrides = null;
                 try {
-                    const textConfigResponse = await fetch(`./samples/${sampleName}/text-config.json`);
-                    if (textConfigResponse.ok) {
-                        textConfig = await textConfigResponse.json();
+                    const layerOverridesResponse = await fetch(`./samples/${sampleName}/layer-overrides.json`);
+                    if (layerOverridesResponse.ok) {
+                        layerOverrides = await layerOverridesResponse.json();
                     }
                 } catch (e) {
-                    // Text config is optional
+                    // Layer overrides are optional
                 }
                 
                 // Create animation
@@ -350,7 +350,7 @@ animation.start();</pre></code>
                     fonts: [{ name: 'OpenSans-Bold', data: fontData }],
                     fps: parseFloat(fpsSlider.value),
                     animation: processedAnim,
-                    textConfig: textConfig,
+                    layerOverrides: layerOverrides,
                     type: FrameType.PNG,
                     wasmPath: './browser/lotio.wasm'
                 });

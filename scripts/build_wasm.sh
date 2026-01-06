@@ -180,7 +180,7 @@ SOURCES=(
     "$SRC_DIR/core/frame_encoder.cpp"
     "$SRC_DIR/utils/logging.cpp"
     "$SRC_DIR/utils/string_utils.cpp"
-    "$SRC_DIR/text/text_config.cpp"
+    "$SRC_DIR/text/layer_overrides.cpp"
     "$SRC_DIR/text/json_manipulation.cpp"
     "$SRC_DIR/text/font_utils.cpp"
     "$SRC_DIR/text/text_sizing.cpp"

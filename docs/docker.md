@@ -15,7 +15,7 @@ docker pull matrunchyk/lotio-ffmpeg:latest
 docker run --rm \
   -v "$(pwd):/workspace" \
   matrunchyk/lotio-ffmpeg:latest \
-  data.json - 30 --text-config text-config.json --output video.mov
+  data.json - 30 --layer-overrides layer-overrides.json --output video.mov
 ```
 
 ### With lotio Binary Only
@@ -124,7 +124,7 @@ Using `lotio-ffmpeg` image with automatic video encoding:
 docker run --rm \
   -v "$(pwd):/workspace" \
   matrunchyk/lotio-ffmpeg:latest \
-  data.json - 30 --text-config text-config.json --output video.mov
+  data.json - 30 --layer-overrides layer-overrides.json --output video.mov
 ```
 
 The entrypoint script automatically:
@@ -179,7 +179,7 @@ All standard lotio arguments are supported:
 
 - `--stream` - Stream frames to stdout as PNG (automatically added if missing for video encoding)
 - `--debug` - Enable debug output
-- `--text-config <file>` - Path to text configuration JSON
+- `--layer-overrides <file>` - Path to layer overrides JSON
 - `--text-padding <0.0-1.0>` - Text padding factor (default: 0.97 = 3% padding)
 - `--text-measurement-mode <fast|accurate|pixel-perfect>` - Text measurement mode (default: accurate)
 - `--version` - Print version information and exit
@@ -219,13 +219,13 @@ docker run --rm \
   data.json - 30 --output video.mov
 ```
 
-### With Text Configuration
+### With Layer Overrides
 
 ```bash
 docker run --rm \
   -v "$(pwd):/workspace" \
   matrunchyk/lotio-ffmpeg:latest \
-  --text-config text-config.json \
+  --layer-overrides layer-overrides.json \
   data.json - 30 \
   --output video.mov
 ```
@@ -236,7 +236,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd):/workspace" \
   matrunchyk/lotio-ffmpeg:latest \
-  --text-config text-config.json \
+  --layer-overrides layer-overrides.json \
   --text-padding 0.95 \
   --text-measurement-mode pixel-perfect \
   data.json - 30 \
@@ -313,21 +313,21 @@ Mount a directory for output:
 
 The output video will be written to the path specified by `--output`.
 
-## Text Configuration
+## Layer Overrides
 
-Text configuration works the same as the CLI. Mount your text config file and reference it:
+Layer overrides work the same as the CLI. Mount your layer overrides file and reference it:
 
 ```bash
 docker run --rm \
   -v "$(pwd)/samples:/workspace/input:ro" \
   -v "$(pwd):/workspace/output" \
   matrunchyk/lotio:latest \
-  --text-config /workspace/input/text-config.json \
+  --layer-overrides /workspace/input/layer-overrides.json \
   /workspace/input/data.json - 30 \
   --output /workspace/output/video.mov
 ```
 
-Example `text-config.json`:
+Example `layer-overrides.json`:
 
 ```json
 {
@@ -381,9 +381,9 @@ Check that:
 ### Text Not Replacing
 
 Verify:
-- Text configuration file is mounted and accessible
-- Layer names in `text-config.json` match layer names in Lottie JSON
-- Text config file is valid JSON
+- Layer overrides file is mounted and accessible
+- Layer names in `layer-overrides.json` match layer names in Lottie JSON
+- Layer overrides file is valid JSON
 
 ### Font Issues
 

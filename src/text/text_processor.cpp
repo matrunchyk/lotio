@@ -1,5 +1,5 @@
 #include "text_processor.h"
-#include "text_config.h"
+#include "layer_overrides.h"
 #include "font_utils.h"
 #include "text_sizing.h"
 #include "json_manipulation.h"
@@ -12,26 +12,121 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
-std::string processTextConfiguration(
+std::string processLayerOverrides(
     std::string& json_data,
-    const std::string& text_config_file,
+    const std::string& layer_overrides_file,
     float textPadding,
     TextMeasurementMode textMeasurementMode
 ) {
-    if (text_config_file.empty()) {
+    if (layer_overrides_file.empty()) {
         return json_data;  // No processing needed
     }
     
-    LOG_DEBUG("Loading text configuration from: " << text_config_file);
-    auto textConfigs = parseTextConfig(text_config_file);
+    LOG_DEBUG("Loading layer overrides from: " << layer_overrides_file);
+    auto layerOverrides = parseLayerOverrides(layer_overrides_file);
+    auto imagePaths = parseImagePaths(layer_overrides_file);
     
-    if (textConfigs.empty()) {
-        LOG_DEBUG("No text layer configuration(s) found in config file");
+    // Process image path overrides first (before text processing)
+    if (!imagePaths.empty()) {
+        LOG_DEBUG("Found " << imagePaths.size() << " image path overrides");
+        
+        // Find assets array in JSON
+        size_t assetsPos = json_data.find("\"assets\"");
+        if (assetsPos != std::string::npos) {
+            size_t arrayStart = json_data.find('[', assetsPos);
+            if (arrayStart != std::string::npos) {
+                // Find the end of the assets array
+                int bracketCount = 0;
+                size_t arrayEnd = arrayStart;
+                for (size_t i = arrayStart; i < json_data.length(); i++) {
+                    if (json_data[i] == '[') bracketCount++;
+                    if (json_data[i] == ']') bracketCount--;
+                    if (bracketCount == 0) {
+                        arrayEnd = i;
+                        break;
+                    }
+                }
+                
+                if (arrayEnd > arrayStart) {
+                    std::string assetsJson = json_data.substr(arrayStart, arrayEnd - arrayStart + 1);
+                    std::string modifiedAssets = assetsJson;
+                    
+                    // Process each asset
+                    for (const auto& [assetId, imagePath] : imagePaths) {
+                        LOG_DEBUG("Processing image override for asset ID: " << assetId << " -> " << imagePath);
+                        
+                        // Find asset by ID
+                        std::string idPattern = "\"id\"\\s*:\\s*\"" + assetId + "\"";
+                        std::regex idRegex(idPattern);
+                        std::smatch idMatch;
+                        
+                        if (std::regex_search(modifiedAssets, idMatch, idRegex)) {
+                            size_t assetStart = idMatch.position(0);
+                            // Find the asset object boundaries
+                            size_t objStart = modifiedAssets.rfind('{', assetStart);
+                            if (objStart != std::string::npos) {
+                                int objBraceCount = 0;
+                                size_t objEnd = objStart;
+                                for (size_t i = objStart; i < modifiedAssets.length(); i++) {
+                                    if (modifiedAssets[i] == '{') objBraceCount++;
+                                    if (modifiedAssets[i] == '}') objBraceCount--;
+                                    if (objBraceCount == 0) {
+                                        objEnd = i;
+                                        break;
+                                    }
+                                }
+                                
+                                if (objEnd > objStart) {
+                                    std::string assetObj = modifiedAssets.substr(objStart, objEnd - objStart + 1);
+                                    
+                                    // Split image path into u (directory) and p (filename)
+                                    std::filesystem::path pathObj(imagePath);
+                                    std::string dir = pathObj.parent_path().string();
+                                    std::string filename = pathObj.filename().string();
+                                    
+                                    // Normalize directory path (ensure it ends with / for relative paths)
+                                    if (!dir.empty() && dir.back() != '/' && dir.back() != '\\') {
+                                        dir += "/";
+                                    }
+                                    if (dir == "/" || dir == "\\") {
+                                        dir = "";  // Root path means empty directory
+                                    }
+                                    
+                                    // Update u and p properties
+                                    std::regex uPattern("\"u\"\\s*:\\s*\"[^\"]*\"");
+                                    std::regex pPattern("\"p\"\\s*:\\s*\"[^\"]*\"");
+                                    
+                                    std::string newU = "\"u\":\"" + dir + "\"";
+                                    std::string newP = "\"p\":\"" + filename + "\"";
+                                    
+                                    assetObj = std::regex_replace(assetObj, uPattern, newU);
+                                    assetObj = std::regex_replace(assetObj, pPattern, newP);
+                                    
+                                    // Replace the asset object in modifiedAssets
+                                    modifiedAssets.replace(objStart, objEnd - objStart + 1, assetObj);
+                                    LOG_DEBUG("Updated asset " << assetId << ": u=\"" << dir << "\", p=\"" << filename << "\"");
+                                }
+                            }
+                        } else {
+                            LOG_DEBUG("Warning: Asset ID " << assetId << " not found in assets array");
+                        }
+                    }
+                    
+                    // Replace assets array in json_data
+                    json_data.replace(arrayStart, arrayEnd - arrayStart + 1, modifiedAssets);
+                }
+            }
+        }
+    }
+    
+    if (layerOverrides.empty()) {
+        LOG_DEBUG("No text layer overrides found in config file");
         return json_data;
     }
     
-    LOG_DEBUG("Found " << textConfigs.size() << " text layer configurations");
+    LOG_DEBUG("Found " << layerOverrides.size() << " text layer overrides");
     
     // Extract animation width from JSON (for fallback text box width)
     float animationWidth = 720.0f;  // Default fallback
@@ -68,7 +163,7 @@ std::string processTextConfiguration(
     };
     std::vector<LayerModification> modifications;
     
-    for (const auto& [layerName, config] : textConfigs) {
+    for (const auto& [layerName, config] : layerOverrides) {
         LOG_DEBUG("Processing text layer: " << layerName);
         
         // Extract font info from JSON

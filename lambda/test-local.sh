@@ -1,14 +1,14 @@
 #!/bin/bash
 set -euo pipefail
 
-# Usage: ./test-local.sh <function-name> <region> <s3-bucket> <local-json-file> [text-config-file]
+# Usage: ./test-local.sh <function-name> <region> <s3-bucket> <local-json-file> [layer-overrides-file]
 # Example: ./test-local.sh lotio-lambda us-east-1 my-bucket ../shots/Your_Results_Positive_2.1/data.json
-# Example with text config: ./test-local.sh lotio-lambda us-east-1 my-bucket ../shots/Your_Results_Positive_2.1/data.json ../shots/Your_Results_Positive_2.1/text-config.json
+# Example with layer overrides: ./test-local.sh lotio-lambda us-east-1 my-bucket ../shots/Your_Results_Positive_2.1/data.json ../shots/Your_Results_Positive_2.1/layer-overrides.json
 
 if [ $# -lt 4 ]; then
-  echo "Usage: $0 <function-name> <region> <s3-bucket> <local-json-file> [text-config-file]"
+  echo "Usage: $0 <function-name> <region> <s3-bucket> <local-json-file> [layer-overrides-file]"
   echo "Example: $0 lotio-lambda us-east-1 my-bucket ../shots/Your_Results_Positive_2.1/data.json"
-  echo "Example with text config: $0 lotio-lambda us-east-1 my-bucket ../shots/Your_Results_Positive_2.1/data.json ../shots/Your_Results_Positive_2.1/text-config.json"
+  echo "Example with layer overrides: $0 lotio-lambda us-east-1 my-bucket ../shots/Your_Results_Positive_2.1/data.json ../shots/Your_Results_Positive_2.1/layer-overrides.json"
   exit 1
 fi
 
@@ -16,7 +16,7 @@ FUNCTION_NAME=$1
 REGION=$2
 S3_BUCKET=$3
 LOCAL_JSON=$4
-TEXT_CONFIG_FILE=${5:-}
+LAYER_OVERRIDES_FILE=${5:-}
 
 # Generate a unique S3 key for the input JSON
 TIMESTAMP=$(date +%s)
@@ -35,34 +35,34 @@ JSON_HTTP_URL="https://${S3_BUCKET}.s3.${REGION}.amazonaws.com/${JSON_KEY}"
 echo "JSON uploaded to: $JSON_S3_URL"
 echo "JSON HTTP URL: $JSON_HTTP_URL"
 
-# Upload text config file if provided
-TEXT_CONFIG_S3_URL=""
-if [ -n "$TEXT_CONFIG_FILE" ]; then
+# Upload layer overrides file if provided
+LAYER_OVERRIDES_S3_URL=""
+if [ -n "$LAYER_OVERRIDES_FILE" ]; then
   echo ""
-  echo "=== Uploading text configuration to S3 ==="
-  TEXT_CONFIG_KEY="inputs/test-${TIMESTAMP}-text-config.json"
-  aws s3 cp "$TEXT_CONFIG_FILE" "s3://${S3_BUCKET}/${TEXT_CONFIG_KEY}" --region $REGION --profile 917630709045_AdministratorAccess
-  TEXT_CONFIG_S3_URL="s3://${S3_BUCKET}/${TEXT_CONFIG_KEY}"
-  echo "Text config uploaded to: $TEXT_CONFIG_S3_URL"
+  echo "=== Uploading layer overrides to S3 ==="
+  LAYER_OVERRIDES_KEY="inputs/test-${TIMESTAMP}-layer-overrides.json"
+  aws s3 cp "$LAYER_OVERRIDES_FILE" "s3://${S3_BUCKET}/${LAYER_OVERRIDES_KEY}" --region $REGION --profile 917630709045_AdministratorAccess
+  LAYER_OVERRIDES_S3_URL="s3://${S3_BUCKET}/${LAYER_OVERRIDES_KEY}"
+  echo "Layer overrides uploaded to: $LAYER_OVERRIDES_S3_URL"
 fi
 echo ""
 
 echo "=== Invoking Lambda function ==="
 echo "Function: $FUNCTION_NAME"
 echo "JSON S3 URI: $JSON_S3_URL"
-if [ -n "$TEXT_CONFIG_S3_URL" ]; then
-  echo "Text Config S3 URI: $TEXT_CONFIG_S3_URL"
+if [ -n "$LAYER_OVERRIDES_S3_URL" ]; then
+  echo "Layer Overrides S3 URI: $LAYER_OVERRIDES_S3_URL"
 fi
 echo "Output: s3://$S3_BUCKET/$OUTPUT_KEY"
 echo ""
 
 # Use S3 URI instead of HTTP URL to avoid public access issues
-if [ -n "$TEXT_CONFIG_S3_URL" ]; then
+if [ -n "$LAYER_OVERRIDES_S3_URL" ]; then
   PAYLOAD=$(cat <<EOF
 {
   "jsonUrl": "$JSON_S3_URL",
   "fps": 30,
-  "textConfigUrl": "$TEXT_CONFIG_S3_URL",
+  "layerOverridesUrl": "$LAYER_OVERRIDES_S3_URL",
   "outputS3Bucket": "$S3_BUCKET",
   "outputS3Key": "$OUTPUT_KEY"
 }
