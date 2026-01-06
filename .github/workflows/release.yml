@@ -299,7 +299,6 @@ jobs:
             type=registry,ref=matrunchyk/lotio:latest
             type=gha
           cache-to: |
-            type=registry,ref=matrunchyk/lotio:latest
             type=gha,mode=max
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
@@ -322,7 +321,6 @@ jobs:
             type=registry,ref=matrunchyk/lotio-ffmpeg:latest
             type=gha
           cache-to: |
-            type=registry,ref=matrunchyk/lotio-ffmpeg:latest
             type=gha,mode=max
           build-args: |
             LOTIO_IMAGE=matrunchyk/lotio:${{ steps.version.outputs.VERSION }}

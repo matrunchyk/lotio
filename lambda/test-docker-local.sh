@@ -18,15 +18,22 @@ NC='\033[0m' # No Color
 echo -e "${GREEN}=== Lambda Docker Test Script ===${NC}"
 echo ""
 
-# Check if image exists
-if ! docker image inspect lotio-lambda:test >/dev/null 2>&1; then
-    echo -e "${RED}Error: Docker image 'lotio-lambda:test' not found${NC}"
-    echo "Please build it first with:"
-    echo "  DOCKER_BUILDKIT=0 docker build --build-arg LOTIO_FFMPEG_IMAGE=matrunchyk/lotio-ffmpeg:test -f lambda/Dockerfile -t lotio-lambda:test ."
-    exit 1
+# Determine which image to use (default to :local, fallback to :test)
+IMAGE_NAME="${LAMBDA_IMAGE:-lotio-lambda:local}"
+if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+    # Try fallback to :test
+    if docker image inspect lotio-lambda:test >/dev/null 2>&1; then
+        IMAGE_NAME="lotio-lambda:test"
+        echo -e "${YELLOW}Using fallback image: $IMAGE_NAME${NC}"
+    else
+        echo -e "${RED}Error: Docker image '$IMAGE_NAME' or 'lotio-lambda:test' not found${NC}"
+        echo "Please build it first with:"
+        echo "  docker buildx build --platform linux/arm64,linux/amd64 -t lotio-lambda:local -f lambda/Dockerfile --build-arg LOTIO_FFMPEG_IMAGE=matrunchyk/lotio-ffmpeg:test --load ."
+        exit 1
+    fi
 fi
 
-echo -e "${GREEN}✓ Docker image found${NC}"
+echo -e "${GREEN}✓ Docker image found: $IMAGE_NAME${NC}"
 echo ""
 
 # Check if sample files exist
@@ -171,7 +178,7 @@ docker run --rm \
     "${DOCKER_ENV_ARGS[@]}" \
     -e LOCALSTACK_ENDPOINT="${LOCALSTACK_ENDPOINT:-}" \
     --entrypoint node \
-    lotio-lambda:test \
+    "$IMAGE_NAME" \
     -e "
 const { handler } = require('/var/task/index.js');
 const fs = require('fs');

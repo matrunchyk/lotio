@@ -90,8 +90,18 @@ COPY --from=ffmpeg-builder /opt/ffmpeg /opt/ffmpeg
 
 # Copy ICU libraries from lotio-ffmpeg image (Ubuntu 22.04 has ICU 70, AL2023 has different version)
 # lotio binary was built against ICU 70, so we need to use the same version
+# BuildKit automatically provides TARGETARCH for multi-arch builds
+ARG TARGETARCH
 RUN mkdir -p /opt/icu/lib
-COPY --from=lotio-ffmpeg-source /usr/lib/aarch64-linux-gnu/libicu*.so* /opt/icu/lib/
+
+# Copy ICU libraries using BuildKit mount feature for architecture-specific paths
+# This allows us to conditionally copy based on TARGETARCH
+RUN --mount=type=bind,from=lotio-ffmpeg-source,source=/usr/lib,target=/mnt/source-lib \
+    if [ "$TARGETARCH" = "arm64" ]; then \
+        cp -f /mnt/source-lib/aarch64-linux-gnu/libicu*.so* /opt/icu/lib/ 2>/dev/null || true; \
+    elif [ "$TARGETARCH" = "amd64" ]; then \
+        cp -f /mnt/source-lib/x86_64-linux-gnu/libicu*.so* /opt/icu/lib/ 2>/dev/null || true; \
+    fi
 
 # Set environment variables
 ENV PATH="/opt/ffmpeg/bin:/opt/bin:${PATH}"
