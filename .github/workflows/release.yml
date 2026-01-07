@@ -343,21 +343,32 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
+      - name: Set Dockerfile name
+        id: dockerfile
+        run: |
+          if [ "${{ matrix.variant }}" = "lotio" ]; then
+            echo "FILENAME=Dockerfile.lotio-ffmpeg" >> $GITHUB_OUTPUT
+            echo "IMAGE_NAME=lotio-ffmpeg" >> $GITHUB_OUTPUT
+          else
+            echo "FILENAME=Dockerfile.lotio-ffmpeg-al2023" >> $GITHUB_OUTPUT
+            echo "IMAGE_NAME=lotio-ffmpeg-al2023" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and push ${{ matrix.variant }}-ffmpeg image (multi-platform)
         uses: docker/build-push-action@v5
         id: build-ffmpeg
         with:
           context: .
-          file: ./Dockerfile.${{ matrix.variant }}-ffmpeg
+          file: ./${{ steps.dockerfile.outputs.FILENAME }}
           platforms: linux/arm64,linux/amd64
           push: true
           provenance: false
           sbom: false
           tags: |
-            matrunchyk/${{ matrix.variant }}-ffmpeg:${{ steps.version.outputs.VERSION }}
-            matrunchyk/${{ matrix.variant }}-ffmpeg:latest
+            matrunchyk/${{ steps.dockerfile.outputs.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
+            matrunchyk/${{ steps.dockerfile.outputs.IMAGE_NAME }}:latest
           cache-from: |
-            type=registry,ref=matrunchyk/${{ matrix.variant }}-ffmpeg:latest
+            type=registry,ref=matrunchyk/${{ steps.dockerfile.outputs.IMAGE_NAME }}:latest
             type=gha
           cache-to: |
             type=gha,mode=max
@@ -368,7 +379,7 @@ jobs:
       - name: Verify multi-platform manifest
         if: steps.build-ffmpeg.outcome == 'success'
         run: |
-          docker buildx imagetools inspect matrunchyk/${{ matrix.variant }}-ffmpeg:latest
+          docker buildx imagetools inspect matrunchyk/${{ steps.dockerfile.outputs.IMAGE_NAME }}:latest
 
   build-linux:
     name: Build Linux
