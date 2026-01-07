@@ -254,10 +254,13 @@ jobs:
             ${{ steps.bottle.outputs.FILENAME }}
           retention-days: 30
 
-  build-docker:
-    name: Build Docker
+  build-docker-base:
+    name: Build Docker Base Images
     runs-on: ubuntu-latest
     needs: version-and-tag
+    strategy:
+      matrix:
+        variant: [lotio, lotio-al2023]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -282,21 +285,21 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - name: Build and push lotio image (multi-platform)
+      - name: Build and push ${{ matrix.variant }} image (multi-platform)
         uses: docker/build-push-action@v5
-        id: build-lotio
+        id: build-base
         with:
           context: .
-          file: ./Dockerfile.lotio
+          file: ./Dockerfile.${{ matrix.variant }}
           platforms: linux/arm64,linux/amd64
           push: true
           provenance: false
           sbom: false
           tags: |
-            matrunchyk/lotio:${{ steps.version.outputs.VERSION }}
-            matrunchyk/lotio:latest
+            matrunchyk/${{ matrix.variant }}:${{ steps.version.outputs.VERSION }}
+            matrunchyk/${{ matrix.variant }}:latest
           cache-from: |
-            type=registry,ref=matrunchyk/lotio:latest
+            type=registry,ref=matrunchyk/${{ matrix.variant }}:latest
             type=gha
           cache-to: |
             type=gha,mode=max
@@ -304,85 +307,73 @@ jobs:
             VERSION=${{ steps.version.outputs.VERSION }}
             BUILDKIT_INLINE_CACHE=1
 
-      - name: Build and push lotio-ffmpeg image (multi-platform)
-        uses: docker/build-push-action@v5
-        id: build-lotio-ffmpeg
-        with:
-          context: .
-          file: ./Dockerfile.lotio-ffmpeg
-          platforms: linux/arm64,linux/amd64
-          push: true
-          provenance: false
-          sbom: false
-          tags: |
-            matrunchyk/lotio-ffmpeg:${{ steps.version.outputs.VERSION }}
-            matrunchyk/lotio-ffmpeg:latest
-          cache-from: |
-            type=registry,ref=matrunchyk/lotio-ffmpeg:latest
-            type=gha
-          cache-to: |
-            type=gha,mode=max
-          build-args: |
-            LOTIO_IMAGE=matrunchyk/lotio:${{ steps.version.outputs.VERSION }}
-            BUILDKIT_INLINE_CACHE=1
-
-      - name: Build and push lotio-al2023 image (multi-platform)
-        uses: docker/build-push-action@v5
-        id: build-lotio-al2023
-        with:
-          context: .
-          file: ./Dockerfile.lotio-al2023
-          platforms: linux/arm64,linux/amd64
-          push: true
-          provenance: false
-          sbom: false
-          tags: |
-            matrunchyk/lotio-al2023:${{ steps.version.outputs.VERSION }}
-            matrunchyk/lotio-al2023:latest
-          cache-from: |
-            type=registry,ref=matrunchyk/lotio-al2023:latest
-            type=gha
-          cache-to: |
-            type=gha,mode=max
-          build-args: |
-            VERSION=${{ steps.version.outputs.VERSION }}
-            BUILDKIT_INLINE_CACHE=1
-
-      - name: Build and push lotio-ffmpeg-al2023 image (multi-platform)
-        uses: docker/build-push-action@v5
-        id: build-lotio-ffmpeg-al2023
-        with:
-          context: .
-          file: ./Dockerfile.lotio-ffmpeg-al2023
-          platforms: linux/arm64,linux/amd64
-          push: true
-          provenance: false
-          sbom: false
-          tags: |
-            matrunchyk/lotio-ffmpeg-al2023:${{ steps.version.outputs.VERSION }}
-            matrunchyk/lotio-ffmpeg-al2023:latest
-          cache-from: |
-            type=registry,ref=matrunchyk/lotio-ffmpeg-al2023:latest
-            type=gha
-          cache-to: |
-            type=gha,mode=max
-          build-args: |
-            LOTIO_IMAGE=matrunchyk/lotio-al2023:${{ steps.version.outputs.VERSION }}
-            BUILDKIT_INLINE_CACHE=1
-
-      - name: Verify multi-platform manifests
-        if: steps.build-lotio.outcome == 'success' && steps.build-lotio-ffmpeg.outcome == 'success' && steps.build-lotio-al2023.outcome == 'success' && steps.build-lotio-ffmpeg-al2023.outcome == 'success'
+      - name: Verify multi-platform manifest
+        if: steps.build-base.outcome == 'success'
         run: |
-          echo "Verifying multi-platform manifests..."
-          docker buildx imagetools inspect matrunchyk/lotio:latest
-          docker buildx imagetools inspect matrunchyk/lotio-ffmpeg:latest
-          docker buildx imagetools inspect matrunchyk/lotio-al2023:latest
-          docker buildx imagetools inspect matrunchyk/lotio-ffmpeg-al2023:latest
+          docker buildx imagetools inspect matrunchyk/${{ matrix.variant }}:latest
+
+  build-docker-ffmpeg:
+    name: Build Docker FFmpeg Images
+    runs-on: ubuntu-latest
+    needs: [version-and-tag, build-docker-base]
+    strategy:
+      matrix:
+        variant: [lotio, lotio-al2023]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set version
+        id: version
+        run: |
+          VERSION="${{ needs.version-and-tag.outputs.version }}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.variant }}-ffmpeg image (multi-platform)
+        uses: docker/build-push-action@v5
+        id: build-ffmpeg
+        with:
+          context: .
+          file: ./Dockerfile.${{ matrix.variant }}-ffmpeg
+          platforms: linux/arm64,linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          tags: |
+            matrunchyk/${{ matrix.variant }}-ffmpeg:${{ steps.version.outputs.VERSION }}
+            matrunchyk/${{ matrix.variant }}-ffmpeg:latest
+          cache-from: |
+            type=registry,ref=matrunchyk/${{ matrix.variant }}-ffmpeg:latest
+            type=gha
+          cache-to: |
+            type=gha,mode=max
+          build-args: |
+            LOTIO_IMAGE=matrunchyk/${{ matrix.variant }}:${{ steps.version.outputs.VERSION }}
+            BUILDKIT_INLINE_CACHE=1
+
+      - name: Verify multi-platform manifest
+        if: steps.build-ffmpeg.outcome == 'success'
+        run: |
+          docker buildx imagetools inspect matrunchyk/${{ matrix.variant }}-ffmpeg:latest
 
   build-linux:
     name: Build Linux
     runs-on: ubuntu-latest
-    needs: [version-and-tag, build-docker]
+    needs: [version-and-tag, build-docker-ffmpeg]
     strategy:
       matrix:
         arch: [arm64, amd64]
@@ -730,7 +721,7 @@ jobs:
 
   test-artifacts:
     runs-on: ubuntu-latest
-    needs: [version-and-tag, build-docker, build-wasm]
+    needs: [version-and-tag, build-docker-ffmpeg, build-wasm]
     strategy:
       matrix:
         test: [docker, js-wasm]
@@ -783,7 +774,7 @@ jobs:
 
   publish-release:
     runs-on: ubuntu-latest
-    needs: [version-and-tag, build-macos, build-linux, build-wasm, build-docs, build-docker, test-artifacts]
+    needs: [version-and-tag, build-macos, build-linux, build-wasm, build-docs, build-docker-ffmpeg, test-artifacts]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
