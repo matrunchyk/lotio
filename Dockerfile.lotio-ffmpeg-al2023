@@ -27,7 +27,7 @@ RUN echo "[BUILD] Building ffmpeg from source on AL2023..." && \
     nasm \
     curl \
     tar \
-    pkgconfig \
+    pkgconf \
     libpng-devel \
     && dnf clean all
 
