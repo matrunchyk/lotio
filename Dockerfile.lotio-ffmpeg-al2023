@@ -1,0 +1,92 @@
+# Multi-stage Dockerfile for lotio with ffmpeg
+# Supports multi-arch builds (arm64, x86_64) with BuildKit
+# This image builds ffmpeg and adds it to the lotio-al2023 image from Dockerfile.lotio-al2023
+#
+# Build chain:
+#   Dockerfile.skia → matrunchyk/skia:latest
+#   Dockerfile.lotio-al2023 → matrunchyk/lotio-al2023:latest (uses matrunchyk/skia:latest)
+#   Dockerfile.lotio-ffmpeg-al2023 → matrunchyk/lotio-ffmpeg-al2023:latest (uses matrunchyk/lotio-al2023:latest)
+
+# Allow overriding the base lotio-al2023 image for local testing
+ARG LOTIO_IMAGE=matrunchyk/lotio-al2023:latest
+
+########################################################################################
+# Stage 1: FFmpeg Builder - Build ffmpeg from source on AL2023 (multi-arch)
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS ffmpeg-builder
+
+# BuildKit automatically sets TARGETPLATFORM for multi-arch builds
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+
+RUN echo "[BUILD] Building ffmpeg from source on AL2023..." && \
+    dnf update -y && \
+    dnf install -y \
+    gcc \
+    gcc-c++ \
+    make \
+    nasm \
+    curl \
+    tar \
+    pkgconfig \
+    libpng-devel \
+    && dnf clean all
+
+# Build ffmpeg with ProRes support (minimal build for lotio's use case)
+# Supports both pipe input (image2pipe) and disk-based input (image2 with file patterns)
+WORKDIR /ffmpeg-build
+RUN echo "[BUILD] Downloading ffmpeg source..." && \
+    curl -L -f https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n8.0.tar.gz -o /tmp/ffmpeg.tar.gz && \
+    tar -xz -C /tmp -f /tmp/ffmpeg.tar.gz && \
+    cd /tmp/FFmpeg-* && \
+    echo "[BUILD] Configuring ffmpeg (minimal build for ProRes + PNG input)..." && \
+    ./configure \
+    --prefix=/opt/ffmpeg \
+    --enable-decoder=png \
+    --enable-demuxer=image2 \
+    --enable-muxer=mov \
+    --enable-encoder=prores_ks \
+    --enable-filter=format \
+    --enable-protocol=pipe \
+    --disable-network \
+    --disable-doc \
+    --disable-avdevice \
+    --disable-ffplay \
+    --disable-ffprobe \
+    --extra-cflags="-O3" \
+    --extra-ldflags="-Wl,-rpath,/opt/ffmpeg/lib" \
+    --enable-shared \
+    --disable-static \
+    --disable-debug \
+    --enable-optimizations \
+    && echo "[BUILD] Building ffmpeg (this may take a while)..." && \
+    make -j$(nproc) && \
+    make install && \
+    echo "[BUILD] ffmpeg built successfully" && \
+    echo "[BUILD] Verifying ProRes codec support..." && \
+    /opt/ffmpeg/bin/ffmpeg -codecs | grep -i prores && \
+    echo "[BUILD] ProRes codec verified"
+
+########################################################################################
+# Stage 2: Runtime - Final image with lotio + ffmpeg
+# Uses matrunchyk/lotio-al2023:latest (built from Dockerfile.lotio-al2023) as base
+FROM ${LOTIO_IMAGE}
+
+# Copy ffmpeg and all its libraries from builder
+COPY --from=ffmpeg-builder /opt/ffmpeg /opt/ffmpeg
+
+ENV PATH="/opt/ffmpeg/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/ffmpeg/lib:${LD_LIBRARY_PATH}"
+
+RUN echo "[BUILD] Verifying ffmpeg..." && \
+    /opt/ffmpeg/bin/ffmpeg -version && \
+    echo "[BUILD] ffmpeg verified"
+
+# Copy entrypoint script
+COPY scripts/render_entrypoint.sh /usr/local/bin/render_entrypoint.sh
+RUN chmod +x /usr/local/bin/render_entrypoint.sh
+
+WORKDIR /workspace
+
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/render_entrypoint.sh"]
+

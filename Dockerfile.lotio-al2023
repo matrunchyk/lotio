@@ -1,0 +1,175 @@
+# Multi-stage Dockerfile for lotio binary
+# Supports multi-arch builds (arm64, x86_64) with BuildKit
+# This image builds lotio using pre-built Skia from matrunchyk/skia:latest
+# Runtime based on Amazon Linux 2023
+
+########################################################################################
+# Stage 1: Build lotio using Skia base image
+# This stage uses the pre-built Skia image as a base (from Dockerfile.skia)
+ARG SKIA_IMAGE=matrunchyk/skia:latest
+FROM ${SKIA_IMAGE} AS lotio-builder
+
+WORKDIR /build
+
+# Copy only lotio source files (not entire project)
+COPY src/ ./src/
+
+# Build arguments
+ARG VERSION=dev
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+
+# Generate dev version with build datetime if VERSION is "dev" (build-time, not runtime)
+# Calculate once and store in a file for reuse across all RUN commands
+RUN if [ "$VERSION" = "dev" ]; then \
+        BUILD_DATETIME=$(date +"%Y%m%d-%H%M%S") && \
+        echo "dev-${BUILD_DATETIME}" > /tmp/version.txt; \
+    else \
+        echo "$VERSION" > /tmp/version.txt; \
+    fi && \
+    ACTUAL_VERSION=$(cat /tmp/version.txt) && \
+    echo "[BUILD] Using VERSION: ${ACTUAL_VERSION}"
+
+# Create temp include structure for <skia/...> includes (like build_binary.sh does)
+# This allows both #include "include/core/..." and #include <skia/core/...> to work
+RUN mkdir -p /tmp/skia_include/skia && \
+    ln -sf /opt/skia/include/core /tmp/skia_include/skia/core && \
+    ln -sf /opt/skia/include /tmp/skia_include/skia/include && \
+    ln -sf /opt/skia/modules /tmp/skia_include/skia/modules && \
+    echo "[BUILD] Temp include structure created"
+
+# Source files for library (excluding main.cpp)
+# Compile library source files
+# Use -I/opt/skia (not /opt/skia/include) to support #include "include/core/..."
+# Use -I/tmp/skia_include to support #include <skia/core/...>
+RUN ACTUAL_VERSION=$(cat /tmp/version.txt) && \
+    echo "[DEBUG] Contents of /tmp/version.txt: '${ACTUAL_VERSION}'" && \
+    VERSION_DEFINE='-DVERSION="'"${ACTUAL_VERSION}"'"' && \
+    echo "[DEBUG] VERSION_DEFINE: '${VERSION_DEFINE}'" && \
+    CXXFLAGS="-std=c++17 -O3 -DNDEBUG $VERSION_DEFINE" && \
+    INCLUDES="-I/opt/skia -I/opt/skia/include -I/opt/skia/modules -I/opt/skia/gen -I/tmp/skia_include -I./src" && \
+    echo "[BUILD] Compiling library source files with VERSION: ${ACTUAL_VERSION}..." && \
+    for src in src/core/argument_parser.cpp \
+               src/core/animation_setup.cpp \
+               src/core/frame_encoder.cpp \
+               src/core/renderer.cpp \
+               src/utils/crash_handler.cpp \
+               src/utils/logging.cpp \
+               src/utils/string_utils.cpp \
+               src/utils/version.cpp \
+               src/text/layer_overrides.cpp \
+               src/text/text_processor.cpp \
+               src/text/font_utils.cpp \
+               src/text/text_sizing.cpp \
+               src/text/json_manipulation.cpp; do \
+        obj="${src%.cpp}.o" && \
+        echo "      Compiling: $(basename $src)" && \
+        g++ $CXXFLAGS $INCLUDES -c "$src" -o "$obj" || exit 1; \
+    done && \
+    echo "[BUILD] Library source files compiled"
+
+# Create static library
+RUN echo "[BUILD] Creating liblotio.a..." && \
+    ar rcs liblotio.a \
+        src/core/argument_parser.o \
+        src/core/animation_setup.o \
+        src/core/frame_encoder.o \
+        src/core/renderer.o \
+        src/utils/crash_handler.o \
+        src/utils/logging.o \
+        src/utils/string_utils.o \
+        src/utils/version.o \
+        src/text/layer_overrides.o \
+        src/text/text_processor.o \
+        src/text/font_utils.o \
+        src/text/text_sizing.o \
+        src/text/json_manipulation.o && \
+    echo "[BUILD] liblotio.a created"
+
+# Compile main.cpp
+RUN ACTUAL_VERSION=$(cat /tmp/version.txt) && \
+    echo "[DEBUG] Contents of /tmp/version.txt: '${ACTUAL_VERSION}'" && \
+    VERSION_DEFINE='-DVERSION="'"${ACTUAL_VERSION}"'"' && \
+    echo "[DEBUG] VERSION_DEFINE: '${VERSION_DEFINE}'" && \
+    CXXFLAGS="-std=c++17 -O3 -DNDEBUG $VERSION_DEFINE" && \
+    INCLUDES="-I/opt/skia -I/opt/skia/include -I/opt/skia/modules -I/opt/skia/gen -I/tmp/skia_include -I./src" && \
+    echo "[BUILD] Compiling main entry point with VERSION: ${ACTUAL_VERSION}..." && \
+    g++ $CXXFLAGS $INCLUDES -c src/main.cpp -o src/main.o && \
+    echo "[BUILD] Main entry point compiled"
+
+# Link the binary
+RUN echo "[BUILD] Linking binary..." && \
+    g++ -std=c++17 -O3 -DNDEBUG \
+        src/main.o liblotio.a \
+        -L/opt/skia/lib \
+        /opt/skia/lib/libskresources.a \
+        /opt/skia/lib/libskparagraph.a \
+        /opt/skia/lib/libskottie.a \
+        /opt/skia/lib/libskshaper.a \
+        /opt/skia/lib/libskunicode_icu.a \
+        /opt/skia/lib/libskunicode_core.a \
+        /opt/skia/lib/libsksg.a \
+        /opt/skia/lib/libjsonreader.a \
+        /opt/skia/lib/libskia.a \
+        -lfreetype -lpng -lharfbuzz -licuuc -licui18n -licudata \
+        -lz -lfontconfig -lexpat -lm -lpthread \
+        -lX11 -lGL -lGLU \
+        -o lotio && \
+    echo "[BUILD] Binary linked successfully" && \
+    ls -lh /build/lotio && \
+    ls -lh /build/liblotio.a
+
+########################################################################################
+# Stage 2: Runtime - Minimal runtime image based on Amazon Linux 2023
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023
+
+# Set environment variables (works for both arm64 and x86_64)
+# AL2023 uses /usr/lib64 for x86_64 and /usr/lib64 for arm64 (both use lib64)
+ENV LD_LIBRARY_PATH=/opt/skia/lib:/usr/lib64
+ENV PATH=/usr/local/bin:${PATH}
+
+# Install runtime libraries using dnf (AL2023 package manager)
+RUN echo "[BUILD] Setting up runtime environment..." && \
+    dnf update -y && \
+    dnf install -y \
+    fontconfig \
+    freetype \
+    libX11 \
+    libXext \
+    libXrender \
+    mesa-libGL \
+    mesa-libGLU \
+    libpng \
+    harfbuzz \
+    icu \
+    && dnf clean all && \
+    echo "[BUILD] Runtime libraries installed"
+
+# Copy Skia libraries and headers from builder (which is based on the Skia image)
+# Headers are needed for .deb package extraction (development packages)
+COPY --from=lotio-builder /opt/skia/lib /opt/skia/lib
+COPY --from=lotio-builder /opt/skia/include /opt/skia/include
+COPY --from=lotio-builder /opt/skia/modules /opt/skia/modules
+
+# Verify Skia headers were copied successfully
+RUN echo "[BUILD] Verifying Skia headers..." && \
+    ls -la /opt/skia/ && \
+    test -d /opt/skia/include && test -d /opt/skia/modules && \
+    echo "[BUILD] Skia headers verified"
+
+# Copy lotio binary
+COPY --from=lotio-builder /build/lotio /usr/local/bin/lotio
+
+# Copy lotio library for development packages
+COPY --from=lotio-builder /build/liblotio.a /usr/local/lib/liblotio.a
+
+# Verify lotio binary
+RUN echo "[BUILD] Verifying lotio binary..." && \
+    echo "=== Full runtime dependencies ===" && \
+    ldd /usr/local/bin/lotio && \
+    echo "[BUILD] All dependencies resolved"
+
+WORKDIR /workspace
+
+ENTRYPOINT ["/usr/local/bin/lotio"]
+
