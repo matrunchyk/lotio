@@ -28,8 +28,10 @@ RUN echo "[BUILD] Building ffmpeg from source on AL2023..." && \
     wget \
     tar \
     gzip \
+    diffutils \
     pkgconf \
     libpng-devel \
+    binutils \
     && dnf clean all
 
 # Build ffmpeg with ProRes support (minimal build for lotio's use case)
@@ -39,33 +41,47 @@ RUN echo "[BUILD] Downloading ffmpeg source..." && \
     wget -O /tmp/ffmpeg.tar.gz https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n8.0.tar.gz && \
     tar -xz -C /tmp -f /tmp/ffmpeg.tar.gz && \
     cd /tmp/FFmpeg-* && \
-    echo "[BUILD] Configuring ffmpeg (minimal build for ProRes + PNG input)..." && \
+    echo "[BUILD] Configuring minimal ffmpeg with --disable-everything (ultra-minimal build)..." && \
     ./configure \
     --prefix=/opt/ffmpeg \
+    --disable-everything \
+    --enable-parser=png \
     --enable-decoder=png \
     --enable-demuxer=image2 \
+    --enable-demuxer=image2pipe \
     --enable-muxer=mov \
     --enable-encoder=prores_ks \
-    --enable-filter=format \
+    --enable-filter=scale \
     --enable-protocol=pipe \
+    --enable-protocol=file \
+    --enable-swscale \
+    --disable-swresample \
     --disable-network \
     --disable-doc \
     --disable-avdevice \
     --disable-ffplay \
     --disable-ffprobe \
-    --extra-cflags="-O3" \
+    --extra-cflags="-O1 -ffast-math -fno-stack-protector" \
     --extra-ldflags="-Wl,-rpath,/opt/ffmpeg/lib" \
     --enable-shared \
     --disable-static \
     --disable-debug \
-    --enable-optimizations \
-    && echo "[BUILD] Building ffmpeg (this may take a while)..." && \
+    --disable-optimizations \
+    && echo "[BUILD] Building ffmpeg (optimized for compilation speed)..." && \
     make -j$(nproc) && \
     make install && \
+    echo "[BUILD] Stripping binaries and libraries for size optimization..." && \
+    strip --strip-all /opt/ffmpeg/bin/ffmpeg 2>/dev/null || true && \
+    find /opt/ffmpeg/lib -name "*.so*" -exec strip --strip-unneeded {} + 2>/dev/null || true && \
+    echo "[BUILD] Removing unnecessary files..." && \
+    rm -rf /opt/ffmpeg/share/man /opt/ffmpeg/share/doc /opt/ffmpeg/lib/pkgconfig /opt/ffmpeg/include 2>/dev/null || true && \
     echo "[BUILD] ffmpeg built successfully" && \
     echo "[BUILD] Verifying ProRes codec support..." && \
-    /opt/ffmpeg/bin/ffmpeg -codecs | grep -i prores && \
-    echo "[BUILD] ProRes codec verified"
+    /opt/ffmpeg/bin/ffmpeg -codecs 2>&1 | grep -i prores && \
+    echo "[BUILD] ProRes codec verified" && \
+    echo "[BUILD] Checking binary size..." && \
+    ls -lh /opt/ffmpeg/bin/ffmpeg && \
+    du -sh /opt/ffmpeg
 
 ########################################################################################
 # Stage 2: Runtime - Final image with lotio + ffmpeg
