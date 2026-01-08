@@ -138,7 +138,7 @@ echo "[RENDER] Rendering frames and encoding to transparent MOV (ProRes 4444)...
     -f image2pipe \
     -vcodec png \
     -r $FPS \
-    -i - \
+    -i pipe:0 \
     -c:v prores_ks \
     -profile:v 4444 \
     -pix_fmt yuva444p10le \

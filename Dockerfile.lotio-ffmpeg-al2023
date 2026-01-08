@@ -32,6 +32,7 @@ RUN wget -q -O /tmp/ffmpeg.tar.gz https://github.com/FFmpeg/FFmpeg/archive/refs/
     --enable-demuxer=image2pipe \
     --enable-muxer=mov \
     --enable-encoder=prores_ks \
+    --enable-filter=format \
     --enable-filter=scale \
     --enable-protocol=pipe \
     --enable-protocol=file \
