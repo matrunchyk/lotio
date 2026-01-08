@@ -1,134 +1,118 @@
-# Multi-stage Dockerfile for Lambda function using lotio (Lottie renderer)
-# Supports multi-arch builds (arm64, amd64)
+# syntax=docker/dockerfile:1.7
 
-# Allow overriding the base lotio-ffmpeg image for local testing
-ARG LOTIO_FFMPEG_IMAGE=matrunchyk/lotio-ffmpeg:latest
-
-# BuildKit automatically provides TARGETARCH for multi-arch builds
-ARG TARGETARCH
-# AWS Lambda architecture mapping: amd64 -> x86_64, arm64 -> arm64
-# This will be set automatically by buildx based on TARGETARCH
-ARG LAMBDA_ARCH=arm64
-# Default mapping: if TARGETARCH is amd64, use x86_64; otherwise use arm64
-# This is handled by passing --build-arg LAMBDA_ARCH=x86_64 for amd64 builds
+ARG LOTIO_SUPPLIER_IMAGE=matrunchyk/lotio-al2023:latest
+ARG FORCE_REBUILD=0
 
 ########################################################################################
-# Stage 0: Lotio-FFmpeg Image - Source for lotio binary and ffmpeg
-# This stage allows ARG substitution (FROM supports ARG, COPY --from does not)
-FROM ${LOTIO_FFMPEG_IMAGE} AS lotio-ffmpeg-source
+# Stage 0: Supplier (lotio + ICU70)
+########################################################################################
+FROM ${LOTIO_SUPPLIER_IMAGE} AS lotio-supplier
+ARG FORCE_REBUILD
+RUN echo "FORCE_REBUILD=${FORCE_REBUILD}" >/dev/null
 
 ########################################################################################
-# Stage 1: FFmpeg Builder - Build ffmpeg on AL2023 for GLIBC compatibility
-# Use architecture-specific Lambda base image
-# AWS Lambda uses 'x86_64' for AMD64, not 'amd64'
-FROM public.ecr.aws/lambda/nodejs:22-${LAMBDA_ARCH} AS ffmpeg-builder
+# Stage 1: FFmpeg builder (build against Lambda runtime GLIBC)
+########################################################################################
+FROM public.ecr.aws/lambda/nodejs:22 AS ffmpeg-builder
+ARG FORCE_REBUILD
+RUN echo "FORCE_REBUILD=${FORCE_REBUILD}" >/dev/null
 
-# Install build dependencies
 RUN dnf install -y \
-    gcc \
-    gcc-c++ \
-    make \
-    nasm \
-    tar \
+    gcc gcc-c++ make nasm tar gzip curl \
     pkgconfig \
     libpng-devel \
     && dnf clean all
 
-# Build ffmpeg with ProRes support (minimal build for lotio's use case)
 WORKDIR /ffmpeg-build
+
 RUN curl -L -f https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n8.0.tar.gz -o /tmp/ffmpeg.tar.gz && \
     tar -xz -C /tmp -f /tmp/ffmpeg.tar.gz && \
     cd /tmp/FFmpeg-* && \
     ./configure \
-    --prefix=/opt/ffmpeg \
-    --enable-decoder=png \
-    --enable-demuxer=image2 \
-    --enable-muxer=mov \
-    --enable-encoder=prores_ks \
-    --enable-filter=format \
-    --enable-protocol=pipe \
-    --disable-network \
-    --disable-doc \
-    --disable-avdevice \
-    --disable-ffplay \
-    --disable-ffprobe \
-    --extra-cflags="-O3" \
-    --extra-ldflags="-Wl,-rpath,/opt/ffmpeg/lib" \
-    --enable-shared \
-    --disable-static \
-    --disable-debug \
-    --enable-optimizations \
-    && make -j$(nproc) && \
-    make install
+      --prefix=/opt/ffmpeg \
+      --disable-network \
+      --disable-doc \
+      --disable-avdevice \
+      --disable-ffplay \
+      --disable-ffprobe \
+      --enable-shared \
+      --disable-static \
+      --disable-debug \
+      --enable-optimizations \
+      --extra-cflags="-O3" \
+      --extra-ldflags="-Wl,-rpath,/opt/ffmpeg/lib" \
+      --enable-decoder=png \
+      --enable-demuxer=image2 \
+      --enable-demuxer=image2pipe \
+      --enable-muxer=mov \
+      --enable-encoder=prores_ks \
+      --enable-filter=format \
+      --enable-filter=scale \
+      --enable-protocol=pipe \
+      --enable-protocol=file \
+    && make -j"$(nproc)" \
+    && make install
+
+RUN /opt/ffmpeg/bin/ffmpeg -version
 
 ########################################################################################
-# Stage 2: TypeScript Builder - Build Lambda handler
-FROM node:22-alpine AS ts-builder
-
+# Stage 2: Bundle builder (lambda/handler.ts -> dist/handler.js)
+########################################################################################
+FROM node:22-alpine AS bundle-builder
 WORKDIR /build
 
-COPY lambda/package.json lambda/package-lock.json* ./
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+ARG FORCE_REBUILD
+RUN echo "FORCE_REBUILD=${FORCE_REBUILD}" >/dev/null
 
-COPY lambda/tsconfig.json lambda/index.ts ./
-RUN npm run build
+# Copy only lambda package files for stable caching
+COPY lambda/package.json lambda/package-lock.json lambda/tsconfig.json lambda/build-bundle.mjs ./
+RUN npm ci
+
+# Copy source
+COPY lambda/handler.ts ./
+
+# Bundle to dist/handler.js (your script controls format=esm)
+RUN node build-bundle.mjs
+
+RUN test -f dist/handler.js || (echo "ERROR: dist/handler.js not found" && ls -la && exit 1)
+
+RUN npm prune --production || true
 
 ########################################################################################
-# Stage 3: Lambda Runtime - Final image
-# Use architecture-specific Lambda base image
-# AWS Lambda uses 'x86_64' for AMD64, not 'amd64'
-ARG LAMBDA_ARCH
-FROM public.ecr.aws/lambda/nodejs:22-${LAMBDA_ARCH}
+# Stage 3: Final runtime (Lambda base)
+########################################################################################
+FROM public.ecr.aws/lambda/nodejs:22
 
-# Install runtime libraries
 RUN dnf install -y \
     fontconfig \
     freetype \
-    libX11 \
-    libXext \
-    libXrender \
-    mesa-libGL \
-    mesa-libGLU \
     libpng \
     harfbuzz \
-    icu \
     && dnf clean all
 
-# Copy lotio binary from lotio-ffmpeg image
-# Note: lotio is statically linked against Skia, so Skia libraries are not needed
-COPY --from=lotio-ffmpeg-source /usr/local/bin/lotio /opt/bin/lotio
+# lotio + ICU70 from supplier (this is the contract you already validated)
+COPY --from=lotio-supplier /usr/local/bin/lotio /opt/bin/lotio
+COPY --from=lotio-supplier /opt/icu /opt/icu
 
-# Copy ffmpeg from AL2023 builder (built with correct GLIBC version)
+# ffmpeg built for Lambda base glibc
 COPY --from=ffmpeg-builder /opt/ffmpeg /opt/ffmpeg
 
-# Copy ICU libraries from lotio-ffmpeg image (Ubuntu 22.04 has ICU 70, AL2023 has different version)
-# lotio binary was built against ICU 70, so we need to use the same version
-# BuildKit automatically provides TARGETARCH for multi-arch builds
-ARG TARGETARCH
-RUN mkdir -p /opt/icu/lib
-
-# Copy ICU libraries using BuildKit mount feature for architecture-specific paths
-# This allows us to conditionally copy based on TARGETARCH
-RUN --mount=type=bind,from=lotio-ffmpeg-source,source=/usr/lib,target=/mnt/source-lib \
-    if [ "$TARGETARCH" = "arm64" ]; then \
-        cp -f /mnt/source-lib/aarch64-linux-gnu/libicu*.so* /opt/icu/lib/ 2>/dev/null || true; \
-    elif [ "$TARGETARCH" = "amd64" ]; then \
-        cp -f /mnt/source-lib/x86_64-linux-gnu/libicu*.so* /opt/icu/lib/ 2>/dev/null || true; \
-    fi
-
-# Set environment variables
 ENV PATH="/opt/ffmpeg/bin:/opt/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/opt/ffmpeg/lib:/opt/icu/lib:/usr/lib64:${LD_LIBRARY_PATH}"
 
-# Copy fonts if they exist (from repo root)
-COPY fonts /usr/local/share/fonts
+RUN test -f /opt/icu/lib/libicuuc.so.70 || (echo "ERROR: ICU70 missing in /opt/icu/lib" && ls -la /opt/icu/lib && exit 1)
+
+# fonts
+COPY lambda/fonts /usr/local/share/fonts
 RUN if [ -d /usr/local/share/fonts ] && [ "$(ls -A /usr/local/share/fonts)" ]; then \
-        fc-cache -fv /usr/local/share/fonts; \
+      fc-cache -fv /usr/local/share/fonts; \
     fi
 
-# Copy compiled Lambda code from ts-builder
-COPY --from=ts-builder /build/node_modules ${LAMBDA_TASK_ROOT}/node_modules
-COPY --from=ts-builder /build/dist/index.js ${LAMBDA_TASK_ROOT}/
+# handler + deps
+COPY --from=bundle-builder /build/dist/handler.js ${LAMBDA_TASK_ROOT}/handler.js
+COPY --from=bundle-builder /build/node_modules ${LAMBDA_TASK_ROOT}/node_modules
 
-# Set handler
-CMD [ "index.handler" ]
+WORKDIR ${LAMBDA_TASK_ROOT}
+RUN echo '{"type":"module"}' > package.json
+
+CMD [ "handler.handler" ]
