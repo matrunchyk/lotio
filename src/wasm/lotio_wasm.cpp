@@ -213,6 +213,18 @@ static void processLayerOverridesFromString(std::string& json_data, const std::s
                     std::string modifiedAssets = assetsJson;
                     
                     for (const auto& [assetId, imagePath] : imagePaths) {
+                        // Validate image path
+                        if (imagePath.empty()) {
+                            EM_ASM({
+                                console.warn('[WARNING] Empty image path provided for asset ID:', UTF8ToString($0));
+                            }, assetId.c_str());
+                            continue;
+                        }
+                        
+                        EM_ASM({
+                            console.log('[DEBUG] Processing image override for asset ID:', UTF8ToString($0), '->', UTF8ToString($1));
+                        }, assetId.c_str(), imagePath.c_str());
+                        
                         std::string idPattern = "\"id\"\\s*:\\s*\"" + assetId + "\"";
                         std::regex idRegex(idPattern);
                         std::smatch idMatch;
@@ -244,6 +256,10 @@ static void processLayerOverridesFromString(std::string& json_data, const std::s
                                         dir = "";
                                     }
                                     
+                                    EM_ASM({
+                                        console.log('[DEBUG] Split image path - directory:', UTF8ToString($0), ', filename:', UTF8ToString($1));
+                                    }, dir.c_str(), filename.c_str());
+                                    
                                     std::regex uPattern("\"u\"\\s*:\\s*\"[^\"]*\"");
                                     std::regex pPattern("\"p\"\\s*:\\s*\"[^\"]*\"");
                                     
@@ -254,8 +270,25 @@ static void processLayerOverridesFromString(std::string& json_data, const std::s
                                     assetObj = std::regex_replace(assetObj, pPattern, newP);
                                     
                                     modifiedAssets.replace(objStart, objEnd - objStart + 1, assetObj);
+                                    
+                                    EM_ASM({
+                                        console.log('[DEBUG] Updated asset:', UTF8ToString($0), '- u:', UTF8ToString($1), ', p:', UTF8ToString($2));
+                                        console.log('[DEBUG] Image override applied successfully for asset ID:', UTF8ToString($0));
+                                    }, assetId.c_str(), dir.c_str(), filename.c_str());
+                                } else {
+                                    EM_ASM({
+                                        console.warn('[WARNING] Failed to find asset object boundaries for asset ID:', UTF8ToString($0));
+                                    }, assetId.c_str());
                                 }
+                            } else {
+                                EM_ASM({
+                                    console.warn('[WARNING] Failed to find asset object start for asset ID:', UTF8ToString($0));
+                                }, assetId.c_str());
                             }
+                        } else {
+                            EM_ASM({
+                                console.warn('[WARNING] Asset ID not found in assets array:', UTF8ToString($0));
+                            }, assetId.c_str());
                         }
                     }
                     
@@ -682,24 +715,44 @@ extern "C" {
             
             // Register codecs needed by SkResources for image decoding
             SkCodecs::Register(SkPngDecoder::Decoder());
+            EM_ASM({
+                console.log('[DEBUG] Registered image codecs: PNG decoder ready');
+            });
             
             // Resource provider - use DataURI for WASM (handles embedded images)
             // DataURIResourceProviderProxy can handle data URIs in the JSON
+            EM_ASM({
+                console.log('[DEBUG] Creating DataURIResourceProvider for image loading...');
+            });
             auto resourceProvider = skresources::DataURIResourceProviderProxy::Make(nullptr);
             if (resourceProvider) {
                 g_context->builder.setResourceProvider(std::move(resourceProvider));
+                EM_ASM({
+                    console.log('[DEBUG] DataURIResourceProvider set successfully - images will be loaded from data URIs');
+                });
+            } else {
+                EM_ASM({
+                    console.warn('[WARNING] Failed to create DataURIResourceProvider - images may fail to load');
+                });
             }
             
             // Font manager - use the one with registered fonts (or empty if none)
             g_context->builder.setFontManager(g_context->fontMgr);
             
             // Create animation
+            EM_ASM({
+                console.log('[DEBUG] Parsing animation JSON (this will load and decode images if present)...');
+            });
             g_context->animation = g_context->builder.make(
                 g_context->processed_json.c_str(), 
                 g_context->processed_json.length()
             );
             
             if (!g_context->animation) {
+                EM_ASM({
+                    console.error('[ERROR] Failed to parse Lottie animation from JSON');
+                    console.error('[ERROR] Possible causes: invalid JSON, missing image files, or unsupported features');
+                });
                 return 1;
             }
             
@@ -713,7 +766,8 @@ extern "C" {
             // Debug: Log animation info
             // Note: We can't use std::cout in WASM, but we can use emscripten_log
             EM_ASM({
-                console.log('Animation created: size=' + $0 + 'x' + $1 + ', duration=' + $2 + ', fps=' + $3);
+                console.log('[DEBUG] Animation created successfully: size=' + $0 + 'x' + $1 + ', duration=' + $2 + ', fps=' + $3);
+                console.log('[DEBUG] Images should be loaded and ready for rendering');
             }, g_context->width, g_context->height, g_context->duration, g_context->fps);
             
             // Debug: Check if animation has inPoint/outPoint

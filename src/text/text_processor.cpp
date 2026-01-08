@@ -35,8 +35,10 @@ std::string processLayerOverrides(
         // Find assets array in JSON
         size_t assetsPos = json_data.find("\"assets\"");
         if (assetsPos != std::string::npos) {
+            LOG_DEBUG("Found assets array in JSON at position " << assetsPos);
             size_t arrayStart = json_data.find('[', assetsPos);
             if (arrayStart != std::string::npos) {
+                LOG_DEBUG("Found assets array start at position " << arrayStart);
                 // Find the end of the assets array
                 int bracketCount = 0;
                 size_t arrayEnd = arrayStart;
@@ -50,12 +52,41 @@ std::string processLayerOverrides(
                 }
                 
                 if (arrayEnd > arrayStart) {
+                    LOG_DEBUG("Found assets array end at position " << arrayEnd << " (length: " << (arrayEnd - arrayStart + 1) << " bytes)");
                     std::string assetsJson = json_data.substr(arrayStart, arrayEnd - arrayStart + 1);
                     std::string modifiedAssets = assetsJson;
                     
                     // Process each asset
                     for (const auto& [assetId, imagePath] : imagePaths) {
                         LOG_DEBUG("Processing image override for asset ID: " << assetId << " -> " << imagePath);
+                        
+                        // Validate image path exists
+                        if (imagePath.empty()) {
+                            LOG_CERR("[WARNING] Empty image path provided for asset ID: " << assetId) << std::endl;
+                            continue;
+                        }
+                        
+                        // Check if path exists (if it's an absolute or relative file path)
+                        std::filesystem::path pathObj(imagePath);
+                        // Check if path is a data URI or URL (C++17 compatible - no starts_with)
+                        bool isDataUri = (imagePath.length() >= 5 && imagePath.substr(0, 5) == "data:");
+                        bool isHttpUrl = (imagePath.length() >= 7 && imagePath.substr(0, 7) == "http://");
+                        bool isHttpsUrl = (imagePath.length() >= 8 && imagePath.substr(0, 8) == "https://");
+                        if (!pathObj.empty() && !isDataUri && !isHttpUrl && !isHttpsUrl) {
+                            if (std::filesystem::exists(pathObj)) {
+                                LOG_DEBUG("Image file exists: " << imagePath);
+                                if (std::filesystem::is_regular_file(pathObj)) {
+                                    auto fileSize = std::filesystem::file_size(pathObj);
+                                    LOG_DEBUG("Image file size: " << fileSize << " bytes");
+                                } else {
+                                    LOG_CERR("[WARNING] Image path is not a regular file: " << imagePath) << std::endl;
+                                }
+                            } else {
+                                LOG_CERR("[WARNING] Image file does not exist: " << imagePath << " (will attempt to load at runtime)") << std::endl;
+                            }
+                        } else {
+                            LOG_DEBUG("Image path appears to be data URI or URL: " << (imagePath.length() > 50 ? imagePath.substr(0, 50) + "..." : imagePath));
+                        }
                         
                         // Find asset by ID
                         std::string idPattern = "\"id\"\\s*:\\s*\"" + assetId + "\"";
@@ -64,6 +95,7 @@ std::string processLayerOverrides(
                         
                         if (std::regex_search(modifiedAssets, idMatch, idRegex)) {
                             size_t assetStart = idMatch.position(0);
+                            LOG_DEBUG("Found asset with ID " << assetId << " at position " << assetStart);
                             // Find the asset object boundaries
                             size_t objStart = modifiedAssets.rfind('{', assetStart);
                             if (objStart != std::string::npos) {
@@ -80,11 +112,14 @@ std::string processLayerOverrides(
                                 
                                 if (objEnd > objStart) {
                                     std::string assetObj = modifiedAssets.substr(objStart, objEnd - objStart + 1);
+                                    LOG_DEBUG("Extracted asset object for ID " << assetId << " (length: " << (objEnd - objStart + 1) << " bytes)");
                                     
                                     // Split image path into u (directory) and p (filename)
                                     std::filesystem::path pathObj(imagePath);
                                     std::string dir = pathObj.parent_path().string();
                                     std::string filename = pathObj.filename().string();
+                                    
+                                    LOG_DEBUG("Split image path - directory: \"" << dir << "\", filename: \"" << filename << "\"");
                                     
                                     // Normalize directory path (ensure it ends with / for relative paths)
                                     if (!dir.empty() && dir.back() != '/' && dir.back() != '\\') {
@@ -107,17 +142,29 @@ std::string processLayerOverrides(
                                     // Replace the asset object in modifiedAssets
                                     modifiedAssets.replace(objStart, objEnd - objStart + 1, assetObj);
                                     LOG_DEBUG("Updated asset " << assetId << ": u=\"" << dir << "\", p=\"" << filename << "\"");
+                                    LOG_DEBUG("Image override applied successfully for asset ID: " << assetId);
+                                } else {
+                                    LOG_CERR("[WARNING] Failed to find asset object boundaries for asset ID: " << assetId) << std::endl;
                                 }
+                            } else {
+                                LOG_CERR("[WARNING] Failed to find asset object start for asset ID: " << assetId) << std::endl;
                             }
                         } else {
-                            LOG_DEBUG("Warning: Asset ID " << assetId << " not found in assets array");
+                            LOG_CERR("[WARNING] Asset ID " << assetId << " not found in assets array") << std::endl;
                         }
                     }
                     
                     // Replace assets array in json_data
                     json_data.replace(arrayStart, arrayEnd - arrayStart + 1, modifiedAssets);
+                    LOG_DEBUG("Assets array updated in JSON (replaced " << (arrayEnd - arrayStart + 1) << " bytes)");
+                } else {
+                    LOG_CERR("[WARNING] Failed to find valid assets array boundaries") << std::endl;
                 }
+            } else {
+                LOG_CERR("[WARNING] Assets array start bracket not found") << std::endl;
             }
+        } else {
+            LOG_CERR("[WARNING] Assets array not found in JSON - image overrides will not be applied") << std::endl;
         }
     }
     

@@ -33,6 +33,7 @@ int main(int argc, char* argv[]) {
     g_debug_mode = args.debug_mode;
 
     // Setup and create animation
+    LOG_DEBUG("Starting animation setup and image loading...");
     AnimationSetupResult setup_result = setupAndCreateAnimation(
         args.input_file, 
         args.layer_overrides_file,
@@ -40,8 +41,10 @@ int main(int argc, char* argv[]) {
         args.text_measurement_mode
     );
     if (!setup_result.success()) {
+        LOG_CERR("[ERROR] Animation setup failed - check input file and image paths") << std::endl;
         return 1;
     }
+    LOG_DEBUG("Animation setup completed successfully - images loaded and ready");
 
     // Configure rendering
     RenderConfig render_config;

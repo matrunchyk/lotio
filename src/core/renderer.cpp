@@ -79,12 +79,16 @@ int renderFrames(
 
     for (int t = 0; t < num_threads; t++) {
         // Create animation for each thread (thread-safe: each thread has its own)
+        LOG_DEBUG("Creating animation for thread " << t << "...");
         auto thread_animation = builder.make(json_data.c_str(), json_data.length());
         if (!thread_animation) {
             LOG_CERR("[ERROR] Failed to create animation for thread " << t) << std::endl;
+            LOG_CERR("[ERROR] This may indicate JSON parsing issues or resource loading failures") << std::endl;
+            LOG_CERR("[ERROR] Check if images are accessible and JSON is valid") << std::endl;
             return 1;
         }
         thread_animations.push_back(thread_animation);
+        LOG_DEBUG("Animation created successfully for thread " << t);
         
         // Create surface for each thread
         std::vector<uint8_t> thread_pixels(totalBytes, 0);
@@ -92,6 +96,7 @@ int renderFrames(
         auto thread_surface = SkSurfaces::WrapPixels(info, thread_pixel_buffers[t].data(), rowBytes, nullptr);
         if (!thread_surface) {
             LOG_CERR("[ERROR] Failed to create surface for thread " << t) << std::endl;
+            LOG_CERR("[ERROR] This may indicate insufficient memory or invalid surface parameters") << std::endl;
             return 1;
         }
         thread_surfaces.push_back(thread_surface);
@@ -100,10 +105,13 @@ int renderFrames(
         auto thread_rgba_surface = SkSurfaces::Raster(rgbaInfo);
         if (!thread_rgba_surface) {
             LOG_CERR("[ERROR] Failed to create RGBA surface for thread " << t) << std::endl;
+            LOG_CERR("[ERROR] This may indicate insufficient memory for image conversion") << std::endl;
             return 1;
         }
         thread_rgba_surfaces.push_back(thread_rgba_surface);
+        LOG_DEBUG("Thread " << t << " setup complete - ready for rendering");
     }
+    LOG_DEBUG("All " << num_threads << " threads initialized successfully");
 
     // Pre-compute frame times (avoid per-frame calculation)
     std::vector<float> frame_times(num_frames);
@@ -158,13 +166,22 @@ int renderFrames(
             // Seek to the desired frame time
             animation->seekFrameTime(t);
             
-            // Render the animation frame
+            // Render the animation frame (this will render all layers including images)
+            if (frame_idx == 0 && thread_id == 0) {
+                LOG_DEBUG("Rendering frame " << frame_idx << " at time " << t << " seconds");
+                LOG_DEBUG("Rendering animation (images will be drawn if present in layers)...");
+            }
             animation->render(canvas);
+            
+            if (frame_idx == 0 && thread_id == 0) {
+                LOG_DEBUG("Frame " << frame_idx << " rendered successfully");
+            }
 
             // Get the image from the surface
             sk_sp<SkImage> image = surface->makeImageSnapshot();
             if (!image) {
                 LOG_CERR("[ERROR] Failed to create image snapshot for frame " << frame_idx) << std::endl;
+                LOG_CERR("[ERROR] This may indicate a rendering issue or memory problem") << std::endl;
                 failed_frames++;
                 continue;
             }
@@ -177,6 +194,12 @@ int renderFrames(
                 LOG_DEBUG("Image snapshot created: " << image->width() << "x" << image->height());
                 LOG_DEBUG("Image color type: " << imgInfo.colorType() << ", alpha type: " << imgInfo.alphaType());
                 LOG_DEBUG("Image has alpha: " << (imgInfo.alphaType() != kOpaque_SkAlphaType));
+                LOG_DEBUG("Rendered image ready for encoding");
+            }
+            
+            // Periodic debug output for image snapshots
+            if (frame_idx > 0 && frame_idx % 100 == 0 && thread_id == 0) {
+                LOG_DEBUG("Rendered and snapped " << frame_idx << " frames (images included if present)");
             }
             
             // Check if conversion is needed (only convert if necessary)
@@ -184,12 +207,16 @@ int renderFrames(
                                      imgInfo.alphaType() != kUnpremul_SkAlphaType);
             
             if (needs_conversion) {
+                if (frame_idx == 0 && thread_id == 0) {
+                    LOG_DEBUG("Image conversion needed: colorType=" << imgInfo.colorType() << " (expected " << kN32_SkColorType << "), alphaType=" << imgInfo.alphaType() << " (expected " << kUnpremul_SkAlphaType << ")");
+                }
                 // Convert to RGBA_8888 with kUnpremul_SkAlphaType
                 rgba_surface->getCanvas()->clear(SK_ColorTRANSPARENT);
                 rgba_surface->getCanvas()->drawImage(image, 0, 0, SkSamplingOptions());
                 image = rgba_surface->makeImageSnapshot();
                 if (!image) {
                     LOG_CERR("[ERROR] Failed to convert image for frame " << frame_idx) << std::endl;
+                    LOG_CERR("[ERROR] Image conversion failed - this may indicate a rendering surface issue") << std::endl;
                     failed_frames++;
                     continue;
                 }
@@ -197,19 +224,27 @@ int renderFrames(
                     LOG_DEBUG("Converted image to RGBA_8888 with kUnpremul_SkAlphaType for encoding");
                     SkImageInfo newInfo = image->imageInfo();
                     LOG_DEBUG("New image color type: " << newInfo.colorType() << ", alpha type: " << newInfo.alphaType());
+                    LOG_DEBUG("Image conversion completed successfully");
                 }
+            } else if (frame_idx == 0 && thread_id == 0) {
+                LOG_DEBUG("Image already in correct format - no conversion needed");
             }
 
             // Encode frame to PNG
+            if (frame_idx == 0 && thread_id == 0) {
+                LOG_DEBUG("Encoding rendered image to PNG format...");
+            }
             EncodedFrame encoded = encodeFrame(image);
             
             // Check encoding results
             if (!encoded.has_png) {
                 LOG_CERR("[ERROR] Failed to encode PNG for frame " << frame_idx) << std::endl;
+                LOG_CERR("[ERROR] PNG encoding failed - image data may be invalid") << std::endl;
                 failed_frames++;
                 continue;
             } else if (frame_idx == 0 && thread_id == 0) {
-                LOG_DEBUG("PNG encoded: " << encoded.png_data->size() << " bytes");
+                LOG_DEBUG("PNG encoded successfully: " << encoded.png_data->size() << " bytes");
+                LOG_DEBUG("Frame " << frame_idx << " complete: rendered -> snapped -> encoded");
             }
 
             // Write files or buffer for streaming
@@ -273,12 +308,22 @@ int renderFrames(
                     lock.unlock();  // Release lock before I/O
                     
                     if (frame.png_data) {
+                        size_t dataSize = frame.png_data->size();
+                        if (dataSize == 0) {
+                            LOG_CERR("[WARNING] Frame " << next_frame_to_write << " PNG data is empty (0 bytes)") << std::endl;
+                        }
                         // Write PNG data to stdout
-                        std::cout.write(reinterpret_cast<const char*>(frame.png_data->data()), 
-                                       frame.png_data->size());
-                        std::cout.flush();
+                        std::cout.write(reinterpret_cast<const char*>(frame.png_data->data()), dataSize);
+                        if (!std::cout.good()) {
+                            LOG_CERR("[ERROR] Failed to write frame " << next_frame_to_write << " to stdout") << std::endl;
+                            LOG_CERR("[ERROR] Check if stdout is still connected (pipe may be broken)") << std::endl;
+                            failed_frames++;
+                        } else {
+                            std::cout.flush();
+                        }
                     } else {
                         LOG_CERR("[ERROR] Frame " << next_frame_to_write << " has no PNG data") << std::endl;
+                        LOG_CERR("[ERROR] Frame was not encoded successfully - check rendering") << std::endl;
                         failed_frames++;
                     }
                     next_frame_to_write++;
@@ -314,6 +359,9 @@ int renderFrames(
     // Check for failures
     if (failed_frames > 0) {
         LOG_CERR("[WARNING] " << failed_frames << " frames failed to render") << std::endl;
+        LOG_CERR("[WARNING] Failed frames may indicate missing images, rendering errors, or encoding issues") << std::endl;
+    } else {
+        LOG_DEBUG("All " << num_frames << " frames rendered successfully (images included if present)");
     }
 
     if (!config.stream_mode) {

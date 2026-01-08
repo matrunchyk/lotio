@@ -33,6 +33,7 @@ static std::string readAndProcessJson(
     // (SkResources docs: clients must call SkCodec::Register() before using FileResourceProvider.)
     SkCodecs::Register(SkPngDecoder::Decoder());
     LOG_DEBUG("Registered image codecs via SkCodecs::Register: png");
+    LOG_DEBUG("Image decoder ready - PNG format supported");
 
     normalizeLottieTextNewlines(json_data);
     
@@ -96,14 +97,28 @@ AnimationSetupResult setupAndCreateAnimation(
         const auto baseDirStr = (ec ? baseDir.string() : absBaseDir.string());
 
         LOG_DEBUG("ResourceProvider base_dir: " << baseDirStr);
+        
+        // Check if base directory exists
+        if (!std::filesystem::exists(baseDirStr)) {
+            LOG_CERR("[WARNING] ResourceProvider base directory does not exist: " << baseDirStr) << std::endl;
+        } else if (!std::filesystem::is_directory(baseDirStr)) {
+            LOG_CERR("[WARNING] ResourceProvider base path is not a directory: " << baseDirStr) << std::endl;
+        } else {
+            LOG_DEBUG("ResourceProvider base directory verified: " << baseDirStr);
+        }
+        
         auto fileRP = skresources::FileResourceProvider::Make(SkString(baseDirStr.c_str()),
                                                               skresources::ImageDecodeStrategy::kPreDecode);
         if (!fileRP) {
             LOG_CERR("[ERROR] Failed to create skresources::FileResourceProvider for base_dir=" << baseDirStr) << std::endl;
+            LOG_CERR("[ERROR] Images may fail to load - check base directory path and permissions") << std::endl;
         } else {
+            LOG_DEBUG("FileResourceProvider created successfully with kPreDecode strategy");
+            LOG_DEBUG("Images will be pre-decoded when loaded from: " << baseDirStr);
             auto cachingRP = skresources::CachingResourceProvider::Make(std::move(fileRP));
             result.builder.setResourceProvider(std::move(cachingRP));
             LOG_DEBUG("ResourceProvider set (FileResourceProvider + CachingResourceProvider)");
+            LOG_DEBUG("Image loading ready - resources will be cached for performance");
         }
     }
 
@@ -139,14 +154,26 @@ AnimationSetupResult setupAndCreateAnimation(
     LOG_DEBUG("Font manager set on builder");
 
     LOG_DEBUG("Calling builder.make() to parse JSON...");
+    LOG_DEBUG("Parsing animation JSON (this will load and decode images if present)...");
     result.animation = result.builder.make(result.processed_json.c_str(), result.processed_json.length());
     
     if (!result.animation) {
         LOG_CERR("[ERROR] Failed to parse Lottie animation from JSON") << std::endl;
+        LOG_CERR("[ERROR] Possible causes: invalid JSON, missing image files, or unsupported features") << std::endl;
         return result;  // animation will be nullptr
     }
     
     LOG_DEBUG("Animation parsed successfully");
+    
+    // Log animation properties for debugging
+    if (result.animation) {
+        SkSize size = result.animation->size();
+        LOG_DEBUG("Animation dimensions: " << size.width() << "x" << size.height());
+        LOG_DEBUG("Animation duration: " << result.animation->duration() << " seconds");
+        LOG_DEBUG("Animation FPS: " << result.animation->fps());
+        LOG_DEBUG("Animation inPoint: " << result.animation->inPoint() << ", outPoint: " << result.animation->outPoint());
+        LOG_DEBUG("Images should be loaded and ready for rendering");
+    }
     return result;
 }
 

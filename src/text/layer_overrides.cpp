@@ -147,49 +147,84 @@ std::map<std::string, LayerOverride> parseLayerOverrides(const std::string& conf
 std::map<std::string, std::string> parseImagePaths(const std::string& configPath) {
     std::map<std::string, std::string> imagePaths;
     
+    if (configPath.empty()) {
+        return imagePaths;
+    }
+    
     std::ifstream file(configPath);
     if (!file.is_open()) {
+        std::cerr << "[WARNING] Could not open layer overrides file for image paths: " << configPath << std::endl;
+        std::cerr << "[WARNING] Image path overrides will not be applied" << std::endl;
         return imagePaths;
     }
     
     std::string json((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     file.close();
     
+    if (json.empty()) {
+        std::cerr << "[WARNING] Layer overrides file is empty: " << configPath << std::endl;
+        return imagePaths;
+    }
+    
     // Extract imagePaths section - find the start of the object
     size_t imagePathsPos = json.find("\"imagePaths\"");
-    if (imagePathsPos != std::string::npos) {
-        // Find the opening brace after "imagePaths"
-        size_t openBrace = json.find('{', imagePathsPos);
-        if (openBrace != std::string::npos) {
-            // Find matching closing brace by counting braces
-            int braceCount = 0;
-            size_t closeBrace = openBrace;
-            for (size_t i = openBrace; i < json.length(); i++) {
-                if (json[i] == '{') braceCount++;
-                if (json[i] == '}') braceCount--;
-                if (braceCount == 0) {
-                    closeBrace = i;
-                    break;
-                }
-            }
-            
-            if (closeBrace > openBrace) {
-                std::string pathsJson = json.substr(openBrace + 1, closeBrace - openBrace - 1);
-                
-                // Find each image path - format: "asset_id": "path/to/image.png"
-                std::regex pathPattern("\"([^\"]+)\"\\s*:\\s*\"([^\"]+)\"");
-                std::sregex_iterator iter(pathsJson.begin(), pathsJson.end(), pathPattern);
-                std::sregex_iterator end;
-                
-                for (; iter != end; ++iter) {
-                    std::smatch match = *iter;
-                    std::string assetId = match[1].str();
-                    std::string imagePath = match[2].str();
-                    
-                    imagePaths[assetId] = imagePath;
-                }
-            }
+    if (imagePathsPos == std::string::npos) {
+        // No imagePaths section found - this is OK, just return empty map
+        return imagePaths;
+    }
+    
+    // Find the opening brace after "imagePaths"
+    size_t openBrace = json.find('{', imagePathsPos);
+    if (openBrace == std::string::npos) {
+        std::cerr << "[WARNING] Found 'imagePaths' key but no opening brace in: " << configPath << std::endl;
+        return imagePaths;
+    }
+    
+    // Find matching closing brace by counting braces
+    int braceCount = 0;
+    size_t closeBrace = openBrace;
+    for (size_t i = openBrace; i < json.length(); i++) {
+        if (json[i] == '{') braceCount++;
+        if (json[i] == '}') braceCount--;
+        if (braceCount == 0) {
+            closeBrace = i;
+            break;
         }
+    }
+    
+    if (closeBrace <= openBrace) {
+        std::cerr << "[WARNING] Could not find matching closing brace for imagePaths in: " << configPath << std::endl;
+        return imagePaths;
+    }
+    
+    std::string pathsJson = json.substr(openBrace + 1, closeBrace - openBrace - 1);
+    
+    // Find each image path - format: "asset_id": "path/to/image.png"
+    std::regex pathPattern("\"([^\"]+)\"\\s*:\\s*\"([^\"]+)\"");
+    std::sregex_iterator iter(pathsJson.begin(), pathsJson.end(), pathPattern);
+    std::sregex_iterator end;
+    
+    int parsedCount = 0;
+    for (; iter != end; ++iter) {
+        std::smatch match = *iter;
+        std::string assetId = match[1].str();
+        std::string imagePath = match[2].str();
+        
+        if (assetId.empty()) {
+            std::cerr << "[WARNING] Empty asset ID found in imagePaths, skipping" << std::endl;
+            continue;
+        }
+        if (imagePath.empty()) {
+            std::cerr << "[WARNING] Empty image path for asset ID: " << assetId << std::endl;
+            continue;
+        }
+        
+        imagePaths[assetId] = imagePath;
+        parsedCount++;
+    }
+    
+    if (parsedCount == 0 && imagePathsPos != std::string::npos) {
+        std::cerr << "[WARNING] imagePaths section found but no valid paths parsed from: " << configPath << std::endl;
     }
     
     return imagePaths;

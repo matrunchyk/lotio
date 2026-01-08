@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <fstream>
 
 void printUsage(const char* program_name) {
     std::cerr << "Usage: " << program_name << " [--stream] [--debug] [--layer-overrides <config.json>] [--text-padding <0.0-1.0>] [--text-measurement-mode <fast|accurate|pixel-perfect>] <input.json> <output_dir> [fps]" << std::endl;
@@ -128,12 +129,23 @@ int parseArguments(int argc, char* argv[], Arguments& args) {
     std::filesystem::path input_path(args.input_file);
     if (!std::filesystem::exists(input_path)) {
         std::cerr << "Error: Input file does not exist: " << args.input_file << std::endl;
+        std::cerr << "Warning: Check file path and permissions" << std::endl;
         return 1;
     }
     if (!std::filesystem::is_regular_file(input_path)) {
         std::cerr << "Error: Input path is not a file (is it a directory?): " << args.input_file << std::endl;
+        std::cerr << "Warning: Expected a JSON file, not a directory" << std::endl;
         return 1;
     }
+    
+    // Check if input file is readable
+    std::ifstream test_file(args.input_file);
+    if (!test_file.is_open()) {
+        std::cerr << "Error: Cannot open input file for reading: " << args.input_file << std::endl;
+        std::cerr << "Warning: Check file permissions" << std::endl;
+        return 1;
+    }
+    test_file.close();
 
     // Handle output directory (not needed in stream mode)
     if (!args.stream_mode) {
@@ -150,12 +162,25 @@ int parseArguments(int argc, char* argv[], Arguments& args) {
             if (!std::filesystem::create_directories(output_path, ec)) {
                 std::cerr << "Error: Could not create output directory: " << args.output_dir << std::endl;
                 std::cerr << "  " << ec.message() << std::endl;
+                std::cerr << "Warning: Check parent directory permissions and disk space" << std::endl;
                 return 1;
             }
             LOG_DEBUG("Created output directory: " << args.output_dir);
         } else if (!std::filesystem::is_directory(output_path)) {
             std::cerr << "Error: Output path exists but is not a directory: " << args.output_dir << std::endl;
+            std::cerr << "Warning: Output path must be a directory for frame output" << std::endl;
             return 1;
+        } else {
+            // Check if directory is writable
+            std::filesystem::path test_file = output_path / ".lotio_write_test";
+            std::ofstream test_stream(test_file);
+            if (!test_stream.is_open()) {
+                std::cerr << "Warning: Output directory may not be writable: " << args.output_dir << std::endl;
+                std::cerr << "Warning: Check directory permissions" << std::endl;
+            } else {
+                test_stream.close();
+                std::filesystem::remove(test_file);
+            }
         }
     } else {
         // In stream mode, output_dir is optional (can be "-")
