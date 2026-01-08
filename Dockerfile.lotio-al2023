@@ -125,7 +125,7 @@ FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
 # Set environment variables (works for both arm64 and x86_64)
 # AL2023 uses /usr/lib64 for x86_64 and /usr/lib64 for arm64 (both use lib64)
-ENV LD_LIBRARY_PATH=/opt/skia/lib:/usr/lib64
+# ICU libraries will be added to LD_LIBRARY_PATH after copying them
 ENV PATH=/usr/local/bin:${PATH}
 
 # Install runtime libraries using dnf (AL2023 package manager)
@@ -156,6 +156,25 @@ RUN echo "[BUILD] Verifying Skia headers..." && \
     ls -la /opt/skia/ && \
     test -d /opt/skia/include && test -d /opt/skia/modules && \
     echo "[BUILD] Skia headers verified"
+
+# Copy ICU 70 libraries from builder (Ubuntu 22.04) since lotio was built against ICU 70
+# AL2023 has a different ICU version, so we need to use the same version lotio was linked against
+ARG TARGETPLATFORM
+RUN mkdir -p /opt/icu/lib
+
+# Copy ICU libraries from builder based on architecture
+RUN --mount=type=bind,from=lotio-builder,source=/usr/lib,target=/mnt/source-lib \
+    ARCH=$(echo "$TARGETPLATFORM" | cut -d'/' -f2) && \
+    if [ "$ARCH" = "arm64" ]; then \
+        cp -f /mnt/source-lib/aarch64-linux-gnu/libicu*.so* /opt/icu/lib/ 2>/dev/null || true; \
+    elif [ "$ARCH" = "amd64" ]; then \
+        cp -f /mnt/source-lib/x86_64-linux-gnu/libicu*.so* /opt/icu/lib/ 2>/dev/null || true; \
+    fi && \
+    echo "[BUILD] ICU libraries copied" && \
+    ls -la /opt/icu/lib/ || echo "[BUILD] Note: ICU libraries may not be present in builder"
+
+# Set LD_LIBRARY_PATH to include ICU libraries
+ENV LD_LIBRARY_PATH=/opt/skia/lib:/opt/icu/lib:/usr/lib64
 
 # Copy lotio binary
 COPY --from=lotio-builder /build/lotio /usr/local/bin/lotio
