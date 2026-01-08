@@ -19,7 +19,7 @@ void printUsage(const char* program_name) {
     std::cerr << "                          pixel-perfect: Most accurate, accounts for anti-aliasing" << std::endl;
     std::cerr << "  --version:              Print version information and exit" << std::endl;
     std::cerr << "  --help, -h:             Show this help message" << std::endl;
-    std::cerr << "  fps:                    Frames per second for output (default: 25)" << std::endl;
+    std::cerr << "  fps:                    Frames per second for output (default: animation fps or 30)" << std::endl;
     std::cerr << "" << std::endl;
     std::cerr << "When --stream is used, output_dir can be '-' or any value (ignored)." << std::endl;
 }
@@ -98,6 +98,7 @@ int parseArguments(int argc, char* argv[], Arguments& args) {
                 // Try to parse as fps
                 try {
                     args.fps = std::stof(arg);
+                    args.fps_explicitly_set = true;  // Mark fps as explicitly provided
                 } catch (...) {
                     std::cerr << "Error: Invalid fps value: " << arg << std::endl;
                     return 1;

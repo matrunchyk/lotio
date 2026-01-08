@@ -235,7 +235,6 @@ int main(int argc, char* argv[]) {
     
     std::string inputJson = argv[1];
     std::string outputDir = argv[2];
-    int fps = (argc > 3) ? std::stoi(argv[3]) : 25;
     
     // Setup animation with custom text padding and measurement mode
     AnimationSetupResult result = setupAndCreateAnimation(
@@ -254,6 +253,15 @@ int main(int argc, char* argv[]) {
     double duration = result.animation->duration();
     int width = static_cast<int>(result.animation->size().width());
     int height = static_cast<int>(result.animation->size().height());
+    
+    // Get fps: use provided value, or animation fps, or fallback to 30
+    float fps;
+    if (argc > 3) {
+        fps = std::stof(argv[3]);
+    } else {
+        float animationFps = result.animation->fps();
+        fps = (animationFps > 0.0f) ? animationFps : 30.0f;
+    }
     
     // Render frames
     int totalFrames = static_cast<int>(duration * fps);

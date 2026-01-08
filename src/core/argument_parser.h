@@ -12,7 +12,8 @@ struct Arguments {
     std::string input_file;
     std::string output_dir;
     std::string layer_overrides_file;
-    float fps = 25.0f;
+    float fps = 30.0f;
+    bool fps_explicitly_set = false;  // Track if fps was provided on command line
     float text_padding = 0.97f;  // Text padding factor (0.0-1.0), default 0.97 (3% padding)
     TextMeasurementMode text_measurement_mode = TextMeasurementMode::ACCURATE;  // Text measurement mode
 };

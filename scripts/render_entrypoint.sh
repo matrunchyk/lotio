@@ -99,7 +99,7 @@ done
 
 # Default fps if not found
 if [ -z "$FPS" ]; then
-    FPS=25
+    FPS=30
 fi
 
 # Ensure --stream is present for video encoding (required for ffmpeg pipe)

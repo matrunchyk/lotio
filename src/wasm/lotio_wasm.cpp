@@ -641,7 +641,7 @@ struct WasmAnimationContext {
     float fps;
     sk_sp<CustomFontMgr> fontMgr;
     
-    WasmAnimationContext() : width(0), height(0), duration(0.0f), fps(25.0f) {
+    WasmAnimationContext() : width(0), height(0), duration(0.0f), fps(30.0f) {
         // Create custom font manager
         fontMgr = sk_make_sp<CustomFontMgr>();
     }

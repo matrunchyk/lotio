@@ -47,7 +47,14 @@ int main(int argc, char* argv[]) {
     RenderConfig render_config;
     render_config.stream_mode = args.stream_mode;
     render_config.output_dir = args.output_dir;
-    render_config.fps = args.fps;
+    
+    // Use animation fps if not explicitly provided, with fallback to 30
+    if (!args.fps_explicitly_set) {
+        float animation_fps = setup_result.animation->fps();
+        render_config.fps = (animation_fps > 0.0f) ? animation_fps : 30.0f;
+    } else {
+        render_config.fps = args.fps;
+    }
 
     // Render all frames
     return renderFrames(

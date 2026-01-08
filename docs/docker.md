@@ -186,7 +186,7 @@ All standard lotio arguments are supported:
 - `--help, -h` - Show help message
 - `<input.json>` - Input Lottie animation file (required)
 - `<output_dir>` - Output directory (use `-` for streaming)
-- `[fps]` - Frames per second (default: 25)
+- `[fps]` - Frames per second (default: animation fps or 30)
 
 **Note:** Frames are output as PNG by default. No format selection is needed.
 

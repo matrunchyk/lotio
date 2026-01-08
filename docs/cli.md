@@ -26,7 +26,7 @@ lotio [OPTIONS] <input.json> <output_dir> [fps]
 
 - `input.json` - Path to Lottie animation JSON file (required)
 - `output_dir` - Directory to save rendered frames (required)
-- `fps` - Frames per second for output (optional, default: 25)
+- `fps` - Frames per second for output (optional, default: animation fps or 30)
 
 ### Options
 

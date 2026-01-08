@@ -10,7 +10,7 @@
 struct RenderConfig {
     bool stream_mode = false;
     std::string output_dir;
-    float fps = 25.0f;
+    float fps = 30.0f;
 };
 
 // Render all frames of the animation
