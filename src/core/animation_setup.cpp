@@ -11,6 +11,102 @@
 #include <fstream>
 #include <filesystem>
 
+// Logging wrapper for ResourceProvider to debug image loading
+class LoggingResourceProvider : public skresources::ResourceProvider {
+public:
+    LoggingResourceProvider(sk_sp<skresources::ResourceProvider> wrapped, const std::string& baseDir)
+        : fWrapped(std::move(wrapped)), fBaseDir(baseDir) {}
+
+    sk_sp<skresources::ImageAsset> loadImageAsset(const char path[],
+                                                   const char name[],
+                                                   const char id[]) const override {
+        // Log the image loading attempt
+        std::string pathStr = path ? path : "";
+        std::string nameStr = name ? name : "";
+        std::string idStr = id ? id : "";
+        
+        LOG_DEBUG("[SKIA] FileResourceProvider.loadImageAsset called");
+        LOG_DEBUG("[SKIA]   Asset ID: " << idStr);
+        LOG_DEBUG("[SKIA]   Path component: " << pathStr);
+        LOG_DEBUG("[SKIA]   Name component: " << nameStr);
+        
+        // Construct the full path that Skia will try to resolve
+        std::string fullPath;
+        if (!pathStr.empty() && !nameStr.empty()) {
+            // Skia combines path + name
+            fullPath = pathStr + nameStr;
+        } else if (!nameStr.empty()) {
+            fullPath = nameStr;
+        } else if (!pathStr.empty()) {
+            fullPath = pathStr;
+        }
+        
+        // Resolve relative to base directory
+        std::filesystem::path resolvedPath;
+        if (!fullPath.empty()) {
+            if (std::filesystem::path(fullPath).is_absolute()) {
+                resolvedPath = fullPath;
+            } else {
+                resolvedPath = std::filesystem::path(fBaseDir) / fullPath;
+            }
+            
+            std::string resolvedPathStr = resolvedPath.string();
+            LOG_DEBUG("[SKIA]   Resolved full path: " << resolvedPathStr);
+            
+            // Check if file exists
+            if (std::filesystem::exists(resolvedPath)) {
+                if (std::filesystem::is_regular_file(resolvedPath)) {
+                    auto fileSize = std::filesystem::file_size(resolvedPath);
+                    LOG_DEBUG("[SKIA]   ✓ File exists: " << resolvedPathStr << " (" << fileSize << " bytes)");
+                } else {
+                    LOG_CERR("[SKIA]   ✗ Path exists but is not a regular file: " << resolvedPathStr) << std::endl;
+                }
+            } else {
+                LOG_CERR("[SKIA]   ✗ File NOT FOUND: " << resolvedPathStr) << std::endl;
+            }
+        } else {
+            LOG_CERR("[SKIA]   ✗ Empty path/name - cannot resolve image path") << std::endl;
+        }
+        
+        // Call the wrapped provider
+        auto result = fWrapped->loadImageAsset(path, name, id);
+        
+        // Log the result
+        if (result) {
+            LOG_DEBUG("[SKIA]   ✓ Image asset loaded successfully");
+            // Try to get image info if possible
+            if (auto image = result->getFrame(0)) {
+                LOG_DEBUG("[SKIA]   ✓ Image decoded: " << image->width() << "x" << image->height());
+            } else {
+                LOG_DEBUG("[SKIA]   ⚠ Image asset created but getFrame(0) returned null");
+            }
+        } else {
+            LOG_CERR("[SKIA]   ✗ Image asset loading FAILED - loadImageAsset returned null") << std::endl;
+        }
+        
+        return result;
+    }
+
+    sk_sp<SkTypeface> loadTypeface(const char name[],
+                                   const char url[]) const override {
+        // Log font loading for completeness
+        if (name || url) {
+            LOG_DEBUG("[SKIA] FileResourceProvider.loadTypeface called: name=" << (name ? name : "") << ", url=" << (url ? url : ""));
+        }
+        auto result = fWrapped->loadTypeface(name, url);
+        if (result) {
+            LOG_DEBUG("[SKIA]   ✓ Font typeface loaded successfully");
+        } else {
+            LOG_DEBUG("[SKIA]   ✗ Font typeface loading returned nullptr");
+        }
+        return result;
+    }
+
+private:
+    sk_sp<skresources::ResourceProvider> fWrapped;
+    std::string fBaseDir;
+};
+
 // Read JSON file and apply layer overrides
 static std::string readAndProcessJson(
     const std::string& input_file,
@@ -115,9 +211,15 @@ AnimationSetupResult setupAndCreateAnimation(
         } else {
             LOG_DEBUG("FileResourceProvider created successfully with kPreDecode strategy");
             LOG_DEBUG("Images will be pre-decoded when loaded from: " << baseDirStr);
-            auto cachingRP = skresources::CachingResourceProvider::Make(std::move(fileRP));
+            
+            // Wrap FileResourceProvider with logging wrapper for debugging
+            auto loggingRP = sk_make_sp<LoggingResourceProvider>(std::move(fileRP), baseDirStr);
+            LOG_DEBUG("LoggingResourceProvider wrapper created - will log all image loading attempts");
+            
+            // Wrap logging provider with caching
+            auto cachingRP = skresources::CachingResourceProvider::Make(std::move(loggingRP));
             result.builder.setResourceProvider(std::move(cachingRP));
-            LOG_DEBUG("ResourceProvider set (FileResourceProvider + CachingResourceProvider)");
+            LOG_DEBUG("ResourceProvider set (FileResourceProvider + LoggingResourceProvider + CachingResourceProvider)");
             LOG_DEBUG("Image loading ready - resources will be cached for performance");
         }
     }

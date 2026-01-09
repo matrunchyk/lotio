@@ -8,13 +8,13 @@ set -e
 #
 # Arguments:
 #   frames_folder    Path to folder containing PNG frames
-#   --fps, -f        Frame rate (default: 25)
+#   --fps, -f        Frame rate (default: 30)
 #   --output, -o     Output video file (default: frames_folder.mov)
 #   --pattern, -p    Frame filename pattern (default: frame_%04d.png)
 #   --help, -h       Show this help message
 
 FRAMES_FOLDER=""
-FPS=25
+FPS=30
 OUTPUT_VIDEO=""
 PATTERN="frame_%04d.png"
 
@@ -42,7 +42,7 @@ while [[ $# -gt 0 ]]; do
             echo "  frames_folder              Path to folder containing PNG frames"
             echo ""
             echo "Options:"
-            echo "  --fps, -f FPS              Frame rate (default: 25)"
+            echo "  --fps, -f FPS              Frame rate (default: 30)"
             echo "  --output, -o FILE          Output video file (default: <frames_folder>.mov)"
             echo "  --pattern, -p PATTERN      Frame filename pattern (default: frame_%04d.png)"
             echo "                             Use ffmpeg pattern syntax (e.g., frame_%04d.png, img_%03d.png)"

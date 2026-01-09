@@ -1,7 +1,12 @@
 {
-  "imagePaths": {
-    "image_0": "images_folder/img_0.png",
-    "image_1": "images_folder/img_1.png"
+  "imageLayers": {
+    "image_0": {
+      "filePath": "images_folder/",
+      "fileName": "img_0.png"
+    },
+    "image_1": {
+      "filePath": "images_folder/",
+      "fileName": "img_1.png"
+    }
   }
 }
-

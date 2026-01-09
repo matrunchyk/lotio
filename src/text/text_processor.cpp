@@ -26,11 +26,21 @@ std::string processLayerOverrides(
     
     LOG_DEBUG("Loading layer overrides from: " << layer_overrides_file);
     auto layerOverrides = parseLayerOverrides(layer_overrides_file);
-    auto imagePaths = parseImagePaths(layer_overrides_file);
+    auto imageLayers = parseImageLayers(layer_overrides_file);
     
-    // Process image path overrides first (before text processing)
-    if (!imagePaths.empty()) {
-        LOG_DEBUG("Found " << imagePaths.size() << " image path overrides");
+    // Get the layer-overrides file's parent directory for resolving relative image paths
+    std::filesystem::path overridesPath(layer_overrides_file);
+    std::filesystem::path overridesBaseDir = overridesPath.has_parent_path() 
+        ? overridesPath.parent_path() 
+        : std::filesystem::path(".");
+    std::error_code ec;
+    std::filesystem::path absOverridesBaseDir = std::filesystem::absolute(overridesBaseDir, ec);
+    const std::string overridesBaseDirStr = (ec ? overridesBaseDir.string() : absOverridesBaseDir.string());
+    LOG_DEBUG("Layer-overrides base directory for relative image paths: " << overridesBaseDirStr);
+    
+    // Process image layer overrides first (before text processing)
+    if (!imageLayers.empty()) {
+        LOG_DEBUG("Found " << imageLayers.size() << " image layer overrides");
         
         // Find assets array in JSON
         size_t assetsPos = json_data.find("\"assets\"");
@@ -57,35 +67,59 @@ std::string processLayerOverrides(
                     std::string modifiedAssets = assetsJson;
                     
                     // Process each asset
-                    for (const auto& [assetId, imagePath] : imagePaths) {
-                        LOG_DEBUG("Processing image override for asset ID: " << assetId << " -> " << imagePath);
+                    for (const auto& [assetId, imageConfig] : imageLayers) {
+                        LOG_DEBUG("Processing image override for asset ID: " << assetId);
                         
-                        // Validate image path exists
-                        if (imagePath.empty()) {
-                            LOG_CERR("[WARNING] Empty image path provided for asset ID: " << assetId) << std::endl;
-                            continue;
-                        }
+                        // Determine the full path from filePath and fileName
+                        std::string resolvedImagePath;
+                        std::string dir;
+                        std::string filename;
                         
-                        // Check if path exists (if it's an absolute or relative file path)
-                        std::filesystem::path pathObj(imagePath);
-                        // Check if path is a data URI or URL (C++17 compatible - no starts_with)
-                        bool isDataUri = (imagePath.length() >= 5 && imagePath.substr(0, 5) == "data:");
-                        bool isHttpUrl = (imagePath.length() >= 7 && imagePath.substr(0, 7) == "http://");
-                        bool isHttpsUrl = (imagePath.length() >= 8 && imagePath.substr(0, 8) == "https://");
-                        if (!pathObj.empty() && !isDataUri && !isHttpUrl && !isHttpsUrl) {
-                            if (std::filesystem::exists(pathObj)) {
-                                LOG_DEBUG("Image file exists: " << imagePath);
-                                if (std::filesystem::is_regular_file(pathObj)) {
-                                    auto fileSize = std::filesystem::file_size(pathObj);
-                                    LOG_DEBUG("Image file size: " << fileSize << " bytes");
-                                } else {
-                                    LOG_CERR("[WARNING] Image path is not a regular file: " << imagePath) << std::endl;
-                                }
+                        if (imageConfig.filePath.empty() && !imageConfig.fileName.empty()) {
+                            // filePath is empty string, fileName contains full path
+                            resolvedImagePath = imageConfig.fileName;
+                            std::filesystem::path fullPathObj(resolvedImagePath);
+                            if (fullPathObj.is_absolute()) {
+                                dir = fullPathObj.parent_path().string();
+                                filename = fullPathObj.filename().string();
                             } else {
-                                LOG_CERR("[WARNING] Image file does not exist: " << imagePath << " (will attempt to load at runtime)") << std::endl;
+                                // Relative path - keep it relative, split into dir and filename
+                                size_t lastSlash = imageConfig.fileName.find_last_of("/\\");
+                                dir = (lastSlash != std::string::npos) ? imageConfig.fileName.substr(0, lastSlash + 1) : "";
+                                filename = (lastSlash != std::string::npos) ? imageConfig.fileName.substr(lastSlash + 1) : imageConfig.fileName;
                             }
+                        } else if (!imageConfig.filePath.empty() && !imageConfig.fileName.empty()) {
+                            // Both specified, combine them
+                            std::filesystem::path pathObj(imageConfig.filePath);
+                            if (pathObj.is_absolute()) {
+                                // Absolute path - use as-is
+                                dir = imageConfig.filePath;
+                                if (dir.back() != '/' && dir.back() != '\\') {
+                                    dir += "/";
+                                }
+                                filename = imageConfig.fileName;
+                                resolvedImagePath = dir + filename;
+                            } else {
+                                // Relative path - keep it relative (don't convert to absolute)
+                                // Skia will resolve it relative to the animation file's directory
+                                dir = imageConfig.filePath;
+                                if (!dir.empty() && dir.back() != '/' && dir.back() != '\\') {
+                                    dir += "/";
+                                }
+                                filename = imageConfig.fileName;
+                                resolvedImagePath = dir + filename;
+                            }
+                        } else if (!imageConfig.filePath.empty() && imageConfig.fileName.empty()) {
+                            // Only filePath specified - use default fileName from assets[].p
+                            dir = imageConfig.filePath;
+                            if (!dir.empty() && dir.back() != '/' && dir.back() != '\\') {
+                                dir += "/";
+                            }
+                            // filename will be extracted from assets[].p below
                         } else {
-                            LOG_DEBUG("Image path appears to be data URI or URL: " << (imagePath.length() > 50 ? imagePath.substr(0, 50) + "..." : imagePath));
+                            // Both empty - skip (shouldn't happen due to validation)
+                            LOG_CERR("[WARNING] Both filePath and fileName are empty for asset ID: " << assetId) << std::endl;
+                            continue;
                         }
                         
                         // Find asset by ID
@@ -114,12 +148,18 @@ std::string processLayerOverrides(
                                     std::string assetObj = modifiedAssets.substr(objStart, objEnd - objStart + 1);
                                     LOG_DEBUG("Extracted asset object for ID " << assetId << " (length: " << (objEnd - objStart + 1) << " bytes)");
                                     
-                                    // Split image path into u (directory) and p (filename)
-                                    std::filesystem::path pathObj(imagePath);
-                                    std::string dir = pathObj.parent_path().string();
-                                    std::string filename = pathObj.filename().string();
-                                    
-                                    LOG_DEBUG("Split image path - directory: \"" << dir << "\", filename: \"" << filename << "\"");
+                                    // If fileName is empty, extract it from assets[].p
+                                    if (filename.empty()) {
+                                        std::regex pPattern("\"p\"\\s*:\\s*\"([^\"]+)\"");
+                                        std::smatch pMatch;
+                                        if (std::regex_search(assetObj, pMatch, pPattern)) {
+                                            filename = pMatch[1].str();
+                                            LOG_DEBUG("Using default fileName from assets[].p: " << filename);
+                                        } else {
+                                            LOG_CERR("[WARNING] Could not find \"p\" property for asset ID: " << assetId << ", skipping") << std::endl;
+                                            continue;
+                                        }
+                                    }
                                     
                                     // Normalize directory path (ensure it ends with / for relative paths)
                                     if (!dir.empty() && dir.back() != '/' && dir.back() != '\\') {
@@ -222,7 +262,7 @@ std::string processLayerOverrides(
         }
         
         // Determine text to use
-        std::string textToUse = config.textValue.empty() ? fontInfo.text : config.textValue;
+        std::string textToUse = config.value.empty() ? fontInfo.text : config.value;
         
         if (textToUse.empty()) {
             LOG_DEBUG("Warning: No text value for layer " << layerName);
@@ -252,29 +292,33 @@ std::string processLayerOverrides(
         LOG_DEBUG("  Target width: " << targetWidth);
         LOG_DEBUG("  Min size: " << config.minSize << ", Max size: " << config.maxSize);
         
-        // Apply padding to target width to prevent text from touching edges
-        // textPadding: 0.97 means 97% of target width (3% padding, 1.5% per side)
-        float paddedTargetWidth = targetWidth * textPadding;
-        LOG_DEBUG("  Padded target width: " << paddedTargetWidth << " (" << (textPadding * 100.0f) << "% of " << targetWidth << ")");
-        
-        // Calculate optimal font size
-        float optimalSize = calculateOptimalFontSize(
-            tempFontMgr.get(),
-            fontInfo,
-            config,
-            textToUse,
-            paddedTargetWidth,
-            textMeasurementMode
-        );
-        
+        // If minSize and maxSize are not specified, no auto-fit - just use original size or update text value
+        float optimalSize = fontInfo.size;
         float finalWidth = 0.0f;
-        if (optimalSize >= 0) {
-            finalWidth = measureTextWidth(tempFontMgr.get(), fontInfo.family, fontInfo.style,
-                                         fontInfo.name, optimalSize, textToUse, textMeasurementMode);
-            LOG_DEBUG("  Optimal size: " << optimalSize << ", final width: " << finalWidth);
-        }
         
-        if (optimalSize < 0) {
+        if (config.minSize > 0 && config.maxSize > 0) {
+            // Apply padding to target width to prevent text from touching edges
+            // textPadding: 0.97 means 97% of target width (3% padding, 1.5% per side)
+            float paddedTargetWidth = targetWidth * textPadding;
+            LOG_DEBUG("  Padded target width: " << paddedTargetWidth << " (" << (textPadding * 100.0f) << "% of " << targetWidth << ")");
+            
+            // Calculate optimal font size
+            optimalSize = calculateOptimalFontSize(
+                tempFontMgr.get(),
+                fontInfo,
+                config,
+                textToUse,
+                paddedTargetWidth,
+                textMeasurementMode
+            );
+            
+            if (optimalSize >= 0) {
+                finalWidth = measureTextWidth(tempFontMgr.get(), fontInfo.family, fontInfo.style,
+                                             fontInfo.name, optimalSize, textToUse, textMeasurementMode);
+                LOG_DEBUG("  Optimal size: " << optimalSize << ", final width: " << finalWidth);
+            }
+            
+            if (optimalSize < 0) {
             // Text doesn't fit even at min size, use fallback
             float minWidth = measureTextWidth(tempFontMgr.get(), fontInfo.family, fontInfo.style,
                                              fontInfo.name, config.minSize, textToUse, textMeasurementMode);
@@ -327,6 +371,12 @@ std::string processLayerOverrides(
                                              optimalSize, textToUse, textMeasurementMode);
                 LOG_DEBUG("  Fallback text optimal size: " << optimalSize << " (width: " << finalWidth << " / " << paddedTargetWidth << ")");
             }
+            }
+        } else {
+            // No auto-fit, just measure at original size
+            finalWidth = currentWidth;
+            optimalSize = fontInfo.size;
+            LOG_DEBUG("  No auto-fit (minSize/maxSize not specified), using original size: " << optimalSize);
         }
         
         // Store original and new text widths for position adjustment

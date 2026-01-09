@@ -228,22 +228,75 @@ void modifyTextLayerInJson(
     }
     
     // Find the "t" object (text data)
-    size_t searchWindow = std::min(layerNamePos + 5000, json.length());
+    // Try multiple "t" occurrences - skip numeric "t" values (like "t": 110 in keyframes)
+    // We want the "t" object that contains text data: "t": { "d": { "k": [ { "s": {
+    size_t searchWindow = std::min(layerNamePos + 10000, json.length());
     size_t textDataPos = json.find("\"t\"", layerNamePos);
-    if (textDataPos == std::string::npos || textDataPos > searchWindow) {
+    size_t tObjStart = std::string::npos;
+    size_t dPos = std::string::npos;
+    
+    while (textDataPos != std::string::npos && textDataPos < searchWindow) {
+        // Check what follows "t" - if it's a colon followed by a number, skip it (it's a keyframe time)
+        size_t colonPos = json.find(':', textDataPos);
+        if (colonPos != std::string::npos && colonPos < textDataPos + 10) {
+            // Skip whitespace after colon (including newlines)
+            size_t valueStart = colonPos + 1;
+            while (valueStart < json.length() && (json[valueStart] == ' ' || json[valueStart] == '\t' || json[valueStart] == '\n' || json[valueStart] == '\r')) {
+                valueStart++;
+            }
+            
+            // If followed by a digit, this is a numeric "t" (keyframe time), skip it
+            if (valueStart < json.length() && std::isdigit(json[valueStart])) {
+                textDataPos = json.find("\"t\"", textDataPos + 1);
+                continue;
+            }
+            
+            // If followed by '{', this is the text data object
+            if (valueStart < json.length() && json[valueStart] == '{') {
+                // Verify it contains "d" nearby (text data structure)
+                // "d" should be within 200 chars of the opening brace
+                size_t bracePos = valueStart;
+                size_t checkEnd = std::min(bracePos + 200, json.length());
+                size_t dCheckPos = json.find("\"d\"", bracePos);
+                if (dCheckPos != std::string::npos && dCheckPos < checkEnd) {
+                    // Found the text data object - store positions
+                    tObjStart = bracePos;
+                    dPos = dCheckPos;
+                    break;
+                }
+            }
+        }
+        
+        // Try next occurrence
+        textDataPos = json.find("\"t\"", textDataPos + 1);
+    }
+    
+    if (textDataPos == std::string::npos || textDataPos >= searchWindow || tObjStart == std::string::npos || dPos == std::string::npos) {
         if (g_debug_mode) {
-            LOG_COUT("[DEBUG] Warning: Could not find \"t\" object for layer: " << layerName) << std::endl;
+            LOG_COUT("[DEBUG] Warning: Could not find \"t\" object with \"d\" for layer: " << layerName) << std::endl;
         }
         return;
     }
     
-    // Find the "s" object (text style) - it should be in t.d.k[0].s
-    // We need to find "s" that's inside the structure: "t": { "d": { "k": [ { "s": {
-    // Look for "d" first, then "k", then find "s" inside the first array element
-    size_t dPos = json.find("\"d\"", textDataPos);
-    if (dPos == std::string::npos || dPos > textDataPos + 500) {
+    // Verify that "d" is followed by ": {" (it's the data object, not some other "d" field)
+    size_t dColonPos = json.find(':', dPos);
+    if (dColonPos == std::string::npos || dColonPos > dPos + 10) {
         if (g_debug_mode) {
-            LOG_COUT("[DEBUG] Warning: Could not find \"d\" object for layer: " << layerName) << std::endl;
+            LOG_COUT("[DEBUG] Warning: \"d\" not followed by colon for layer: " << layerName) << std::endl;
+        }
+        return;
+    }
+    
+    // Skip whitespace after colon
+    size_t dValueStart = dColonPos + 1;
+    while (dValueStart < json.length() && (json[dValueStart] == ' ' || json[dValueStart] == '\t' || json[dValueStart] == '\n' || json[dValueStart] == '\r')) {
+        dValueStart++;
+    }
+    
+    // Verify it's followed by '{'
+    if (dValueStart >= json.length() || json[dValueStart] != '{') {
+        if (g_debug_mode) {
+            LOG_COUT("[DEBUG] Warning: \"d\" not followed by object for layer: " << layerName) << std::endl;
         }
         return;
     }

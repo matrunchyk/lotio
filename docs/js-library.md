@@ -410,6 +410,12 @@ new Lotio(options)
 - `fps` (number): Frames per second (default: 30)
 - `animation` (Object|string): Lottie animation JSON (object or stringified)
 - `layerOverrides` (Object|string, optional): Layer overrides JSON (for text and image overrides)
+  - Can be a JavaScript object or JSON string
+  - Supports `textLayers` and `imageLayers` sections
+  - **Image Layers**: In browser/WebAssembly context, `imageLayers` supports:
+    - **Data URIs**: `"data:image/png;base64,..."` (recommended for browser use) - use empty `filePath` and full path in `fileName`
+    - **Relative paths**: Resolved by your application before passing to Lotio
+    - **URLs are NOT supported**: HTTP (`http://`) and HTTPS (`https://`) URLs are not supported
 - `textPadding` (number, optional): Text padding factor (0.0-1.0, default: 0.97 = 3% padding)
 - `textMeasurementMode` (string, optional): Text measurement mode: `'fast'` | `'accurate'` | `'pixel-perfect'` (default: `'accurate'`)
 - `wasmPath` (string): Path to `lotio.wasm` file (default: `'./lotio.wasm'`)
@@ -523,7 +529,19 @@ animation.on('frame', () => {
 ### With Fonts and Layer Overrides
 
 ```javascript
+// Convert image to data URI (recommended for browser)
+async function imageToDataURI(url) {
+  const response = await fetch(url);
+  const blob = await response.blob();
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+}
+
 const fontData = new Uint8Array(await fontResponse.arrayBuffer());
+const imageDataURI = await imageToDataURI('./images/logo.png');
 
 const animation = new Lotio({
   fonts: [{ name: 'OpenSans-Bold', data: fontData }],
@@ -533,18 +551,29 @@ const animation = new Lotio({
       "Patient_Name": {
         minSize: 20,
         maxSize: 100,
-        textBoxWidth: 500
+        textBoxWidth: 500,
+        value: "John Doe"
       }
     },
-    textValues: {
-      "Patient_Name": "John Doe"
-    },
-    imagePaths: {
-      "image_0": "images/custom_image.png"
+    imageLayers: {
+      "image_0": {
+        filePath: "",  // Empty for data URI
+        fileName: imageDataURI  // Data URI (recommended for browser)
+      },
+      "image_1": {
+        filePath: "",
+        fileName: "data:image/png;base64,..."  // Direct data URI
+      }
     }
   }
 });
 ```
+
+**Note on Image Layers in Browser:**
+- **Data URIs are recommended**: Convert images to data URIs before passing to Lotio
+  - Use empty `filePath` and put the full data URI in `fileName`
+- **Relative paths**: Must be resolved by your application (Lotio doesn't resolve file paths in browser context)
+- **URLs are NOT supported**: HTTP/HTTPS URLs are not supported in `imageLayers`
 
 ### With Custom Text Padding and Measurement Mode
 

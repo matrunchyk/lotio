@@ -89,50 +89,13 @@ static std::map<std::string, LayerOverride> parseLayerOverridesFromString(const 
                         config.maxSize = extractJsonFloat(layerConfig, "maxSize");
                         config.fallbackText = extractJsonString(layerConfig, "fallbackText");
                         config.textBoxWidth = extractJsonFloat(layerConfig, "textBoxWidth");
-                        config.textValue = "";
-                        config.imagePath = "";
+                        config.value = extractJsonString(layerConfig, "value");
+                        
+                        // Handle \u0003 (ETX) - convert to \r for Lottie newlines
+                        replaceAllInPlace(config.value, "\\u0003", "\r");
+                        replaceCharInPlace(config.value, '\x03', '\r');
                         
                         configs[layerName] = config;
-                    }
-                }
-            }
-        }
-    }
-    
-    // Extract textValues section
-    size_t textValuesPos = json.find("\"textValues\"");
-    if (textValuesPos != std::string::npos) {
-        size_t openBrace = json.find('{', textValuesPos);
-        if (openBrace != std::string::npos) {
-            int braceCount = 0;
-            size_t closeBrace = openBrace;
-            for (size_t i = openBrace; i < json.length(); i++) {
-                if (json[i] == '{') braceCount++;
-                if (json[i] == '}') braceCount--;
-                if (braceCount == 0) {
-                    closeBrace = i;
-                    break;
-                }
-            }
-            
-            if (closeBrace > openBrace) {
-                std::string valuesJson = json.substr(openBrace + 1, closeBrace - openBrace - 1);
-                
-                std::regex valuePattern("\"([^\"]+)\"\\s*:\\s*\"([^\"]+)\"");
-                std::sregex_iterator iter(valuesJson.begin(), valuesJson.end(), valuePattern);
-                std::sregex_iterator end;
-                
-                for (; iter != end; ++iter) {
-                    std::smatch match = *iter;
-                    std::string layerName = match[1].str();
-                    std::string textValue = match[2].str();
-                    
-                    // Handle \u0003 (ETX) - convert to \r for Lottie newlines
-                    replaceAllInPlace(textValue, "\\u0003", "\r");
-                    replaceCharInPlace(textValue, '\x03', '\r');
-                    
-                    if (configs.find(layerName) != configs.end()) {
-                        configs[layerName].textValue = textValue;
                     }
                 }
             }
@@ -142,13 +105,13 @@ static std::map<std::string, LayerOverride> parseLayerOverridesFromString(const 
     return configs;
 }
 
-// Helper to parse image paths from string (for WASM)
-static std::map<std::string, std::string> parseImagePathsFromString(const std::string& json) {
-    std::map<std::string, std::string> imagePaths;
+// Helper to parse image layers from string (for WASM)
+static std::map<std::string, ImageLayerOverride> parseImageLayersFromString(const std::string& json) {
+    std::map<std::string, ImageLayerOverride> imageLayers;
     
-    size_t imagePathsPos = json.find("\"imagePaths\"");
-    if (imagePathsPos != std::string::npos) {
-        size_t openBrace = json.find('{', imagePathsPos);
+    size_t imageLayersPos = json.find("\"imageLayers\"");
+    if (imageLayersPos != std::string::npos) {
+        size_t openBrace = json.find('{', imageLayersPos);
         if (openBrace != std::string::npos) {
             int braceCount = 0;
             size_t closeBrace = openBrace;
@@ -162,24 +125,47 @@ static std::map<std::string, std::string> parseImagePathsFromString(const std::s
             }
             
             if (closeBrace > openBrace) {
-                std::string pathsJson = json.substr(openBrace + 1, closeBrace - openBrace - 1);
+                std::string layersJson = json.substr(openBrace + 1, closeBrace - openBrace - 1);
                 
-                std::regex pathPattern("\"([^\"]+)\"\\s*:\\s*\"([^\"]+)\"");
-                std::sregex_iterator iter(pathsJson.begin(), pathsJson.end(), pathPattern);
+                // Find each image layer config - each layer is "asset_id": { ... }
+                std::regex layerPattern("\"([^\"]+)\"\\s*:\\s*\\{");
+                std::sregex_iterator iter(layersJson.begin(), layersJson.end(), layerPattern);
                 std::sregex_iterator end;
                 
                 for (; iter != end; ++iter) {
                     std::smatch match = *iter;
                     std::string assetId = match[1].str();
-                    std::string imagePath = match[2].str();
+                    size_t layerStart = match.position(0) + match.length(0) - 1; // Position of opening brace
                     
-                    imagePaths[assetId] = imagePath;
+                    // Find the matching closing brace for this layer
+                    int layerBraceCount = 0;
+                    size_t layerEnd = layerStart;
+                    for (size_t i = layerStart; i < layersJson.length(); i++) {
+                        if (layersJson[i] == '{') layerBraceCount++;
+                        if (layersJson[i] == '}') layerBraceCount--;
+                        if (layerBraceCount == 0) {
+                            layerEnd = i;
+                            break;
+                        }
+                    }
+                    
+                    if (layerEnd > layerStart) {
+                        std::string layerConfig = layersJson.substr(layerStart + 1, layerEnd - layerStart - 1);
+                        
+                        ImageLayerOverride config;
+                        config.filePath = extractJsonString(layerConfig, "filePath");
+                        config.fileName = extractJsonString(layerConfig, "fileName");
+                        
+                        if (!assetId.empty()) {
+                            imageLayers[assetId] = config;
+                        }
+                    }
                 }
             }
         }
     }
     
-    return imagePaths;
+    return imageLayers;
 }
 
 // Helper to process layer overrides from string (for WASM)
@@ -189,10 +175,10 @@ static void processLayerOverridesFromString(std::string& json_data, const std::s
     }
     
     auto layerOverrides = parseLayerOverridesFromString(layer_overrides_json);
-    auto imagePaths = parseImagePathsFromString(layer_overrides_json);
+    auto imageLayers = parseImageLayersFromString(layer_overrides_json);
     
-    // Process image path overrides first
-    if (!imagePaths.empty()) {
+    // Process image layer overrides first
+    if (!imageLayers.empty()) {
         size_t assetsPos = json_data.find("\"assets\"");
         if (assetsPos != std::string::npos) {
             size_t arrayStart = json_data.find('[', assetsPos);
@@ -212,18 +198,41 @@ static void processLayerOverridesFromString(std::string& json_data, const std::s
                     std::string assetsJson = json_data.substr(arrayStart, arrayEnd - arrayStart + 1);
                     std::string modifiedAssets = assetsJson;
                     
-                    for (const auto& [assetId, imagePath] : imagePaths) {
-                        // Validate image path
-                        if (imagePath.empty()) {
+                    for (const auto& [assetId, imageConfig] : imageLayers) {
+                        EM_ASM({
+                            console.log('[DEBUG] Processing image override for asset ID:', UTF8ToString($0));
+                        }, assetId.c_str());
+                        
+                        // Determine the full path from filePath and fileName
+                        std::string dir;
+                        std::string filename;
+                        
+                        if (imageConfig.filePath.empty() && !imageConfig.fileName.empty()) {
+                            // filePath is empty string, fileName contains full path
+                            size_t lastSlash = imageConfig.fileName.find_last_of("/\\");
+                            dir = (lastSlash != std::string::npos) ? imageConfig.fileName.substr(0, lastSlash + 1) : "";
+                            filename = (lastSlash != std::string::npos) ? imageConfig.fileName.substr(lastSlash + 1) : imageConfig.fileName;
+                        } else if (!imageConfig.filePath.empty() && !imageConfig.fileName.empty()) {
+                            // Both specified
+                            dir = imageConfig.filePath;
+                            if (dir.back() != '/' && dir.back() != '\\') {
+                                dir += "/";
+                            }
+                            filename = imageConfig.fileName;
+                        } else if (!imageConfig.filePath.empty() && imageConfig.fileName.empty()) {
+                            // Only filePath specified - use default fileName from assets[].p
+                            dir = imageConfig.filePath;
+                            if (dir.back() != '/' && dir.back() != '\\') {
+                                dir += "/";
+                            }
+                            // filename will be extracted from assets[].p below
+                        } else {
+                            // Both empty - skip
                             EM_ASM({
-                                console.warn('[WARNING] Empty image path provided for asset ID:', UTF8ToString($0));
+                                console.warn('[WARNING] Both filePath and fileName are empty for asset ID:', UTF8ToString($0));
                             }, assetId.c_str());
                             continue;
                         }
-                        
-                        EM_ASM({
-                            console.log('[DEBUG] Processing image override for asset ID:', UTF8ToString($0), '->', UTF8ToString($1));
-                        }, assetId.c_str(), imagePath.c_str());
                         
                         std::string idPattern = "\"id\"\\s*:\\s*\"" + assetId + "\"";
                         std::regex idRegex(idPattern);
@@ -247,10 +256,19 @@ static void processLayerOverridesFromString(std::string& json_data, const std::s
                                 if (objEnd > objStart) {
                                     std::string assetObj = modifiedAssets.substr(objStart, objEnd - objStart + 1);
                                     
-                                    // Split path into u and p
-                                    size_t lastSlash = imagePath.find_last_of("/\\");
-                                    std::string dir = (lastSlash != std::string::npos) ? imagePath.substr(0, lastSlash + 1) : "";
-                                    std::string filename = (lastSlash != std::string::npos) ? imagePath.substr(lastSlash + 1) : imagePath;
+                                    // If fileName is empty, extract it from assets[].p
+                                    if (filename.empty()) {
+                                        std::regex pPattern("\"p\"\\s*:\\s*\"([^\"]+)\"");
+                                        std::smatch pMatch;
+                                        if (std::regex_search(assetObj, pMatch, pPattern)) {
+                                            filename = pMatch[1].str();
+                                        } else {
+                                            EM_ASM({
+                                                console.warn('[WARNING] Could not find "p" property for asset ID:', UTF8ToString($0), ', skipping');
+                                            }, assetId.c_str());
+                                            continue;
+                                        }
+                                    }
                                     
                                     if (dir == "/" || dir == "\\") {
                                         dir = "";
@@ -336,7 +354,7 @@ static void processLayerOverridesFromString(std::string& json_data, const std::s
             continue;
         }
         
-        std::string textToUse = config.textValue.empty() ? fontInfo.text : config.textValue;
+        std::string textToUse = config.value.empty() ? fontInfo.text : config.value;
         
         if (textToUse.empty()) {
             continue;
@@ -352,62 +370,67 @@ static void processLayerOverridesFromString(std::string& json_data, const std::s
         float currentWidth = measureTextWidth(tempFontMgr, fontInfo.family, fontInfo.style,
                                              fontInfo.name, fontInfo.size, textToUse, textMeasurementMode);
         
-        // Apply padding to target width to prevent text from touching edges
-        // textPadding: 0.97 means 97% of target width (3% padding, 1.5% per side)
-        float paddedTargetWidth = targetWidth * textPadding;
+        // If minSize and maxSize are not specified, no auto-fit - just use original size or update text value
+        float optimalSize = fontInfo.size;
+        float finalWidth = currentWidth;
         
-        float optimalSize = calculateOptimalFontSize(
-            tempFontMgr,
-            fontInfo,
-            config,
-            textToUse,
-            paddedTargetWidth,
-            textMeasurementMode
-        );
-        
-        float finalWidth = 0.0f;
-        if (optimalSize >= 0) {
-            finalWidth = measureTextWidth(tempFontMgr, fontInfo.family, fontInfo.style,
-                                         fontInfo.name, optimalSize, textToUse, textMeasurementMode);
-        }
-        
-        if (optimalSize < 0) {
-            textToUse = config.fallbackText;
-            FontInfo fallbackFontInfo = fontInfo;
-            fallbackFontInfo.size = config.minSize;
+        if (config.minSize > 0 && config.maxSize > 0) {
+            // Apply padding to target width to prevent text from touching edges
+            // textPadding: 0.97 means 97% of target width (3% padding, 1.5% per side)
+            float paddedTargetWidth = targetWidth * textPadding;
             
-            float fallbackMinWidth = measureTextWidth(tempFontMgr, fallbackFontInfo.family, 
-                                                     fallbackFontInfo.style, fallbackFontInfo.name, 
-                                                     config.minSize, textToUse, textMeasurementMode);
+            optimalSize = calculateOptimalFontSize(
+                tempFontMgr,
+                fontInfo,
+                config,
+                textToUse,
+                paddedTargetWidth,
+                textMeasurementMode
+            );
             
-            if (fallbackMinWidth > paddedTargetWidth) {
-                optimalSize = config.minSize;
-                finalWidth = measureTextWidth(tempFontMgr, fallbackFontInfo.family,
-                                             fallbackFontInfo.style, fallbackFontInfo.name,
-                                             config.minSize, textToUse, textMeasurementMode);
-            } else {
-                float min = config.minSize;
-                float max = config.maxSize;
-                float bestSize = config.minSize;
+            if (optimalSize >= 0) {
+                finalWidth = measureTextWidth(tempFontMgr, fontInfo.family, fontInfo.style,
+                                             fontInfo.name, optimalSize, textToUse, textMeasurementMode);
+            }
+            
+            if (optimalSize < 0) {
+                textToUse = config.fallbackText;
+                FontInfo fallbackFontInfo = fontInfo;
+                fallbackFontInfo.size = config.minSize;
                 
-                for (int i = 0; i < 10; i++) {
-                    float testSize = (min + max) / 2.0f;
-                    float testWidth = measureTextWidth(tempFontMgr, fallbackFontInfo.family,
-                                                      fallbackFontInfo.style, fallbackFontInfo.name,
-                                                      testSize, textToUse, textMeasurementMode);
+                float fallbackMinWidth = measureTextWidth(tempFontMgr, fallbackFontInfo.family, 
+                                                         fallbackFontInfo.style, fallbackFontInfo.name, 
+                                                         config.minSize, textToUse, textMeasurementMode);
+                
+                if (fallbackMinWidth > paddedTargetWidth) {
+                    optimalSize = config.minSize;
+                    finalWidth = measureTextWidth(tempFontMgr, fallbackFontInfo.family,
+                                                 fallbackFontInfo.style, fallbackFontInfo.name,
+                                                 config.minSize, textToUse, textMeasurementMode);
+                } else {
+                    float min = config.minSize;
+                    float max = config.maxSize;
+                    float bestSize = config.minSize;
                     
-                    if (testWidth <= paddedTargetWidth) {
-                        bestSize = testSize;
-                        min = testSize;
-                    } else {
-                        max = testSize;
+                    for (int i = 0; i < 10; i++) {
+                        float testSize = (min + max) / 2.0f;
+                        float testWidth = measureTextWidth(tempFontMgr, fallbackFontInfo.family,
+                                                          fallbackFontInfo.style, fallbackFontInfo.name,
+                                                          testSize, textToUse, textMeasurementMode);
+                        
+                        if (testWidth <= paddedTargetWidth) {
+                            bestSize = testSize;
+                            min = testSize;
+                        } else {
+                            max = testSize;
+                        }
                     }
+                    
+                    optimalSize = std::min(bestSize, config.maxSize);
+                    finalWidth = measureTextWidth(tempFontMgr, fallbackFontInfo.family,
+                                                 fallbackFontInfo.style, fallbackFontInfo.name,
+                                                 optimalSize, textToUse, textMeasurementMode);
                 }
-                
-                optimalSize = std::min(bestSize, config.maxSize);
-                finalWidth = measureTextWidth(tempFontMgr, fallbackFontInfo.family,
-                                             fallbackFontInfo.style, fallbackFontInfo.name,
-                                             optimalSize, textToUse, textMeasurementMode);
             }
         }
         

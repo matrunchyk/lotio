@@ -3,14 +3,15 @@
     "Text_1": {
       "minSize": 50,
       "maxSize": 222,
-      "fallbackText": "Default text",
-      "textBoxWidth": 720
+      "fallbackText": "FALLBACK1",
+      "textBoxWidth": 720,
+      "value": "OV3"
+    },
+    "Text_2": {
+      "value": "OV1"
+    },
+    "Gene_Number": {
+      "value": "OV2"
     }
-  },
-  "textValues": {
-    "Text_2": "GENES",
-    "Gene_Number": "2",
-    "Text_1": "This is a text"
   }
 }
-

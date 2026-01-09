@@ -180,13 +180,25 @@ All standard lotio arguments are supported:
 - `--stream` - Stream frames to stdout as PNG (automatically added if missing for video encoding)
 - `--debug` - Enable debug output
 - `--layer-overrides <file>` - Path to layer overrides JSON
+  - **Absolute paths**: Used as-is (e.g., `/workspace/input/layer-overrides.json`)
+  - **Relative paths**: Resolved relative to the **current working directory (cwd)** inside the container
+    - Example: If the container's cwd is `/workspace` and you use `--layer-overrides config/overrides.json`, it resolves to `/workspace/config/overrides.json`
+  - The parent directory of this file is used as the base directory for resolving relative image paths in `imageLayers.filePath`
 - `--text-padding <0.0-1.0>` - Text padding factor (default: 0.97 = 3% padding)
 - `--text-measurement-mode <fast|accurate|pixel-perfect>` - Text measurement mode (default: accurate)
 - `--version` - Print version information and exit
 - `--help, -h` - Show help message
 - `<input.json>` - Input Lottie animation file (required)
-- `<output_dir>` - Output directory (use `-` for streaming)
+  - **Absolute paths**: Used as-is (e.g., `/workspace/input/data.json`)
+  - **Relative paths**: Resolved relative to the **current working directory (cwd)** inside the container
+    - Example: If the container's cwd is `/workspace` and you use `data.json`, it resolves to `/workspace/data.json`
+  - The parent directory of this file is used as the base directory for resolving relative image paths in the Lottie JSON
+- `<output_dir>` - Output directory (required in non-stream mode; optional in stream mode, defaults to `-` when using `--stream`)
 - `[fps]` - Frames per second (default: animation fps or 30)
+
+**Note on `output_dir` in stream mode:** When using `--stream` (automatically added by the entrypoint script), the `output_dir` argument is optional. If omitted, it defaults to `-` (stdout). You can explicitly specify `-` for clarity, or omit it entirely:
+- `data.json - 30 --output video.mov` (explicit)
+- `data.json 30 --output video.mov` (implicit, defaults to `-`)
 
 **Note:** Frames are output as PNG by default. No format selection is needed.
 
@@ -233,6 +245,7 @@ docker run --rm \
 ### With Custom Text Padding and Measurement Mode
 
 ```bash
+# Explicit output_dir (recommended for clarity)
 docker run --rm \
   -v "$(pwd):/workspace" \
   matrunchyk/lotio-ffmpeg:latest \
@@ -240,6 +253,16 @@ docker run --rm \
   --text-padding 0.95 \
   --text-measurement-mode pixel-perfect \
   data.json - 30 \
+  --output video.mov
+
+# Implicit output_dir (defaults to - in stream mode)
+docker run --rm \
+  -v "$(pwd):/workspace" \
+  matrunchyk/lotio-ffmpeg:latest \
+  --layer-overrides layer-overrides.json \
+  --text-padding 0.95 \
+  --text-measurement-mode pixel-perfect \
+  data.json 30 \
   --output video.mov
 ```
 
@@ -336,15 +359,40 @@ Example `layer-overrides.json`:
       "minSize": 50,
       "maxSize": 222,
       "fallbackText": "Default text",
-      "textBoxWidth": 720
+      "textBoxWidth": 720,
+      "value": "Custom text value"
+    },
+    "Text_2": {
+      "value": "Another text"
     }
   },
-  "textValues": {
-    "Text_1": "Custom text value",
-    "Text_2": "Another text"
+  "imageLayers": {
+    "image_0": {
+      "filePath": "images/",
+      "fileName": "logo.png"
+    },
+    "image_1": {
+      "filePath": "/workspace/input/",
+      "fileName": "bg.png"
+    }
   }
 }
 ```
+
+### Image Layers in Layer Overrides
+
+**Path Resolution:**
+- **Absolute paths**: Used as-is (e.g., `/workspace/input/images/logo.png`)
+- **Relative paths**: Resolved relative to the **layer-overrides.json file's directory** (NOT the current working directory)
+  - Example: If `layer-overrides.json` is at `/workspace/input/layer-overrides.json` and `filePath` is `"images/"`, it resolves relative to `/workspace/input/`
+  - Important: This is different from `input.json` and `--layer-overrides` paths, which are resolved relative to the current working directory
+- **URLs are NOT supported**: HTTP (`http://`) and HTTPS (`https://`) URLs are not supported
+- **Empty `filePath`**: If `filePath` is an empty string, `fileName` must contain the full path
+
+**Notes:**
+- Image paths in the original Lottie JSON (`data.json`) are resolved relative to `data.json`'s parent directory
+- If an asset ID is not in `imageLayers`, the original `u` and `p` from data.json are used
+- Both `filePath` and `fileName` are optional - if not specified, defaults from `assets[].u` and `assets[].p` are used
 
 ## Fonts
 
@@ -375,15 +423,29 @@ The container sets up the following environment variables:
 
 Check that:
 - Input file path is correct and mounted
+  - **Relative paths are resolved relative to the current working directory (cwd)** inside the container
+  - Use absolute paths (e.g., `/workspace/input/data.json`) for clarity
 - Output directory is writable
 - Sufficient disk space is available
+- Image paths in `imageLayers` are correct
+  - **Relative paths in `imageLayers.filePath` are resolved relative to the layer-overrides.json file's directory** (NOT the current working directory)
 
 ### Text Not Replacing
 
 Verify:
-- Layer overrides file is mounted and accessible
+- Layer overrides file is mounted and accessible (supports both absolute and relative paths)
 - Layer names in `layer-overrides.json` match layer names in Lottie JSON
 - Layer overrides file is valid JSON
+
+### Image Path Issues
+
+If images aren't loading:
+- Verify image paths in `imageLayers` are correct
+- **Relative paths in `imageLayers.filePath` are resolved relative to the layer-overrides.json file's directory** (NOT the current working directory)
+  - Example: If `layer-overrides.json` is at `/workspace/config/overrides.json` and `imageLayers` has `"image_0": { "filePath": "images/", "fileName": "logo.png" }`, it resolves to `/workspace/config/images/logo.png`
+- Absolute paths in `imageLayers.filePath` are used as-is
+- URLs (`http://`, `https://`) and data URIs (`data:`) are NOT supported in `imageLayers`
+- Ensure image files exist and are accessible from within the container
 
 ### Font Issues
 
@@ -466,6 +528,84 @@ The build chain is optimized for speed:
 3. **Dockerfile.lotio-ffmpeg** - Uses pre-built lotio + builds minimal FFmpeg (takes 5-10 minutes)
 
 **Total build time:** ~20-30 minutes (first time), but subsequent builds are much faster due to caching.
+
+## Lambda/Container Integration
+
+When using the `lotio-ffmpeg` image in Lambda functions or containers, the entrypoint script (`render_entrypoint.sh`) automatically handles video encoding. Here's how to structure your commands:
+
+### Command Format
+
+```bash
+render_entrypoint.sh [LOTIO_OPTIONS] <input.json> [output_dir] [fps] --output <video.mov>
+```
+
+### Key Points
+
+1. **Streaming is automatic**: The entrypoint script automatically adds `--stream` if not present
+2. **`output_dir` is optional**: In stream mode, `output_dir` defaults to `-` if omitted
+3. **All lotio options supported**: `--layer-overrides`, `--text-padding`, `--text-measurement-mode`, `--debug` all work
+4. **Docker-specific options**: `--output` (or `-o`) specifies the final video file path
+
+### Complete Example
+
+```bash
+render_entrypoint.sh \
+  --layer-overrides /tmp/overrides.json \
+  --text-padding 0.95 \
+  --text-measurement-mode pixel-perfect \
+  /tmp/input.json \
+  --output /tmp/output.mov
+```
+
+**Note:** In the example above, `output_dir` is omitted because:
+- The entrypoint script adds `--stream` automatically
+- In stream mode, `output_dir` defaults to `-` (stdout)
+- The `--output` flag specifies where the final video file is saved
+
+### With Explicit Output Directory
+
+```bash
+render_entrypoint.sh \
+  --layer-overrides /tmp/overrides.json \
+  --text-padding 0.95 \
+  /tmp/input.json \
+  - \
+  30 \
+  --output /tmp/output.mov
+```
+
+Both forms are equivalent when using the entrypoint script.
+
+### TypeScript/Node.js Integration Example
+
+```typescript
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
+
+// Build command arguments
+const args = [
+  inputJsonPath,  // input.json (required)
+  // output_dir omitted - defaults to "-" in stream mode
+  // fps omitted - defaults to 30
+  "--output", outputVideoPath
+];
+
+// Add optional arguments
+if (layerOverridesPath) {
+  args.unshift("--layer-overrides", layerOverridesPath);
+}
+if (textPadding !== undefined) {
+  args.unshift("--text-padding", textPadding.toString());
+}
+if (textMeasurementMode) {
+  args.unshift("--text-measurement-mode", textMeasurementMode);
+}
+
+// Execute
+await execAsync(`render_entrypoint.sh ${args.map(a => `"${a}"`).join(" ")}`);
+```
 
 ## Limitations
 

@@ -114,7 +114,7 @@ bool success = encodeFrameToPNG(rgbaData, width, height, outputPath);
 
 // Load layer overrides
 auto layerOverrides = parseLayerOverrides("layer-overrides.json");
-auto imagePaths = parseImagePaths("layer-overrides.json");
+auto imageLayers = parseImageLayers("layer-overrides.json");
 
 // Process layer overrides in animation JSON
 std::string modifiedJson = processLayerOverrides(
@@ -163,7 +163,15 @@ AnimationSetupResult setupAndCreateAnimation(
 
 **Parameters:**
 - `inputJsonPath`: Path to Lottie animation JSON file
+  - **Absolute paths**: Used as-is (e.g., `/path/to/animation.json`)
+  - **Relative paths**: Resolved relative to the **current working directory (cwd)** where your program is executed
+    - Example: If your program runs from `/home/user/project/` and you pass `animation.json`, it resolves to `/home/user/project/animation.json`
+  - The parent directory of this file is used as the base directory for resolving relative image paths in the Lottie JSON
 - `layerOverridesPath`: Path to layer overrides JSON file (empty string if not used)
+  - **Absolute paths**: Used as-is (e.g., `/path/to/layer-overrides.json`)
+  - **Relative paths**: Resolved relative to the **current working directory (cwd)** where your program is executed
+    - Example: If your program runs from `/home/user/project/` and you pass `config/overrides.json`, it resolves to `/home/user/project/config/overrides.json`
+  - The parent directory of this file is used as the base directory for resolving relative image paths in `imageLayers.filePath`
 - `textPadding`: Text padding factor (0.0-1.0, default: 0.97 = 3% padding). Controls how much of the target text box width is used for text sizing.
 - `textMeasurementMode`: Text measurement accuracy mode (default: `ACCURATE`). See `TextMeasurementMode` enum above.
 ```
@@ -198,22 +206,42 @@ Encodes RGBA pixel data to PNG format. The C++ library outputs PNG frames by def
 
 ```cpp
 struct LayerOverride {
-    float minSize;
-    float maxSize;
-    std::string fallbackText;
-    std::string textValue;
-    float textBoxWidth;
-    std::string imagePath;  // Optional: image path override
+    float minSize;          // Optional: minimum font size (0 = not specified, no auto-fit)
+    float maxSize;          // Optional: maximum font size (0 = not specified, no auto-fit)
+    std::string fallbackText; // Optional: fallback text if text doesn't fit (defaults to empty)
+    float textBoxWidth;     // Optional: text box width (0 = use from JSON or animation width)
+    std::string value;      // Optional: text value to set (defaults to original text from data.json)
+};
+
+struct ImageLayerOverride {
+    std::string filePath;   // Optional: directory path (defaults to assets[].u, empty string = use full path from fileName)
+    std::string fileName;   // Optional: filename (defaults to assets[].p)
 };
 
 std::map<std::string, LayerOverride> parseLayerOverrides(const std::string& configPath);
-std::map<std::string, std::string> parseImagePaths(const std::string& configPath);
+std::map<std::string, ImageLayerOverride> parseImageLayers(const std::string& configPath);
 std::string processLayerOverrides(
     std::string& animationJson,
     const std::string& layerOverridesPath,
     float textPadding = 0.97f,
     TextMeasurementMode textMeasurementMode = TextMeasurementMode::ACCURATE
 );
+```
+
+**Image Layer Path Resolution:**
+
+When using `imageLayers` in layer-overrides.json:
+- **Absolute paths**: Used as-is (e.g., `/workspace/images/logo.png`)
+- **Relative paths**: Resolved relative to the **layer-overrides.json file's directory** (NOT the current working directory)
+  - Example: If `layer-overrides.json` is at `/workspace/config/layer-overrides.json` and `imageLayers` contains `"image_0": { "filePath": "images/", "fileName": "logo.png" }`, it resolves to `/workspace/config/images/logo.png`
+  - Important: This is different from `inputJsonPath` and `layerOverridesPath` parameters, which are resolved relative to the current working directory
+- **URLs are NOT supported**: HTTP (`http://`) and HTTPS (`https://`) URLs are not supported
+- **Empty `filePath`**: If `filePath` is an empty string, `fileName` must contain the full path
+
+**Notes:**
+- Image paths in the original Lottie JSON are resolved relative to the input JSON file's parent directory
+- If an asset ID is not in `imageLayers`, the original `u` and `p` from the Lottie JSON are used
+- Both `filePath` and `fileName` are optional - if not specified, defaults from `assets[].u` and `assets[].p` are used
 ```
 
 ## Complete Example
@@ -402,6 +430,9 @@ for (auto& thread : threads) {
 - Check animation JSON is valid
 - Verify font paths in Lottie JSON
 - Check file permissions for output directory
+- **Relative paths for `inputJsonPath` and `layerOverridesPath` are resolved relative to the current working directory (cwd)** where your program runs
+- **Relative paths in `imageLayers.filePath` are resolved relative to the layer-overrides.json file's directory** (NOT the current working directory)
+- URLs (`http://`, `https://`) and data URIs (`data:`) are NOT supported in `imageLayers`
 
 ## See Also
 

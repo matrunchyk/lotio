@@ -163,11 +163,9 @@ const animation = new Lotio({
       "Patient_Name": {
         minSize: 20,
         maxSize: 100,
-        textBoxWidth: 500
+        textBoxWidth: 500,
+        value: "John Doe"
       }
-    },
-    textValues: {
-      "Patient_Name": "John Doe"
     }
   }
 });

@@ -41,3 +41,4 @@ third_party/
 *.log
 _site
 .vscode_skia/
+frame_*.png
