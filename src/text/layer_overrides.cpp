@@ -5,8 +5,10 @@
 #include "include/core/SkFontStyle.h"
 #include "include/core/SkTypeface.h"
 #include "include/ports/SkFontScanner_FreeType.h"
+#ifndef __EMSCRIPTEN__
 #include "include/ports/SkFontMgr_fontconfig.h"
 #include <fontconfig/fontconfig.h>
+#endif
 #include <fstream>
 #include <regex>
 #include <iostream>
@@ -136,7 +138,8 @@ bool validateImageLayerConfig(const std::string& assetId, const ImageLayerOverri
 }
 
 bool validateFontExists(const std::string& fontName, const std::string& dataJsonPath, std::string& errorMsg) {
-    // Check system fonts via fontconfig
+#ifndef __EMSCRIPTEN__
+    // Check system fonts via fontconfig (not available in WASM)
     try {
         FcInit();
         auto scanner = SkFontScanner_Make_FreeType();
@@ -158,6 +161,7 @@ bool validateFontExists(const std::string& fontName, const std::string& dataJson
     } catch (...) {
         // Fontconfig not available, continue to check fonts directory
     }
+#endif
     
     // Check fonts directory (relative to data.json or working directory)
     std::string fontFileName = fontName + ".ttf";

@@ -6,8 +6,10 @@
 #include "../utils/logging.h"
 #include "include/core/SkFontMgr.h"
 #include "include/ports/SkFontScanner_FreeType.h"
+#ifndef __EMSCRIPTEN__
 #include "include/ports/SkFontMgr_fontconfig.h"
 #include <fontconfig/fontconfig.h>
+#endif
 #include <regex>
 #include <vector>
 #include <algorithm>
@@ -226,6 +228,7 @@ std::string processLayerOverrides(
     
     // Create font manager early for text measurement
     sk_sp<SkFontMgr> tempFontMgr;
+#ifndef __EMSCRIPTEN__
     try {
         FcInit(); // Initialize fontconfig
         auto scanner = SkFontScanner_Make_FreeType();
@@ -235,6 +238,7 @@ std::string processLayerOverrides(
     } catch (...) {
         // Will create font manager later
     }
+#endif
     
     if (!tempFontMgr) {
         tempFontMgr = SkFontMgr::RefEmpty();
