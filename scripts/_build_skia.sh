@@ -434,6 +434,8 @@ if [[ "$TARGET" == "wasm" ]]; then
         skia_use_fontconfig=false \
         skia_use_icu=false \
         skia_use_harfbuzz=false \
+        skia_enable_gpu=false \
+        skia_use_ganesh=false \
         cc=\"$(which emcc)\" \
         cxx=\"$(which em++)\" \
         ar=\"$(which emar)\" \
