@@ -12,7 +12,18 @@ WORKDIR /build
 
 # Copy only lotio source files (not entire project)
 COPY src/ ./src/
-COPY third_party/ ./third_party/
+
+# Download nlohmann/json.hpp if third_party doesn't exist in build context
+# (third_party/ is gitignored, so it won't be in Docker build context)
+RUN mkdir -p ./third_party/nlohmann && \
+    if [ ! -f ./third_party/nlohmann/json.hpp ]; then \
+        echo "[BUILD] Downloading nlohmann/json.hpp..." && \
+        curl -L -s -o ./third_party/nlohmann/json.hpp \
+            https://github.com/nlohmann/json/releases/download/v3.12.0/json.hpp && \
+        echo "[BUILD] nlohmann/json.hpp downloaded"; \
+    else \
+        echo "[BUILD] nlohmann/json.hpp already exists"; \
+    fi
 
 # Build arguments
 ARG VERSION=dev
