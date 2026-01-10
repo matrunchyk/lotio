@@ -11,7 +11,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkColor.h"
-#include <regex>
+#include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
 
@@ -243,217 +243,97 @@ SkScalar measureTextWidth(
 
 FontInfo extractFontInfoFromJson(const std::string& json, const std::string& layerName) {
     FontInfo info;
+    info.size = 0.0f;
+    info.textBoxWidth = 0.0f;  // Initialize to 0 to avoid garbage values
     
-    // Find the layer by name - try multiple approaches
-    size_t layerNamePos = std::string::npos;
-    
-    // Approach 1: Use regex with escaped name
-    std::string escapedLayerName = escapeRegex(layerName);
-    std::string layerNamePattern = "\"nm\"\\s*:\\s*\"" + escapedLayerName + "\"";
-    std::regex layerNameRegex(layerNamePattern);
-    std::smatch layerMatch;
-    
-    if (std::regex_search(json, layerMatch, layerNameRegex)) {
-        layerNamePos = layerMatch.position(0);
-    } else {
-        // Approach 2: Use regex without escaping
-        std::string simplePattern = "\"nm\"\\s*:\\s*\"" + layerName + "\"";
-        std::regex simpleRegex(simplePattern);
-        if (std::regex_search(json, layerMatch, simpleRegex)) {
-            layerNamePos = layerMatch.position(0);
-        } else {
-            // Approach 3: Simple string search - find "nm" then check the name
-            size_t nmPos = json.find("\"nm\"");
-            while (nmPos != std::string::npos && nmPos < json.length() - 100) {
-                // Find the quoted name after "nm"
-                size_t colonPos = json.find(':', nmPos);
-                if (colonPos != std::string::npos && colonPos < nmPos + 20) {
-                    size_t nameStart = json.find('"', colonPos);
-                    if (nameStart != std::string::npos) {
-                        size_t nameEnd = json.find('"', nameStart + 1);
-                        if (nameEnd != std::string::npos) {
-                            std::string foundName = json.substr(nameStart + 1, nameEnd - nameStart - 1);
-                            if (foundName == layerName) {
-                                layerNamePos = nmPos;
-                                break;
+    try {
+        nlohmann::json j = nlohmann::json::parse(json);
+        
+        // Find the layer by name
+        if (!j.contains("layers") || !j["layers"].is_array()) {
+            LOG_DEBUG("No layers array found in JSON");
+            return info;
+        }
+        
+        nlohmann::json* foundLayer = nullptr;
+        for (auto& layer : j["layers"]) {
+            if (layer.contains("nm") && layer["nm"].is_string() && layer["nm"].get<std::string>() == layerName) {
+                // Check if it's a text layer (ty:5)
+                if (layer.contains("ty") && layer["ty"].is_number() && layer["ty"].get<int>() == 5) {
+                    foundLayer = &layer;
+                    break;
+                }
+            }
+        }
+        
+        if (foundLayer == nullptr) {
+            LOG_DEBUG("Layer " << layerName << " not found or not a text layer (ty:5)");
+            return info;
+        }
+        
+        // Extract text style from layers[i]["t"]["d"]["k"][0]["s"]
+        if (foundLayer->contains("t") && (*foundLayer)["t"].is_object()) {
+            auto& t = (*foundLayer)["t"];
+            if (t.contains("d") && t["d"].is_object()) {
+                auto& d = t["d"];
+                if (d.contains("k") && d["k"].is_array() && d["k"].size() > 0) {
+                    auto& k = d["k"];
+                    if (k[0].is_object() && k[0].contains("s") && k[0]["s"].is_object()) {
+                        auto& s = k[0]["s"];
+                        
+                        // Extract font size
+                        if (s.contains("s") && s["s"].is_number()) {
+                            info.size = s["s"].get<float>();
+                        }
+                        
+                        // Extract font name
+                        if (s.contains("f") && s["f"].is_string()) {
+                            info.name = s["f"].get<std::string>();
+                        }
+                        
+                        // Extract text content
+                        if (s.contains("t") && s["t"].is_string()) {
+                            info.text = s["t"].get<std::string>();
+                            // Handle escaped newlines in extracted text (\r, \n, \u0003)
+                            // Convert escaped sequences to actual characters (unescape)
+                            // Normalize all to \r for Lottie compatibility
+                            replaceAllInPlace(info.text, "\\r", "\r");
+                            replaceAllInPlace(info.text, "\\n", "\r");  // Convert \n to \r for Lottie
+                            replaceAllInPlace(info.text, "\\u0003", "\r");
+                            replaceCharInPlace(info.text, '\x03', '\r');
+                            // Also convert any existing \n to \r for consistency
+                            replaceCharInPlace(info.text, '\n', '\r');
+                        }
+                        
+                        // Extract text box size (sz)
+                        if (s.contains("sz") && s["sz"].is_array() && s["sz"].size() >= 2) {
+                            if (s["sz"][0].is_number()) {
+                                info.textBoxWidth = s["sz"][0].get<float>();
                             }
                         }
                     }
                 }
-                nmPos = json.find("\"nm\"", nmPos + 1);
             }
         }
-    }
-    
-    if (layerNamePos == std::string::npos) {
-        LOG_DEBUG("Layer name not found: " << layerName);
-        return info;
-    }
-    
-    // Check if this is a text layer (ty:5) - search in a window around the layer name
-    // The "ty" field could be before or after "nm" in the JSON
-    size_t tySearchStart = (layerNamePos > 1000) ? layerNamePos - 1000 : 0;
-    size_t tySearchEnd = std::min(layerNamePos + 3000, json.length());
-    std::string layerSection = json.substr(tySearchStart, tySearchEnd - tySearchStart);
-    size_t relativeLayerNamePos = layerNamePos - tySearchStart;
-    
-    // Check for text layer type - look for "ty":5 in the layer section
-    // Try to find "ty" that's reasonably close to the layer name (within the same object)
-    bool isTextLayer = false;
-    
-    // Search for "ty" before the layer name
-    size_t tySearchOffset = (relativeLayerNamePos > 200) ? relativeLayerNamePos - 200 : 0;
-    size_t tyPos = layerSection.find("\"ty\"", tySearchOffset);
-    
-    // Also search after the layer name
-    if (tyPos == std::string::npos || tyPos > relativeLayerNamePos + 500) {
-        tyPos = layerSection.find("\"ty\"", relativeLayerNamePos);
-    }
-    
-    if (tyPos != std::string::npos) {
-        // Check if followed by :5
-        size_t colonPos = layerSection.find(':', tyPos);
-        if (colonPos != std::string::npos && colonPos < tyPos + 30) {
-            // Skip whitespace and check for 5
-            size_t numStart = colonPos + 1;
-            while (numStart < layerSection.length() && (layerSection[numStart] == ' ' || layerSection[numStart] == '\t' || layerSection[numStart] == '\n' || layerSection[numStart] == '\r')) {
-                numStart++;
-            }
-            if (numStart < layerSection.length() && layerSection[numStart] == '5') {
-                isTextLayer = true;
-            }
-        }
-    }
-    
-    if (!isTextLayer) {
-        LOG_DEBUG("Layer " << layerName << " found but not identified as text layer (ty:5)");
-        return info;  // Not a text layer
-    }
-    
-    // Find the "t" object (text data) - it should be after the layer name
-    // Search within a reasonable window after the layer name
-    size_t tSearchStart = layerNamePos;
-    size_t tSearchEnd = std::min(layerNamePos + 5000, json.length());
-    size_t textDataPos = json.find("\"t\"", tSearchStart);
-    
-    // Try multiple "t" occurrences - skip numeric "t" values (like "t": 110 in keyframes)
-    // We want the "t" object that contains text data: "t": { "d": { "k": [ { "s": {
-    while (textDataPos != std::string::npos && textDataPos < tSearchEnd) {
-        // Check what follows "t" - if it's a colon followed by a number, skip it (it's a keyframe time)
-        size_t colonPos = json.find(':', textDataPos);
-        if (colonPos != std::string::npos && colonPos < textDataPos + 10) {
-            // Skip whitespace after colon
-            size_t valueStart = colonPos + 1;
-            while (valueStart < json.length() && (json[valueStart] == ' ' || json[valueStart] == '\t')) {
-                valueStart++;
-            }
-            
-            // If followed by a digit, this is a numeric "t" (keyframe time), skip it
-            if (valueStart < json.length() && std::isdigit(json[valueStart])) {
-                textDataPos = json.find("\"t\"", textDataPos + 1);
-                continue;
-            }
-            
-            // If followed by '{', this is the text data object
-            if (valueStart < json.length() && json[valueStart] == '{') {
-                // Verify it contains "d" nearby (text data structure)
-                size_t checkWindow = std::min(textDataPos + 100, json.length());
-                std::string checkSection = json.substr(textDataPos, checkWindow - textDataPos);
-                if (checkSection.find("\"d\"") != std::string::npos) {
-                    break;  // Found the text data object
+        
+        // Extract font family and style from fonts.list
+        if (j.contains("fonts") && j["fonts"].is_object() && j["fonts"].contains("list") && j["fonts"]["list"].is_array()) {
+            for (auto& fontDef : j["fonts"]["list"]) {
+                if (fontDef.is_object() && fontDef.contains("fName") && fontDef["fName"].is_string()) {
+                    if (fontDef["fName"].get<std::string>() == info.name) {
+                        if (fontDef.contains("fFamily") && fontDef["fFamily"].is_string()) {
+                            info.family = fontDef["fFamily"].get<std::string>();
+                        }
+                        if (fontDef.contains("fStyle") && fontDef["fStyle"].is_string()) {
+                            info.style = fontDef["fStyle"].get<std::string>();
+                        }
+                        break;
+                    }
                 }
             }
         }
-        
-        // Try next occurrence
-        textDataPos = json.find("\"t\"", textDataPos + 1);
-    }
-    
-    if (textDataPos == std::string::npos || textDataPos >= tSearchEnd) {
-        LOG_DEBUG("Could not find \"t\" object for layer " << layerName);
-        return info;
-    }
-    
-    // Find the "s" object within the text data (text style)
-    // The "s" object should be inside the "t" -> "d" -> "k" -> [0] -> "s" structure
-    size_t textStylePos = json.find("\"s\"", textDataPos);
-    if (textStylePos == std::string::npos || textStylePos > textDataPos + 1000) {
-        LOG_DEBUG("Could not find \"s\" object for layer " << layerName);
-        return info;
-    }
-    
-    // Extract the text style object - find the opening brace and matching closing brace
-    size_t styleOpenBrace = json.find('{', textStylePos);
-    if (styleOpenBrace == std::string::npos) {
-        return info;
-    }
-    
-    // Find matching closing brace
-    int braceCount = 0;
-    size_t styleCloseBrace = styleOpenBrace;
-    for (size_t i = styleOpenBrace; i < std::min(styleOpenBrace + 500, json.length()); i++) {
-        if (json[i] == '{') braceCount++;
-        if (json[i] == '}') braceCount--;
-        if (braceCount == 0) {
-            styleCloseBrace = i;
-            break;
-        }
-    }
-    
-    if (styleCloseBrace > styleOpenBrace) {
-        std::string textStyleJson = json.substr(styleOpenBrace, styleCloseBrace - styleOpenBrace + 1);
-        
-        // Extract font size
-        std::regex sizePattern("\"s\"\\s*:\\s*([0-9]+\\.?[0-9]*)");
-        std::smatch sizeMatch;
-        if (std::regex_search(textStyleJson, sizeMatch, sizePattern)) {
-            info.size = std::stof(sizeMatch[1].str());
-        }
-        
-        // Extract font name
-        std::regex fontPattern("\"f\"\\s*:\\s*\"([^\"]+)\"");
-        std::smatch fontMatch;
-        if (std::regex_search(textStyleJson, fontMatch, fontPattern)) {
-            info.name = fontMatch[1].str();
-        }
-        
-        // Extract text content
-        std::regex textPattern("\"t\"\\s*:\\s*\"([^\"]+)\"");
-        std::smatch textMatch;
-        if (std::regex_search(textStyleJson, textMatch, textPattern)) {
-            info.text = textMatch[1].str();
-            // Handle escaped newlines in extracted text (\r, \n, \u0003)
-            // Convert escaped sequences to actual characters (unescape)
-            // Normalize all to \r for Lottie compatibility
-            replaceAllInPlace(info.text, "\\r", "\r");
-            replaceAllInPlace(info.text, "\\n", "\r");  // Convert \n to \r for Lottie
-            replaceAllInPlace(info.text, "\\u0003", "\r");
-            replaceCharInPlace(info.text, '\x03', '\r');
-            // Also convert any existing \n to \r for consistency
-            replaceCharInPlace(info.text, '\n', '\r');
-        }
-        
-        // Extract text box size (sz)
-        std::regex szPattern("\"sz\"\\s*:\\s*\\[\\s*([0-9]+\\.?[0-9]*)\\s*,\\s*([0-9]+\\.?[0-9]*)");
-        std::smatch szMatch;
-        if (std::regex_search(textStyleJson, szMatch, szPattern)) {
-            info.textBoxWidth = std::stof(szMatch[1].str());
-        }
-    }
-    
-    // Extract font family and style from fonts.list
-    std::regex fontsPattern("\"fonts\"\\s*:\\s*\\{[^}]*\"list\"\\s*:\\s*\\[([^\\]]+)\\]");
-    std::smatch fontsMatch;
-    if (std::regex_search(json, fontsMatch, fontsPattern)) {
-        std::string fontsList = fontsMatch[1].str();
-        std::string escapedFontName = escapeRegex(info.name);
-        std::string fontDefPatternStr = "\\{[^}]*\"fName\"\\s*:\\s*\"" + escapedFontName + "\"[^}]*\"fFamily\"\\s*:\\s*\"([^\"]+)\"[^}]*\"fStyle\"\\s*:\\s*\"([^\"]+)\"";
-        std::regex fontDefPattern(fontDefPatternStr);
-        std::smatch fontDefMatch;
-        if (std::regex_search(fontsList, fontDefMatch, fontDefPattern)) {
-            info.family = fontDefMatch[1].str();
-            info.style = fontDefMatch[2].str();
-        }
+    } catch (const nlohmann::json::exception& e) {
+        LOG_DEBUG("Failed to parse JSON in extractFontInfoFromJson: " << e.what());
     }
     
     return info;

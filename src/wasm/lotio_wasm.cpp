@@ -19,6 +19,7 @@
 #include "include/core/SkStream.h"
 #include "include/ports/SkFontMgr_data.h"
 #include "include/encode/SkPngEncoder.h"
+#include <nlohmann/json.hpp>
 #include <map>
 #include <vector>
 #include "include/codec/SkCodec.h"
@@ -38,68 +39,56 @@
 static std::map<std::string, LayerOverride> parseLayerOverridesFromString(const std::string& json) {
     std::map<std::string, LayerOverride> configs;
     
-    // Extract textLayers section - find the start of the object
-    size_t textLayersPos = json.find("\"textLayers\"");
-    if (textLayersPos != std::string::npos) {
-        // Find the opening brace after "textLayers"
-        size_t openBrace = json.find('{', textLayersPos);
-        if (openBrace != std::string::npos) {
-            // Find matching closing brace by counting braces
-            int braceCount = 0;
-            size_t closeBrace = openBrace;
-            for (size_t i = openBrace; i < json.length(); i++) {
-                if (json[i] == '{') braceCount++;
-                if (json[i] == '}') braceCount--;
-                if (braceCount == 0) {
-                    closeBrace = i;
-                    break;
-                }
-            }
-            
-            if (closeBrace > openBrace) {
-                std::string layersJson = json.substr(openBrace + 1, closeBrace - openBrace - 1);
+    try {
+        nlohmann::json j = nlohmann::json::parse(json);
+        
+        // Parse textLayers section
+        if (j.contains("textLayers") && j["textLayers"].is_object()) {
+            for (auto& [layerName, layerConfig] : j["textLayers"].items()) {
+                LayerOverride config;
                 
-                // Find each layer config - each layer is "name": { ... }
-                std::regex layerPattern("\"([^\"]+)\"\\s*:\\s*\\{");
-                std::sregex_iterator iter(layersJson.begin(), layersJson.end(), layerPattern);
-                std::sregex_iterator end;
-                
-                for (; iter != end; ++iter) {
-                    std::smatch match = *iter;
-                    std::string layerName = match[1].str();
-                    size_t layerStart = match.position(0) + match.length(0) - 1; // Position of opening brace
-                    
-                    // Find the matching closing brace for this layer
-                    int layerBraceCount = 0;
-                    size_t layerEnd = layerStart;
-                    for (size_t i = layerStart; i < layersJson.length(); i++) {
-                        if (layersJson[i] == '{') layerBraceCount++;
-                        if (layersJson[i] == '}') layerBraceCount--;
-                        if (layerBraceCount == 0) {
-                            layerEnd = i;
-                            break;
-                        }
-                    }
-                    
-                    if (layerEnd > layerStart) {
-                        std::string layerConfig = layersJson.substr(layerStart + 1, layerEnd - layerStart - 1);
-                        
-                        LayerOverride config;
-                        config.minSize = extractJsonFloat(layerConfig, "minSize");
-                        config.maxSize = extractJsonFloat(layerConfig, "maxSize");
-                        config.fallbackText = extractJsonString(layerConfig, "fallbackText");
-                        config.textBoxWidth = extractJsonFloat(layerConfig, "textBoxWidth");
-                        config.value = extractJsonString(layerConfig, "value");
-                        
-                        // Handle \u0003 (ETX) - convert to \r for Lottie newlines
-                        replaceAllInPlace(config.value, "\\u0003", "\r");
-                        replaceCharInPlace(config.value, '\x03', '\r');
-                        
-                        configs[layerName] = config;
-                    }
+                // Extract optional fields
+                if (layerConfig.contains("minSize") && layerConfig["minSize"].is_number()) {
+                    config.minSize = layerConfig["minSize"].get<float>();
+                } else {
+                    config.minSize = 0.0f;
                 }
+                
+                if (layerConfig.contains("maxSize") && layerConfig["maxSize"].is_number()) {
+                    config.maxSize = layerConfig["maxSize"].get<float>();
+                } else {
+                    config.maxSize = 0.0f;
+                }
+                
+                if (layerConfig.contains("fallbackText") && layerConfig["fallbackText"].is_string()) {
+                    config.fallbackText = layerConfig["fallbackText"].get<std::string>();
+                } else {
+                    config.fallbackText = "";
+                }
+                
+                if (layerConfig.contains("textBoxWidth") && layerConfig["textBoxWidth"].is_number()) {
+                    config.textBoxWidth = layerConfig["textBoxWidth"].get<float>();
+                } else {
+                    config.textBoxWidth = 0.0f;
+                }
+                
+                if (layerConfig.contains("value") && layerConfig["value"].is_string()) {
+                    config.value = layerConfig["value"].get<std::string>();
+                } else {
+                    config.value = "";
+                }
+                
+                // Handle \u0003 (ETX) - convert to \r for Lottie newlines
+                replaceAllInPlace(config.value, "\\u0003", "\r");
+                replaceCharInPlace(config.value, '\x03', '\r');
+                
+                configs[layerName] = config;
             }
         }
+    } catch (const nlohmann::json::exception& e) {
+        EM_ASM({
+            console.error('[ERROR] Failed to parse layer-overrides.json:', UTF8ToString($0));
+        }, e.what());
     }
     
     return configs;
@@ -109,60 +98,38 @@ static std::map<std::string, LayerOverride> parseLayerOverridesFromString(const 
 static std::map<std::string, ImageLayerOverride> parseImageLayersFromString(const std::string& json) {
     std::map<std::string, ImageLayerOverride> imageLayers;
     
-    size_t imageLayersPos = json.find("\"imageLayers\"");
-    if (imageLayersPos != std::string::npos) {
-        size_t openBrace = json.find('{', imageLayersPos);
-        if (openBrace != std::string::npos) {
-            int braceCount = 0;
-            size_t closeBrace = openBrace;
-            for (size_t i = openBrace; i < json.length(); i++) {
-                if (json[i] == '{') braceCount++;
-                if (json[i] == '}') braceCount--;
-                if (braceCount == 0) {
-                    closeBrace = i;
-                    break;
+    try {
+        nlohmann::json j = nlohmann::json::parse(json);
+        
+        // Parse imageLayers section
+        if (j.contains("imageLayers") && j["imageLayers"].is_object()) {
+            for (auto& [assetId, layerConfig] : j["imageLayers"].items()) {
+                if (assetId.empty()) {
+                    continue;
                 }
-            }
-            
-            if (closeBrace > openBrace) {
-                std::string layersJson = json.substr(openBrace + 1, closeBrace - openBrace - 1);
                 
-                // Find each image layer config - each layer is "asset_id": { ... }
-                std::regex layerPattern("\"([^\"]+)\"\\s*:\\s*\\{");
-                std::sregex_iterator iter(layersJson.begin(), layersJson.end(), layerPattern);
-                std::sregex_iterator end;
+                ImageLayerOverride config;
                 
-                for (; iter != end; ++iter) {
-                    std::smatch match = *iter;
-                    std::string assetId = match[1].str();
-                    size_t layerStart = match.position(0) + match.length(0) - 1; // Position of opening brace
-                    
-                    // Find the matching closing brace for this layer
-                    int layerBraceCount = 0;
-                    size_t layerEnd = layerStart;
-                    for (size_t i = layerStart; i < layersJson.length(); i++) {
-                        if (layersJson[i] == '{') layerBraceCount++;
-                        if (layersJson[i] == '}') layerBraceCount--;
-                        if (layerBraceCount == 0) {
-                            layerEnd = i;
-                            break;
-                        }
-                    }
-                    
-                    if (layerEnd > layerStart) {
-                        std::string layerConfig = layersJson.substr(layerStart + 1, layerEnd - layerStart - 1);
-                        
-                        ImageLayerOverride config;
-                        config.filePath = extractJsonString(layerConfig, "filePath");
-                        config.fileName = extractJsonString(layerConfig, "fileName");
-                        
-                        if (!assetId.empty()) {
-                            imageLayers[assetId] = config;
-                        }
-                    }
+                // Extract optional fields
+                if (layerConfig.contains("filePath") && layerConfig["filePath"].is_string()) {
+                    config.filePath = layerConfig["filePath"].get<std::string>();
+                } else {
+                    config.filePath = "";
                 }
+                
+                if (layerConfig.contains("fileName") && layerConfig["fileName"].is_string()) {
+                    config.fileName = layerConfig["fileName"].get<std::string>();
+                } else {
+                    config.fileName = "";
+                }
+                
+                imageLayers[assetId] = config;
             }
         }
+    } catch (const nlohmann::json::exception& e) {
+        EM_ASM({
+            console.error('[ERROR] Failed to parse image layers from layer-overrides.json:', UTF8ToString($0));
+        }, e.what());
     }
     
     return imageLayers;
@@ -179,140 +146,100 @@ static void processLayerOverridesFromString(std::string& json_data, const std::s
     
     // Process image layer overrides first
     if (!imageLayers.empty()) {
-        size_t assetsPos = json_data.find("\"assets\"");
-        if (assetsPos != std::string::npos) {
-            size_t arrayStart = json_data.find('[', assetsPos);
-            if (arrayStart != std::string::npos) {
-                int bracketCount = 0;
-                size_t arrayEnd = arrayStart;
-                for (size_t i = arrayStart; i < json_data.length(); i++) {
-                    if (json_data[i] == '[') bracketCount++;
-                    if (json_data[i] == ']') bracketCount--;
-                    if (bracketCount == 0) {
-                        arrayEnd = i;
-                        break;
-                    }
-                }
-                
-                if (arrayEnd > arrayStart) {
-                    std::string assetsJson = json_data.substr(arrayStart, arrayEnd - arrayStart + 1);
-                    std::string modifiedAssets = assetsJson;
+        try {
+            nlohmann::json j = nlohmann::json::parse(json_data);
+            
+            if (j.contains("assets") && j["assets"].is_array()) {
+                // Process each asset
+                for (const auto& [assetId, imageConfig] : imageLayers) {
+                    EM_ASM({
+                        console.log('[DEBUG] Processing image override for asset ID:', UTF8ToString($0));
+                    }, assetId.c_str());
                     
-                    for (const auto& [assetId, imageConfig] : imageLayers) {
+                    // Find asset by ID
+                    nlohmann::json* foundAsset = nullptr;
+                    for (auto& asset : j["assets"]) {
+                        if (asset.contains("id") && asset["id"].is_string() && asset["id"].get<std::string>() == assetId) {
+                            foundAsset = &asset;
+                            break;
+                        }
+                    }
+                    
+                    if (foundAsset == nullptr) {
                         EM_ASM({
-                            console.log('[DEBUG] Processing image override for asset ID:', UTF8ToString($0));
+                            console.warn('[WARNING] Asset ID not found in assets array:', UTF8ToString($0));
                         }, assetId.c_str());
-                        
-                        // Determine the full path from filePath and fileName
-                        std::string dir;
-                        std::string filename;
-                        
-                        if (imageConfig.filePath.empty() && !imageConfig.fileName.empty()) {
-                            // filePath is empty string, fileName contains full path
-                            size_t lastSlash = imageConfig.fileName.find_last_of("/\\");
-                            dir = (lastSlash != std::string::npos) ? imageConfig.fileName.substr(0, lastSlash + 1) : "";
-                            filename = (lastSlash != std::string::npos) ? imageConfig.fileName.substr(lastSlash + 1) : imageConfig.fileName;
-                        } else if (!imageConfig.filePath.empty() && !imageConfig.fileName.empty()) {
-                            // Both specified
-                            dir = imageConfig.filePath;
-                            if (dir.back() != '/' && dir.back() != '\\') {
-                                dir += "/";
-                            }
-                            filename = imageConfig.fileName;
-                        } else if (!imageConfig.filePath.empty() && imageConfig.fileName.empty()) {
-                            // Only filePath specified - use default fileName from assets[].p
-                            dir = imageConfig.filePath;
-                            if (dir.back() != '/' && dir.back() != '\\') {
-                                dir += "/";
-                            }
-                            // filename will be extracted from assets[].p below
+                        continue;
+                    }
+                    
+                    // Determine the full path from filePath and fileName
+                    std::string dir;
+                    std::string filename;
+                    
+                    if (imageConfig.filePath.empty() && !imageConfig.fileName.empty()) {
+                        // filePath is empty string, fileName contains full path
+                        size_t lastSlash = imageConfig.fileName.find_last_of("/\\");
+                        dir = (lastSlash != std::string::npos) ? imageConfig.fileName.substr(0, lastSlash + 1) : "";
+                        filename = (lastSlash != std::string::npos) ? imageConfig.fileName.substr(lastSlash + 1) : imageConfig.fileName;
+                    } else if (!imageConfig.filePath.empty() && !imageConfig.fileName.empty()) {
+                        // Both specified
+                        dir = imageConfig.filePath;
+                        if (dir.back() != '/' && dir.back() != '\\') {
+                            dir += "/";
+                        }
+                        filename = imageConfig.fileName;
+                    } else if (!imageConfig.filePath.empty() && imageConfig.fileName.empty()) {
+                        // Only filePath specified - use default fileName from assets[].p
+                        dir = imageConfig.filePath;
+                        if (dir.back() != '/' && dir.back() != '\\') {
+                            dir += "/";
+                        }
+                        // Extract filename from assets[].p
+                        if ((*foundAsset).contains("p") && (*foundAsset)["p"].is_string()) {
+                            filename = (*foundAsset)["p"].get<std::string>();
                         } else {
-                            // Both empty - skip
                             EM_ASM({
-                                console.warn('[WARNING] Both filePath and fileName are empty for asset ID:', UTF8ToString($0));
+                                console.warn('[WARNING] Could not find "p" property for asset ID:', UTF8ToString($0), ', skipping');
                             }, assetId.c_str());
                             continue;
                         }
-                        
-                        std::string idPattern = "\"id\"\\s*:\\s*\"" + assetId + "\"";
-                        std::regex idRegex(idPattern);
-                        std::smatch idMatch;
-                        
-                        if (std::regex_search(modifiedAssets, idMatch, idRegex)) {
-                            size_t assetStart = idMatch.position(0);
-                            size_t objStart = modifiedAssets.rfind('{', assetStart);
-                            if (objStart != std::string::npos) {
-                                int objBraceCount = 0;
-                                size_t objEnd = objStart;
-                                for (size_t i = objStart; i < modifiedAssets.length(); i++) {
-                                    if (modifiedAssets[i] == '{') objBraceCount++;
-                                    if (modifiedAssets[i] == '}') objBraceCount--;
-                                    if (objBraceCount == 0) {
-                                        objEnd = i;
-                                        break;
-                                    }
-                                }
-                                
-                                if (objEnd > objStart) {
-                                    std::string assetObj = modifiedAssets.substr(objStart, objEnd - objStart + 1);
-                                    
-                                    // If fileName is empty, extract it from assets[].p
-                                    if (filename.empty()) {
-                                        std::regex pPattern("\"p\"\\s*:\\s*\"([^\"]+)\"");
-                                        std::smatch pMatch;
-                                        if (std::regex_search(assetObj, pMatch, pPattern)) {
-                                            filename = pMatch[1].str();
-                                        } else {
-                                            EM_ASM({
-                                                console.warn('[WARNING] Could not find "p" property for asset ID:', UTF8ToString($0), ', skipping');
-                                            }, assetId.c_str());
-                                            continue;
-                                        }
-                                    }
-                                    
-                                    if (dir == "/" || dir == "\\") {
-                                        dir = "";
-                                    }
-                                    
-                                    EM_ASM({
-                                        console.log('[DEBUG] Split image path - directory:', UTF8ToString($0), ', filename:', UTF8ToString($1));
-                                    }, dir.c_str(), filename.c_str());
-                                    
-                                    std::regex uPattern("\"u\"\\s*:\\s*\"[^\"]*\"");
-                                    std::regex pPattern("\"p\"\\s*:\\s*\"[^\"]*\"");
-                                    
-                                    std::string newU = "\"u\":\"" + dir + "\"";
-                                    std::string newP = "\"p\":\"" + filename + "\"";
-                                    
-                                    assetObj = std::regex_replace(assetObj, uPattern, newU);
-                                    assetObj = std::regex_replace(assetObj, pPattern, newP);
-                                    
-                                    modifiedAssets.replace(objStart, objEnd - objStart + 1, assetObj);
-                                    
-                                    EM_ASM({
-                                        console.log('[DEBUG] Updated asset:', UTF8ToString($0), '- u:', UTF8ToString($1), ', p:', UTF8ToString($2));
-                                        console.log('[DEBUG] Image override applied successfully for asset ID:', UTF8ToString($0));
-                                    }, assetId.c_str(), dir.c_str(), filename.c_str());
-                                } else {
-                                    EM_ASM({
-                                        console.warn('[WARNING] Failed to find asset object boundaries for asset ID:', UTF8ToString($0));
-                                    }, assetId.c_str());
-                                }
-                            } else {
-                                EM_ASM({
-                                    console.warn('[WARNING] Failed to find asset object start for asset ID:', UTF8ToString($0));
-                                }, assetId.c_str());
-                            }
-                        } else {
-                            EM_ASM({
-                                console.warn('[WARNING] Asset ID not found in assets array:', UTF8ToString($0));
-                            }, assetId.c_str());
-                        }
+                    } else {
+                        // Both empty - skip
+                        EM_ASM({
+                            console.warn('[WARNING] Both filePath and fileName are empty for asset ID:', UTF8ToString($0));
+                        }, assetId.c_str());
+                        continue;
                     }
                     
-                    json_data.replace(arrayStart, arrayEnd - arrayStart + 1, modifiedAssets);
+                    if (dir == "/" || dir == "\\") {
+                        dir = "";
+                    }
+                    
+                    EM_ASM({
+                        console.log('[DEBUG] Split image path - directory:', UTF8ToString($0), ', filename:', UTF8ToString($1));
+                    }, dir.c_str(), filename.c_str());
+                    
+                    // Update u and p properties
+                    (*foundAsset)["u"] = dir;
+                    (*foundAsset)["p"] = filename;
+                    
+                    EM_ASM({
+                        console.log('[DEBUG] Updated asset:', UTF8ToString($0), '- u:', UTF8ToString($1), ', p:', UTF8ToString($2));
+                        console.log('[DEBUG] Image override applied successfully for asset ID:', UTF8ToString($0));
+                    }, assetId.c_str(), dir.c_str(), filename.c_str());
                 }
+                
+                // Serialize back to JSON
+                json_data = j.dump(4);
+            } else {
+                EM_ASM({
+                    console.warn('[WARNING] Assets array not found in JSON - image overrides will not be applied');
+                });
             }
+        } catch (const nlohmann::json::exception& e) {
+            EM_ASM({
+                console.error('[ERROR] Failed to parse JSON for image asset processing:', UTF8ToString($0));
+            }, e.what());
         }
     }
     
@@ -322,10 +249,13 @@ static void processLayerOverridesFromString(std::string& json_data, const std::s
     
     // Extract animation width from JSON
     float animationWidth = 720.0f;
-    std::regex widthPattern("\"w\"\\s*:\\s*([0-9]+\\.?[0-9]*)");
-    std::smatch widthMatch;
-    if (std::regex_search(json_data, widthMatch, widthPattern)) {
-        animationWidth = std::stof(widthMatch[1].str());
+    try {
+        nlohmann::json j = nlohmann::json::parse(json_data);
+        if (j.contains("w") && j["w"].is_number()) {
+            animationWidth = j["w"].get<float>();
+        }
+    } catch (const nlohmann::json::exception&) {
+        // Use default width if parsing fails
     }
     
     // Use the provided font manager (with registered fonts) for text measurement

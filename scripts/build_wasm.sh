@@ -66,9 +66,9 @@ if [ -f "$SKIA_LIB_DIR/libskia.a" ]; then
 else
     # Check if Skia structure exists
     if [ ! -d "$SKIA_ROOT" ] || [ ! -f "$SKIA_ROOT/bin/gn" ]; then
-        "$SCRIPT_DIR/_build_skia.sh" --target=wasm
+        "$SCRIPT_DIR/_build_deps.sh" --target=wasm
     else
-        "$SCRIPT_DIR/_build_skia.sh" --target=wasm --skip-setup
+        "$SCRIPT_DIR/_build_deps.sh" --target=wasm --skip-setup
     fi
 fi
 
@@ -119,7 +119,7 @@ ln -sf "$SKIA_ROOT/include/core" "$TEMP_INCLUDE_DIR/skia/core" 2>/dev/null || tr
 ln -sf "$SKIA_ROOT/include" "$TEMP_INCLUDE_DIR/skia/include" 2>/dev/null || true
 ln -sf "$SKIA_ROOT/modules" "$TEMP_INCLUDE_DIR/skia/modules" 2>/dev/null || true
 
-INCLUDES="-I$SKIA_ROOT -I$TEMP_INCLUDE_DIR -I$SRC_DIR"
+INCLUDES="-I$SKIA_ROOT -I$TEMP_INCLUDE_DIR -I$SRC_DIR -I$PROJECT_ROOT/third_party"
 LDFLAGS="-L$SKIA_LIB_DIR"
 
 # Cleanup function for temp directory

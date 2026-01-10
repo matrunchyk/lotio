@@ -208,9 +208,9 @@ fi
 
 if [[ "$SKIP_SKIA" == "false" ]]; then
     if [[ "$SKIP_SKIA_SETUP" == "true" ]]; then
-        "$SCRIPT_DIR/_build_skia.sh" --target=binary --target-cpu="$TARGET_CPU" --skip-setup
+        "$SCRIPT_DIR/_build_deps.sh" --target=binary --target-cpu="$TARGET_CPU" --skip-setup
     else
-        "$SCRIPT_DIR/_build_skia.sh" --target=binary --target-cpu="$TARGET_CPU"
+        "$SCRIPT_DIR/_build_deps.sh" --target=binary --target-cpu="$TARGET_CPU"
     fi
 else
     echo "⏭️  Skipping Skia build (--skip-skia specified)"
@@ -222,6 +222,20 @@ fi
 ################################################################################
 
 cd "$PROJECT_ROOT"
+
+# Ensure nlohmann/json is available
+if [ ! -f "$PROJECT_ROOT/third_party/nlohmann/json.hpp" ]; then
+    echo "📦 Downloading nlohmann/json header..."
+    mkdir -p "$PROJECT_ROOT/third_party/nlohmann"
+    curl -L -s -o "$PROJECT_ROOT/third_party/nlohmann/json.hpp" https://github.com/nlohmann/json/releases/download/v3.12.0/json.hpp
+    if [ -f "$PROJECT_ROOT/third_party/nlohmann/json.hpp" ]; then
+        echo "   ✅ nlohmann/json downloaded"
+    else
+        echo "   ❌ ERROR: Failed to download nlohmann/json"
+        exit 1
+    fi
+    echo ""
+fi
 
 echo "📝 Step 1: Building lotio..."
 echo ""
@@ -337,12 +351,12 @@ for src in "${LIBRARY_SOURCES[@]}"; do
     echo "      Compiling: $(basename $src)"
     if [[ "$OSTYPE" == "darwin"* ]]; then
         g++ -std=c++17 -O3 -DNDEBUG $VERSION_DEFINE \
-            -I"$SKIA_ROOT" -I"$TEMP_INCLUDE_DIR" -I"$SRC_DIR" \
+            -I"$SKIA_ROOT" -I"$TEMP_INCLUDE_DIR" -I"$SRC_DIR" -I"$PROJECT_ROOT/third_party" \
             -I"$HOMEBREW_PREFIX/include" -I"$FREETYPE_INCLUDE" -I"$ICU_INCLUDE" -I"$HARFBUZZ_INCLUDE" \
             -c "$src" -o "$obj"
     else
         g++ -std=c++17 -O3 -DNDEBUG $VERSION_DEFINE \
-            -I"$SKIA_ROOT" -I"$TEMP_INCLUDE_DIR" -I"$SRC_DIR" \
+            -I"$SKIA_ROOT" -I"$TEMP_INCLUDE_DIR" -I"$SRC_DIR" -I"$PROJECT_ROOT/third_party" \
             -c "$src" -o "$obj"
     fi
     LIBRARY_OBJECTS+=("$obj")
@@ -377,12 +391,12 @@ MAIN_OBJECT="${MAIN_SOURCE%.cpp}.o"
 echo "      Compiling: $(basename $MAIN_SOURCE)"
 if [[ "$OSTYPE" == "darwin"* ]]; then
     g++ -std=c++17 -O3 -DNDEBUG $VERSION_DEFINE \
-        -I"$SKIA_ROOT" -I"$TEMP_INCLUDE_DIR" -I"$SRC_DIR" \
+        -I"$SKIA_ROOT" -I"$TEMP_INCLUDE_DIR" -I"$SRC_DIR" -I"$PROJECT_ROOT/third_party" \
         -I"$HOMEBREW_PREFIX/include" -I"$FREETYPE_INCLUDE" -I"$ICU_INCLUDE" -I"$HARFBUZZ_INCLUDE" \
         -c "$MAIN_SOURCE" -o "$MAIN_OBJECT"
 else
     g++ -std=c++17 -O3 -DNDEBUG $VERSION_DEFINE \
-        -I"$SKIA_ROOT" -I"$TEMP_INCLUDE_DIR" -I"$SRC_DIR" \
+        -I"$SKIA_ROOT" -I"$TEMP_INCLUDE_DIR" -I"$SRC_DIR" -I"$PROJECT_ROOT/third_party" \
         -c "$MAIN_SOURCE" -o "$MAIN_OBJECT"
 fi
 

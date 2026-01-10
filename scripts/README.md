@@ -68,13 +68,13 @@ This directory contains build, test, and utility scripts for the `lotio` project
 
 ---
 
-### `_build_skia.sh` (Internal)
-**Purpose:** Shared Skia build script used by `build_binary.sh` and `build_wasm.sh`
+### `_build_deps.sh` (Internal)
+**Purpose:** Shared dependencies build script (Skia and nlohmann/json) used by `build_binary.sh` and `build_wasm.sh`
 
 **Usage:**
 ```bash
 # Not meant to be called directly - used internally by other build scripts
-scripts/_build_skia.sh --target=binary --target-cpu=arm64
+scripts/_build_deps.sh --target=binary --target-cpu=arm64
 ```
 
 **When to use:**
@@ -500,11 +500,11 @@ brew install emscripten
 
 ```
 build_binary.sh ⭐ (RECOMMENDED)
-  └─> _build_skia.sh (--target=binary)
+  └─> _build_deps.sh (--target=binary)
       └─> Handles: Skia setup + build + lotio compilation + liblotio.a
 
 build_wasm.sh
-  └─> _build_skia.sh (--target=wasm)
+  └─> _build_deps.sh (--target=wasm)
       └─> Handles: Skia WASM build + lotio WASM compilation (requires Emscripten)
 
 build_skia_docker_multi.sh

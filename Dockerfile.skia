@@ -63,7 +63,7 @@ RUN TARGET_CPU=$(echo "$TARGETPLATFORM" | sed 's/linux\///' | sed 's/amd64/x64/'
     echo "[BUILD] Building Skia for platform: $TARGETPLATFORM (CPU: $TARGET_CPU)" && \
     echo "[BUILD] ccache stats before build:" && \
     ccache -s || true && \
-    chmod +x scripts/_build_skia.sh scripts/build_binary.sh && \
+    chmod +x scripts/_build_deps.sh scripts/build_binary.sh && \
     TARGET_CPU="$TARGET_CPU" ./scripts/build_binary.sh --target-cpu="$TARGET_CPU" && \
     echo "[BUILD] ccache stats after build:" && \
     ccache -s || true && \

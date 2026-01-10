@@ -10,10 +10,8 @@
 #include "include/ports/SkFontMgr_fontconfig.h"
 #include <fontconfig/fontconfig.h>
 #endif
-#include <regex>
+#include <nlohmann/json.hpp>
 #include <vector>
-#include <algorithm>
-#include <cmath>
 #include <filesystem>
 
 std::string processLayerOverrides(
@@ -44,169 +42,107 @@ std::string processLayerOverrides(
     if (!imageLayers.empty()) {
         LOG_DEBUG("Found " << imageLayers.size() << " image layer overrides");
         
-        // Find assets array in JSON
-        size_t assetsPos = json_data.find("\"assets\"");
-        if (assetsPos != std::string::npos) {
-            LOG_DEBUG("Found assets array in JSON at position " << assetsPos);
-            size_t arrayStart = json_data.find('[', assetsPos);
-            if (arrayStart != std::string::npos) {
-                LOG_DEBUG("Found assets array start at position " << arrayStart);
-                // Find the end of the assets array
-                int bracketCount = 0;
-                size_t arrayEnd = arrayStart;
-                for (size_t i = arrayStart; i < json_data.length(); i++) {
-                    if (json_data[i] == '[') bracketCount++;
-                    if (json_data[i] == ']') bracketCount--;
-                    if (bracketCount == 0) {
-                        arrayEnd = i;
-                        break;
-                    }
-                }
-                
-                if (arrayEnd > arrayStart) {
-                    LOG_DEBUG("Found assets array end at position " << arrayEnd << " (length: " << (arrayEnd - arrayStart + 1) << " bytes)");
-                    std::string assetsJson = json_data.substr(arrayStart, arrayEnd - arrayStart + 1);
-                    std::string modifiedAssets = assetsJson;
+        try {
+            nlohmann::json j = nlohmann::json::parse(json_data);
+            
+            if (j.contains("assets") && j["assets"].is_array()) {
+                // Process each asset
+                for (const auto& [assetId, imageConfig] : imageLayers) {
+                    LOG_DEBUG("Processing image override for asset ID: " << assetId);
                     
-                    // Process each asset
-                    for (const auto& [assetId, imageConfig] : imageLayers) {
-                        LOG_DEBUG("Processing image override for asset ID: " << assetId);
-                        
-                        // Determine the full path from filePath and fileName
-                        std::string resolvedImagePath;
-                        std::string dir;
-                        std::string filename;
-                        
-                        if (imageConfig.filePath.empty() && !imageConfig.fileName.empty()) {
-                            // filePath is empty string, fileName contains full path
-                            resolvedImagePath = imageConfig.fileName;
-                            std::filesystem::path fullPathObj(resolvedImagePath);
-                            if (fullPathObj.is_absolute()) {
-                                dir = fullPathObj.parent_path().string();
-                                filename = fullPathObj.filename().string();
-                            } else {
-                                // Relative path - keep it relative, split into dir and filename
-                                size_t lastSlash = imageConfig.fileName.find_last_of("/\\");
-                                dir = (lastSlash != std::string::npos) ? imageConfig.fileName.substr(0, lastSlash + 1) : "";
-                                filename = (lastSlash != std::string::npos) ? imageConfig.fileName.substr(lastSlash + 1) : imageConfig.fileName;
+                    // Find asset by ID
+                    nlohmann::json* foundAsset = nullptr;
+                    for (auto& asset : j["assets"]) {
+                        if (asset.contains("id") && asset["id"].is_string() && asset["id"].get<std::string>() == assetId) {
+                            foundAsset = &asset;
+                            break;
+                        }
+                    }
+                    
+                    if (foundAsset == nullptr) {
+                        LOG_CERR("[WARNING] Asset ID " << assetId << " not found in assets array") << std::endl;
+                        continue;
+                    }
+                    
+                    // Determine the full path from filePath and fileName
+                    std::string dir;
+                    std::string filename;
+                    
+                    if (imageConfig.filePath.empty() && !imageConfig.fileName.empty()) {
+                        // filePath is empty string, fileName contains full path
+                        std::filesystem::path fullPathObj(imageConfig.fileName);
+                        if (fullPathObj.is_absolute()) {
+                            dir = fullPathObj.parent_path().string();
+                            filename = fullPathObj.filename().string();
+                        } else {
+                            // Relative path - keep it relative, split into dir and filename
+                            size_t lastSlash = imageConfig.fileName.find_last_of("/\\");
+                            dir = (lastSlash != std::string::npos) ? imageConfig.fileName.substr(0, lastSlash + 1) : "";
+                            filename = (lastSlash != std::string::npos) ? imageConfig.fileName.substr(lastSlash + 1) : imageConfig.fileName;
+                        }
+                    } else if (!imageConfig.filePath.empty() && !imageConfig.fileName.empty()) {
+                        // Both specified, combine them
+                        std::filesystem::path pathObj(imageConfig.filePath);
+                        if (pathObj.is_absolute()) {
+                            // Absolute path - use as-is
+                            dir = imageConfig.filePath;
+                            if (dir.back() != '/' && dir.back() != '\\') {
+                                dir += "/";
                             }
-                        } else if (!imageConfig.filePath.empty() && !imageConfig.fileName.empty()) {
-                            // Both specified, combine them
-                            std::filesystem::path pathObj(imageConfig.filePath);
-                            if (pathObj.is_absolute()) {
-                                // Absolute path - use as-is
-                                dir = imageConfig.filePath;
-                                if (dir.back() != '/' && dir.back() != '\\') {
-                                    dir += "/";
-                                }
-                                filename = imageConfig.fileName;
-                                resolvedImagePath = dir + filename;
-                            } else {
-                                // Relative path - keep it relative (don't convert to absolute)
-                                // Skia will resolve it relative to the animation file's directory
-                                dir = imageConfig.filePath;
-                                if (!dir.empty() && dir.back() != '/' && dir.back() != '\\') {
-                                    dir += "/";
-                                }
-                                filename = imageConfig.fileName;
-                                resolvedImagePath = dir + filename;
-                            }
-                        } else if (!imageConfig.filePath.empty() && imageConfig.fileName.empty()) {
-                            // Only filePath specified - use default fileName from assets[].p
+                            filename = imageConfig.fileName;
+                        } else {
+                            // Relative path - keep it relative (don't convert to absolute)
+                            // Skia will resolve it relative to the animation file's directory
                             dir = imageConfig.filePath;
                             if (!dir.empty() && dir.back() != '/' && dir.back() != '\\') {
                                 dir += "/";
                             }
-                            // filename will be extracted from assets[].p below
+                            filename = imageConfig.fileName;
+                        }
+                    } else if (!imageConfig.filePath.empty() && imageConfig.fileName.empty()) {
+                        // Only filePath specified - use default fileName from assets[].p
+                        dir = imageConfig.filePath;
+                        if (!dir.empty() && dir.back() != '/' && dir.back() != '\\') {
+                            dir += "/";
+                        }
+                        // Extract filename from assets[].p
+                        if ((*foundAsset).contains("p") && (*foundAsset)["p"].is_string()) {
+                            filename = (*foundAsset)["p"].get<std::string>();
+                            LOG_DEBUG("Using default fileName from assets[].p: " << filename);
                         } else {
-                            // Both empty - skip (shouldn't happen due to validation)
-                            LOG_CERR("[WARNING] Both filePath and fileName are empty for asset ID: " << assetId) << std::endl;
+                            LOG_CERR("[WARNING] Could not find \"p\" property for asset ID: " << assetId << ", skipping") << std::endl;
                             continue;
                         }
-                        
-                        // Find asset by ID
-                        std::string idPattern = "\"id\"\\s*:\\s*\"" + assetId + "\"";
-                        std::regex idRegex(idPattern);
-                        std::smatch idMatch;
-                        
-                        if (std::regex_search(modifiedAssets, idMatch, idRegex)) {
-                            size_t assetStart = idMatch.position(0);
-                            LOG_DEBUG("Found asset with ID " << assetId << " at position " << assetStart);
-                            // Find the asset object boundaries
-                            size_t objStart = modifiedAssets.rfind('{', assetStart);
-                            if (objStart != std::string::npos) {
-                                int objBraceCount = 0;
-                                size_t objEnd = objStart;
-                                for (size_t i = objStart; i < modifiedAssets.length(); i++) {
-                                    if (modifiedAssets[i] == '{') objBraceCount++;
-                                    if (modifiedAssets[i] == '}') objBraceCount--;
-                                    if (objBraceCount == 0) {
-                                        objEnd = i;
-                                        break;
-                                    }
-                                }
-                                
-                                if (objEnd > objStart) {
-                                    std::string assetObj = modifiedAssets.substr(objStart, objEnd - objStart + 1);
-                                    LOG_DEBUG("Extracted asset object for ID " << assetId << " (length: " << (objEnd - objStart + 1) << " bytes)");
-                                    
-                                    // If fileName is empty, extract it from assets[].p
-                                    if (filename.empty()) {
-                                        std::regex pPattern("\"p\"\\s*:\\s*\"([^\"]+)\"");
-                                        std::smatch pMatch;
-                                        if (std::regex_search(assetObj, pMatch, pPattern)) {
-                                            filename = pMatch[1].str();
-                                            LOG_DEBUG("Using default fileName from assets[].p: " << filename);
-                                        } else {
-                                            LOG_CERR("[WARNING] Could not find \"p\" property for asset ID: " << assetId << ", skipping") << std::endl;
-                                            continue;
-                                        }
-                                    }
-                                    
-                                    // Normalize directory path (ensure it ends with / for relative paths)
-                                    if (!dir.empty() && dir.back() != '/' && dir.back() != '\\') {
-                                        dir += "/";
-                                    }
-                                    if (dir == "/" || dir == "\\") {
-                                        dir = "";  // Root path means empty directory
-                                    }
-                                    
-                                    // Update u and p properties
-                                    std::regex uPattern("\"u\"\\s*:\\s*\"[^\"]*\"");
-                                    std::regex pPattern("\"p\"\\s*:\\s*\"[^\"]*\"");
-                                    
-                                    std::string newU = "\"u\":\"" + dir + "\"";
-                                    std::string newP = "\"p\":\"" + filename + "\"";
-                                    
-                                    assetObj = std::regex_replace(assetObj, uPattern, newU);
-                                    assetObj = std::regex_replace(assetObj, pPattern, newP);
-                                    
-                                    // Replace the asset object in modifiedAssets
-                                    modifiedAssets.replace(objStart, objEnd - objStart + 1, assetObj);
-                                    LOG_DEBUG("Updated asset " << assetId << ": u=\"" << dir << "\", p=\"" << filename << "\"");
-                                    LOG_DEBUG("Image override applied successfully for asset ID: " << assetId);
-                                } else {
-                                    LOG_CERR("[WARNING] Failed to find asset object boundaries for asset ID: " << assetId) << std::endl;
-                                }
-                            } else {
-                                LOG_CERR("[WARNING] Failed to find asset object start for asset ID: " << assetId) << std::endl;
-                            }
-                        } else {
-                            LOG_CERR("[WARNING] Asset ID " << assetId << " not found in assets array") << std::endl;
-                        }
+                    } else {
+                        // Both empty - skip (shouldn't happen due to validation)
+                        LOG_CERR("[WARNING] Both filePath and fileName are empty for asset ID: " << assetId) << std::endl;
+                        continue;
                     }
                     
-                    // Replace assets array in json_data
-                    json_data.replace(arrayStart, arrayEnd - arrayStart + 1, modifiedAssets);
-                    LOG_DEBUG("Assets array updated in JSON (replaced " << (arrayEnd - arrayStart + 1) << " bytes)");
-                } else {
-                    LOG_CERR("[WARNING] Failed to find valid assets array boundaries") << std::endl;
+                    // Normalize directory path (ensure it ends with / for relative paths)
+                    if (!dir.empty() && dir.back() != '/' && dir.back() != '\\') {
+                        dir += "/";
+                    }
+                    if (dir == "/" || dir == "\\") {
+                        dir = "";  // Root path means empty directory
+                    }
+                    
+                    // Update u and p properties
+                    (*foundAsset)["u"] = dir;
+                    (*foundAsset)["p"] = filename;
+                    
+                    LOG_DEBUG("Updated asset " << assetId << ": u=\"" << dir << "\", p=\"" << filename << "\"");
+                    LOG_DEBUG("Image override applied successfully for asset ID: " << assetId);
                 }
+                
+                // Serialize back to JSON
+                json_data = j.dump(4);
+                LOG_DEBUG("Assets array updated in JSON");
             } else {
-                LOG_CERR("[WARNING] Assets array start bracket not found") << std::endl;
+                LOG_CERR("[WARNING] Assets array not found in JSON - image overrides will not be applied") << std::endl;
             }
-        } else {
-            LOG_CERR("[WARNING] Assets array not found in JSON - image overrides will not be applied") << std::endl;
+        } catch (const nlohmann::json::exception& e) {
+            LOG_CERR("[ERROR] Failed to parse JSON for image asset processing: " << e.what()) << std::endl;
         }
     }
     
@@ -219,11 +155,14 @@ std::string processLayerOverrides(
     
     // Extract animation width from JSON (for fallback text box width)
     float animationWidth = 720.0f;  // Default fallback
-    std::regex widthPattern("\"w\"\\s*:\\s*([0-9]+\\.?[0-9]*)");
-    std::smatch widthMatch;
-    if (std::regex_search(json_data, widthMatch, widthPattern)) {
-        animationWidth = std::stof(widthMatch[1].str());
-        LOG_DEBUG("Animation width: " << animationWidth);
+    try {
+        nlohmann::json j = nlohmann::json::parse(json_data);
+        if (j.contains("w") && j["w"].is_number()) {
+            animationWidth = j["w"].get<float>();
+            LOG_DEBUG("Animation width: " << animationWidth);
+        }
+    } catch (const nlohmann::json::exception&) {
+        // Use default width if parsing fails
     }
     
     // Create font manager early for text measurement

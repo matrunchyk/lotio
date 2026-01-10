@@ -38,6 +38,7 @@ WORKDIR /build
 
 # Copy only lotio source files (not entire project)
 COPY src/ ./src/
+COPY third_party/ ./third_party/
 
 # Build arguments
 ARG VERSION=dev
@@ -63,7 +64,7 @@ RUN mkdir -p /tmp/skia_include/skia && \
 RUN ACTUAL_VERSION=$(cat /tmp/version.txt) && \
     VERSION_DEFINE='-DVERSION="'"${ACTUAL_VERSION}"'"' && \
     CXXFLAGS="-std=c++17 -O3 -DNDEBUG $VERSION_DEFINE" && \
-    INCLUDES="-I/opt/skia -I/opt/skia/include -I/opt/skia/modules -I/opt/skia/gen -I/tmp/skia_include -I./src" && \
+    INCLUDES="-I/opt/skia -I/opt/skia/include -I/opt/skia/modules -I/opt/skia/gen -I/tmp/skia_include -I./src -I./third_party" && \
     echo "[BUILD] Compiling library source files with VERSION: ${ACTUAL_VERSION}..." && \
     for src in src/core/argument_parser.cpp \
                src/core/animation_setup.cpp \
@@ -106,7 +107,7 @@ RUN echo "[BUILD] Creating liblotio.a..." && \
 RUN ACTUAL_VERSION=$(cat /tmp/version.txt) && \
     VERSION_DEFINE='-DVERSION="'"${ACTUAL_VERSION}"'"' && \
     CXXFLAGS="-std=c++17 -O3 -DNDEBUG $VERSION_DEFINE" && \
-    INCLUDES="-I/opt/skia -I/opt/skia/include -I/opt/skia/modules -I/opt/skia/gen -I/tmp/skia_include -I./src" && \
+    INCLUDES="-I/opt/skia -I/opt/skia/include -I/opt/skia/modules -I/opt/skia/gen -I/tmp/skia_include -I./src -I./third_party" && \
     echo "[BUILD] Compiling main entry point with VERSION: ${ACTUAL_VERSION}..." && \
     g++ $CXXFLAGS $INCLUDES -c src/main.cpp -o src/main.o && \
     echo "[BUILD] Main entry point compiled"

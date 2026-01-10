@@ -9,6 +9,7 @@
 #include "include/ports/SkFontMgr_fontconfig.h"
 #include <fontconfig/fontconfig.h>
 #endif
+#include <nlohmann/json.hpp>
 #include <fstream>
 #include <regex>
 #include <iostream>
@@ -207,78 +208,63 @@ std::map<std::string, LayerOverride> parseLayerOverrides(const std::string& conf
         return configs;
     }
     
-    std::string json((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    file.close();
-    
-    // Extract textLayers section - find the start of the object
-    size_t textLayersPos = json.find("\"textLayers\"");
-    if (textLayersPos != std::string::npos) {
-        // Find the opening brace after "textLayers"
-        size_t openBrace = json.find('{', textLayersPos);
-        if (openBrace != std::string::npos) {
-            // Find matching closing brace by counting braces
-            int braceCount = 0;
-            size_t closeBrace = openBrace;
-            for (size_t i = openBrace; i < json.length(); i++) {
-                if (json[i] == '{') braceCount++;
-                if (json[i] == '}') braceCount--;
-                if (braceCount == 0) {
-                    closeBrace = i;
-                    break;
-                }
-            }
-            
-            if (closeBrace > openBrace) {
-                std::string layersJson = json.substr(openBrace + 1, closeBrace - openBrace - 1);
+    try {
+        nlohmann::json j;
+        file >> j;
+        file.close();
+        
+        // Parse textLayers section
+        if (j.contains("textLayers") && j["textLayers"].is_object()) {
+            for (auto& [layerName, layerConfig] : j["textLayers"].items()) {
+                LayerOverride config;
                 
-                // Find each layer config - each layer is "name": { ... }
-                std::regex layerPattern("\"([^\"]+)\"\\s*:\\s*\\{");
-                std::sregex_iterator iter(layersJson.begin(), layersJson.end(), layerPattern);
-                std::sregex_iterator end;
-                
-                for (; iter != end; ++iter) {
-                    std::smatch match = *iter;
-                    std::string layerName = match[1].str();
-                    size_t layerStart = match.position(0) + match.length(0) - 1; // Position of opening brace
-                    
-                    // Find the matching closing brace for this layer
-                    int layerBraceCount = 0;
-                    size_t layerEnd = layerStart;
-                    for (size_t i = layerStart; i < layersJson.length(); i++) {
-                        if (layersJson[i] == '{') layerBraceCount++;
-                        if (layersJson[i] == '}') layerBraceCount--;
-                        if (layerBraceCount == 0) {
-                            layerEnd = i;
-                            break;
-                        }
-                    }
-                    
-                    if (layerEnd > layerStart) {
-                        std::string layerConfig = layersJson.substr(layerStart + 1, layerEnd - layerStart - 1);
-                        
-                        LayerOverride config;
-                        config.minSize = extractJsonFloat(layerConfig, "minSize");
-                        config.maxSize = extractJsonFloat(layerConfig, "maxSize");
-                        config.fallbackText = extractJsonString(layerConfig, "fallbackText");
-                        config.textBoxWidth = extractJsonFloat(layerConfig, "textBoxWidth");
-                        config.value = extractJsonString(layerConfig, "value");
-                        
-                        // Handle \u0003 (ETX) - convert to \r for Lottie newlines
-                        replaceAllInPlace(config.value, "\\u0003", "\r");
-                        replaceCharInPlace(config.value, '\x03', '\r');
-                        
-                        // Validate the config
-                        std::string errorMsg;
-                        if (!validateTextLayerConfig(layerName, config, errorMsg)) {
-                            LOG_CERR("[ERROR] " << errorMsg) << std::endl;
-                            continue;  // Skip invalid config
-                        }
-                        
-                        configs[layerName] = config;
-                    }
+                // Extract optional fields
+                if (layerConfig.contains("minSize") && layerConfig["minSize"].is_number()) {
+                    config.minSize = layerConfig["minSize"].get<float>();
+                } else {
+                    config.minSize = 0.0f;
                 }
+                
+                if (layerConfig.contains("maxSize") && layerConfig["maxSize"].is_number()) {
+                    config.maxSize = layerConfig["maxSize"].get<float>();
+                } else {
+                    config.maxSize = 0.0f;
+                }
+                
+                if (layerConfig.contains("fallbackText") && layerConfig["fallbackText"].is_string()) {
+                    config.fallbackText = layerConfig["fallbackText"].get<std::string>();
+                } else {
+                    config.fallbackText = "";
+                }
+                
+                if (layerConfig.contains("textBoxWidth") && layerConfig["textBoxWidth"].is_number()) {
+                    config.textBoxWidth = layerConfig["textBoxWidth"].get<float>();
+                } else {
+                    config.textBoxWidth = 0.0f;
+                }
+                
+                if (layerConfig.contains("value") && layerConfig["value"].is_string()) {
+                    config.value = layerConfig["value"].get<std::string>();
+                } else {
+                    config.value = "";
+                }
+                
+                // Handle \u0003 (ETX) - convert to \r for Lottie newlines
+                replaceAllInPlace(config.value, "\\u0003", "\r");
+                replaceCharInPlace(config.value, '\x03', '\r');
+                
+                // Validate the config
+                std::string errorMsg;
+                if (!validateTextLayerConfig(layerName, config, errorMsg)) {
+                    LOG_CERR("[ERROR] " << errorMsg) << std::endl;
+                    continue;  // Skip invalid config
+                }
+                
+                configs[layerName] = config;
             }
         }
+    } catch (const nlohmann::json::exception& e) {
+        LOG_CERR("[ERROR] Failed to parse layer-overrides.json: " << e.what()) << std::endl;
     }
     
     return configs;
@@ -297,95 +283,46 @@ std::map<std::string, ImageLayerOverride> parseImageLayers(const std::string& co
         return imageLayers;
     }
     
-    std::string json((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    file.close();
-    
-    if (json.empty()) {
-        return imageLayers;
-    }
-    
-    // Extract imageLayers section - find the start of the object
-    size_t imageLayersPos = json.find("\"imageLayers\"");
-    if (imageLayersPos == std::string::npos) {
-        // No imageLayers section found - this is OK, just return empty map
-        return imageLayers;
-    }
-    
-    // Find the opening brace after "imageLayers"
-    size_t openBrace = json.find('{', imageLayersPos);
-    if (openBrace == std::string::npos) {
-        std::cerr << "[WARNING] Found 'imageLayers' key but no opening brace in: " << configPath << std::endl;
-        return imageLayers;
-    }
-    
-    // Find matching closing brace by counting braces
-    int braceCount = 0;
-    size_t closeBrace = openBrace;
-    for (size_t i = openBrace; i < json.length(); i++) {
-        if (json[i] == '{') braceCount++;
-        if (json[i] == '}') braceCount--;
-        if (braceCount == 0) {
-            closeBrace = i;
-            break;
-        }
-    }
-    
-    if (closeBrace <= openBrace) {
-        std::cerr << "[WARNING] Could not find matching closing brace for imageLayers in: " << configPath << std::endl;
-        return imageLayers;
-    }
-    
-    std::string layersJson = json.substr(openBrace + 1, closeBrace - openBrace - 1);
-    
-    // Find each image layer config - each layer is "asset_id": { ... }
-    std::regex layerPattern("\"([^\"]+)\"\\s*:\\s*\\{");
-    std::sregex_iterator iter(layersJson.begin(), layersJson.end(), layerPattern);
-    std::sregex_iterator end;
-    
-    int parsedCount = 0;
-    for (; iter != end; ++iter) {
-        std::smatch match = *iter;
-        std::string assetId = match[1].str();
-        size_t layerStart = match.position(0) + match.length(0) - 1; // Position of opening brace
+    try {
+        nlohmann::json j;
+        file >> j;
+        file.close();
         
-        // Find the matching closing brace for this layer
-        int layerBraceCount = 0;
-        size_t layerEnd = layerStart;
-        for (size_t i = layerStart; i < layersJson.length(); i++) {
-            if (layersJson[i] == '{') layerBraceCount++;
-            if (layersJson[i] == '}') layerBraceCount--;
-            if (layerBraceCount == 0) {
-                layerEnd = i;
-                break;
+        // Parse imageLayers section
+        if (j.contains("imageLayers") && j["imageLayers"].is_object()) {
+            for (auto& [assetId, layerConfig] : j["imageLayers"].items()) {
+                if (assetId.empty()) {
+                    std::cerr << "[WARNING] Empty asset ID found in imageLayers, skipping" << std::endl;
+                    continue;
+                }
+                
+                ImageLayerOverride config;
+                
+                // Extract optional fields
+                if (layerConfig.contains("filePath") && layerConfig["filePath"].is_string()) {
+                    config.filePath = layerConfig["filePath"].get<std::string>();
+                } else {
+                    config.filePath = "";
+                }
+                
+                if (layerConfig.contains("fileName") && layerConfig["fileName"].is_string()) {
+                    config.fileName = layerConfig["fileName"].get<std::string>();
+                } else {
+                    config.fileName = "";
+                }
+                
+                // Validate the config
+                std::string errorMsg;
+                if (!validateImageLayerConfig(assetId, config, configPath, errorMsg)) {
+                    LOG_CERR("[ERROR] " << errorMsg) << std::endl;
+                    continue;  // Skip invalid config
+                }
+                
+                imageLayers[assetId] = config;
             }
         }
-        
-        if (layerEnd > layerStart) {
-            std::string layerConfig = layersJson.substr(layerStart + 1, layerEnd - layerStart - 1);
-            
-            ImageLayerOverride config;
-            config.filePath = extractJsonString(layerConfig, "filePath");
-            config.fileName = extractJsonString(layerConfig, "fileName");
-            
-            if (assetId.empty()) {
-                std::cerr << "[WARNING] Empty asset ID found in imageLayers, skipping" << std::endl;
-                continue;
-            }
-            
-            // Validate the config
-            std::string errorMsg;
-            if (!validateImageLayerConfig(assetId, config, configPath, errorMsg)) {
-                LOG_CERR("[ERROR] " << errorMsg) << std::endl;
-                continue;  // Skip invalid config
-            }
-            
-            imageLayers[assetId] = config;
-            parsedCount++;
-        }
-    }
-    
-    if (parsedCount == 0 && imageLayersPos != std::string::npos) {
-        std::cerr << "[WARNING] imageLayers section found but no valid layers parsed from: " << configPath << std::endl;
+    } catch (const nlohmann::json::exception& e) {
+        LOG_CERR("[ERROR] Failed to parse layer-overrides.json for image layers: " << e.what()) << std::endl;
     }
     
     return imageLayers;
