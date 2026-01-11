@@ -101,6 +101,7 @@ RUN echo "[BUILD] Installing build tools and Skia dependencies..." && \
     libicu-dev \
     libharfbuzz-dev \
     libexpat1-dev \
+    wget \
     && rm -rf /var/lib/apt/lists/* && \
     echo "[BUILD] Build tools and dependencies installed"
 
@@ -122,6 +123,13 @@ COPY --from=skia-builder /build/third_party/skia/out/Release/gen /opt/skia/gen
 # Copy Skia source directory (required for internal headers like src/core/SkTHash.h)
 # This is needed because Skia's module headers reference internal source files
 COPY --from=skia-builder /build/third_party/skia/src /opt/skia/src
+
+# Download nlohmann/json.hpp for lotio builds
+# This is a header-only library needed by lotio, so we include it in the base image
+RUN mkdir -p /opt/third_party/nlohmann && \
+    wget -q -O /opt/third_party/nlohmann/json.hpp \
+        https://github.com/nlohmann/json/releases/download/v3.12.0/json.hpp && \
+    echo "[BUILD] nlohmann/json.hpp installed in base image"
 
 WORKDIR /workspace
 

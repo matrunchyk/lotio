@@ -24,7 +24,11 @@ std::string processLayerOverrides(
         return json_data;  // No processing needed
     }
     
+    const char* modeStr = (textMeasurementMode == TextMeasurementMode::FAST) ? "FAST" :
+                         (textMeasurementMode == TextMeasurementMode::ACCURATE) ? "ACCURATE" : "PIXEL_PERFECT";
     LOG_DEBUG("Loading layer overrides from: " << layer_overrides_file);
+    LOG_DEBUG("Text measurement mode: " << modeStr);
+    LOG_DEBUG("Text padding: " << textPadding << " (" << (textPadding * 100.0f) << "% of target width)");
     auto layerOverrides = parseLayerOverrides(layer_overrides_file);
     auto imageLayers = parseImageLayers(layer_overrides_file);
     

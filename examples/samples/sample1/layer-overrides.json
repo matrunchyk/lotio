@@ -1,6 +1,8 @@
 {
   "textLayers": {
     "Patient_Name": {
+      "minSize": 50,
+      "maxSize": 200,
       "fallbackText": "Fallback2",
       "value": "John Daw"
     },

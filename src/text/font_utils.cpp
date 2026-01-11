@@ -27,14 +27,18 @@ SkFontStyle getSkFontStyle(const std::string& styleStr) {
 }
 
 // Helper function to measure rendered text width by scanning pixels (PIXEL_PERFECT mode)
-static SkScalar measureRenderedTextWidth(sk_sp<SkTextBlob> blob, const SkFont& /* font */, const SkRect& blobBounds) {
+// This measures the full text advance width including spacing, kerning, and glyph widths
+static SkScalar measureRenderedTextWidth(sk_sp<SkTextBlob> blob, const SkFont& font, const SkRect& blobBounds) {
     // Create an off-screen surface to render the text
-    // Use a surface that matches the rendering characteristics
+    // Use a surface that's wide enough to capture the full advance width
     int padding = 20;  // Extra padding for anti-aliasing
-    int surfaceWidth = static_cast<int>(std::ceil(blobBounds.width())) + padding * 2;
+    int surfaceWidth = static_cast<int>(std::ceil(blobBounds.width() + std::abs(blobBounds.left()) + padding * 2));
     int surfaceHeight = static_cast<int>(std::ceil(blobBounds.height())) + padding * 2;
     
     if (surfaceWidth <= 0 || surfaceHeight <= 0) {
+        if (g_debug_mode) {
+            LOG_DEBUG("[PIXEL_PERFECT] Fallback: invalid surface dimensions, using blobBounds.width(): " << blobBounds.width());
+        }
         return blobBounds.width();
     }
     
@@ -47,59 +51,84 @@ static SkScalar measureRenderedTextWidth(sk_sp<SkTextBlob> blob, const SkFont& /
     auto surface = SkSurfaces::Raster(info);
     if (!surface) {
         // Fallback to blob bounds if surface creation fails
+        if (g_debug_mode) {
+            LOG_DEBUG("[PIXEL_PERFECT] Fallback: surface creation failed, using blobBounds.width(): " << blobBounds.width());
+        }
         return blobBounds.width();
     }
     
     SkCanvas* canvas = surface->getCanvas();
     canvas->clear(SK_ColorTRANSPARENT);
     
-    // Render the text
+    // Render the text starting at a known position (accounting for left side bearing)
+    // This ensures we measure from the text start position, not just the leftmost pixel
     SkPaint paint;
     paint.setAntiAlias(true);
     paint.setColor(SK_ColorBLACK);
     
-    canvas->drawTextBlob(
-        blob,
-        padding - blobBounds.left(),
-        padding - blobBounds.top(),
-        paint
-    );
+    // Render at x=padding, y=padding (known start position)
+    // The blob's left() might be negative (left side bearing), so we adjust
+    float xStart = padding - blobBounds.left();  // Start position accounting for left bearing
+    float yStart = padding - blobBounds.top();
+    canvas->drawTextBlob(blob, xStart, yStart, paint);
     
-    // Get the image and find actual non-transparent bounds
+    // Get the image and find actual rendered bounds
     sk_sp<SkImage> image = surface->makeImageSnapshot();
     if (!image) {
+        if (g_debug_mode) {
+            LOG_DEBUG("[PIXEL_PERFECT] Fallback: image snapshot failed, using blobBounds.width(): " << blobBounds.width());
+        }
         return blobBounds.width();
     }
     
     // Read pixels and find actual rendered bounds
     SkPixmap pixmap;
     if (!image->peekPixels(&pixmap)) {
+        if (g_debug_mode) {
+            LOG_DEBUG("[PIXEL_PERFECT] Fallback: peekPixels failed, using blobBounds.width(): " << blobBounds.width());
+        }
         return blobBounds.width();
     }
     
-    // Find leftmost and rightmost non-transparent pixels
-    int left = pixmap.width();
-    int right = 0;
+    // Find rightmost non-transparent pixel (from the start position)
+    // This gives us the full advance width including all spacing and kerning
+    int rightmostPixel = 0;
     bool foundPixel = false;
     
+    // Scan from the start position to find the rightmost pixel
+    // This accounts for the full text width including spacing
+    int startX = static_cast<int>(xStart);
     for (int y = 0; y < pixmap.height(); y++) {
         const uint32_t* row = pixmap.addr32(0, y);
-        for (int x = 0; x < pixmap.width(); x++) {
+        for (int x = startX; x < pixmap.width(); x++) {
             SkColor color = row[x];
             if (SkColorGetA(color) > 0) {  // Non-transparent pixel
-                left = std::min(left, x);
-                right = std::max(right, x);
+                rightmostPixel = std::max(rightmostPixel, x);
                 foundPixel = true;
             }
         }
     }
     
-    if (foundPixel && right >= left) {
-        // Return actual rendered width + small safety margin
-        return static_cast<SkScalar>(right - left + 1) + 1.0f;  // +1px safety
+    if (foundPixel && rightmostPixel >= startX) {
+        // Measure from start position to rightmost pixel
+        // This gives us the full advance width including spacing, kerning, and glyph widths
+        SkScalar renderedWidth = static_cast<SkScalar>(rightmostPixel - startX + 1) + 1.0f;  // +1px safety margin
+        
+        // Use the maximum of rendered width and blob bounds width to ensure we account for all spacing
+        // The blob bounds include full glyph bounding boxes which account for kerning and spacing
+        SkScalar finalWidth = std::max(renderedWidth, blobBounds.width());
+        
+        if (g_debug_mode) {
+            LOG_DEBUG("[PIXEL_PERFECT] Measured width: " << finalWidth << " (rendered: " << renderedWidth 
+                      << ", blobBounds: " << blobBounds.width() << ", startX: " << startX << ", rightmost: " << rightmostPixel << ")");
+        }
+        return finalWidth;
     }
     
-    // Fallback to blob bounds
+    // Fallback to blob bounds (which includes full spacing and kerning)
+    if (g_debug_mode) {
+        LOG_DEBUG("[PIXEL_PERFECT] Fallback: no pixels found, using blobBounds.width(): " << blobBounds.width());
+    }
     return blobBounds.width();
 }
 
