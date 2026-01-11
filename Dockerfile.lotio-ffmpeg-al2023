@@ -43,12 +43,12 @@ RUN wget -q -O /tmp/ffmpeg.tar.gz https://github.com/FFmpeg/FFmpeg/archive/refs/
     --disable-avdevice \
     --disable-ffplay \
     --disable-ffprobe \
-    --extra-cflags="-O1 -ffast-math -fno-stack-protector" \
+    --extra-cflags="-O3 -ffast-math -fno-stack-protector" \
     --extra-ldflags="-Wl,-rpath,/opt/ffmpeg/lib" \
     --enable-shared \
     --disable-static \
     --disable-debug \
-    --disable-optimizations \
+    --enable-optimizations \
     && make -j"$(nproc)" \
     && make install
 

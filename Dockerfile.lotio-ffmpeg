@@ -59,13 +59,13 @@ RUN echo "[BUILD] Downloading ffmpeg source..." && \
     --disable-avdevice \
     --disable-ffplay \
     --disable-ffprobe \
-    --extra-cflags="-O1 -ffast-math -fno-stack-protector" \
+    --extra-cflags="-O3 -ffast-math -fno-stack-protector" \
     --extra-ldflags="-Wl,-rpath,/opt/ffmpeg/lib" \
     --enable-shared \
     --disable-static \
     --disable-debug \
-    --disable-optimizations \
-    && echo "[BUILD] Building ffmpeg (optimized for compilation speed)..." && \
+    --enable-optimizations \
+    && echo "[BUILD] Building ffmpeg (optimized for runtime performance)..." && \
     make -j$(nproc) && \
     make install && \
     echo "[BUILD] Stripping binaries and libraries for size optimization..." && \

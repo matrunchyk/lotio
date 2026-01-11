@@ -137,15 +137,24 @@ echo "[RENDER] Text measurement mode: $TEXT_MEASUREMENT_MODE"
 
 # Render frames and pipe to ffmpeg
 # Use ProRes 4444 codec for transparent MOV with alpha channel support
+# Optimized for maximum encoding speed while maintaining quality
+# Software-only encoding (optimized for Lambda ARM64 - no GPU acceleration)
 echo "[RENDER] Rendering frames and encoding to transparent MOV (ProRes 4444)..."
 "${LOTIO_CMD[@]}" | /opt/ffmpeg/bin/ffmpeg -y \
     -f image2pipe \
     -vcodec png \
-    -r $FPS \
+    -thread_queue_size 512 \
+    -framerate $FPS \
+    -analyzeduration 0 \
+    -probesize 32 \
     -i pipe:0 \
     -c:v prores_ks \
     -profile:v 4444 \
     -pix_fmt yuva444p10le \
+    -threads 0 \
+    -thread_type frame+slice \
+    -fps_mode passthrough \
+    -fflags +genpts \
     "$OUTPUT_VIDEO"
 
 # Check if video was created
